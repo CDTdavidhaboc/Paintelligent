@@ -34,6 +34,8 @@ const { login } = useAuth();
 
   }
 };
+console.log("Username:", VALID_USERNAME);
+console.log("Password:", VALID_PASSWORD);
   return (
     <div className="h-screen overflow-hidden relative flex items-center justify-center p-4">
       {/* Background */}

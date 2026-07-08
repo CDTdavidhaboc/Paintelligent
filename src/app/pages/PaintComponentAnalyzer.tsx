@@ -74,7 +74,7 @@ type ColorAnalysis = {
 
 const ai = new GoogleGenAI({
   apiKey: import.meta.env.VITE_GEMINI_API_KEY,
-});
+}); 
 
 const toNumber = (value: unknown, fallback = 0) => {
   const parsed = Number(String(value ?? "").replace(/,/g, ""));
