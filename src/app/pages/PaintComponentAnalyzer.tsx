@@ -117,7 +117,7 @@ export default function PaintComponentAnalyzer() {
   }, []);
 
   const loadInventory = async () => {
-    const response = await fetch("/public/GPC_Products.csv");
+    const response = await fetch("/GPC_Products.csv");
 
     if (!response.ok) {
       throw new Error("Unable to load /public/GPC_Products.csv. Make sure the file is inside public/.");
