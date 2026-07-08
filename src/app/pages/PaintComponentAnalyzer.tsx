@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState, useEffect } from "react";
 import type { ChangeEvent } from "react";
 import {
   Card,
@@ -105,6 +105,16 @@ export default function PaintComponentAnalyzer() {
   const [analyzeError, setAnalyzeError] = useState("");
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [lastFetched, setLastFetched] = useState<Date | null>(null);
+
+  const [isVisible, setIsVisible] = useState(false);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setIsVisible(true);
+    }, 80);
+
+    return () => clearTimeout(timer);
+  }, []);
 
   const loadInventory = async () => {
     const response = await fetch("/public/GPC_Products.csv");
@@ -360,7 +370,17 @@ Required JSON format:
     );
 
     return (
-      <div className="p-6 space-y-6 bg-white min-h-screen">
+  <div
+    className={`
+      min-h-screen bg-white p-6 space-y-6
+      transition-all duration-700 ease-out transform
+      ${
+        isVisible
+          ? "opacity-100 translate-y-0 scale-100"
+          : "opacity-0 translate-y-6 scale-[0.98]"
+      }
+    `}
+  >
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
