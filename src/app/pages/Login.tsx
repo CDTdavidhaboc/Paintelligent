@@ -47,12 +47,15 @@ const { login } = useAuth();
 
       {/* Content */}
       <div className="w-full max-w-lg relative z-10">
-
-        {/* Logo */}
-        <div className="flex flex-col items-center relative mb-2">
-          <img src={paintelligentLogo} alt="Paintelligent Logo" className="w-56 h-56 mb-2    object-contain drop-shadow-2xl" />
-          <p className="text-sm text-white/70 absolute bottom-2">by Garcia Paint Center</p>
-        </div>
+      <div className="relative flex justify-center">
+              <div className="absolute top-1/2 h-72 w-72 -translate-y-1/2 rounded-full bg-[#4a9d6f]/20 blur-3xl" />
+              <img
+                src={paintelligentLogo}
+                alt="Paintelligent Logo"
+                className="relative h-64 w-64 object-contain drop-shadow-2xl"
+              />
+                <p className="text-sm text-white/70 absolute bottom-3">by Garcia Paint Center</p>
+            </div>
 
         {/* Glass Card */}
         <div className="bg-white/20 backdrop-blur-2xl border border-white/20 rounded-2xl shadow-2xl px-8 py-8">
