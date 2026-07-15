@@ -1,0 +1,251 @@
+Date,Category,Total Sales (PHP),Units Sold,Season
+2025-01-01,Automotive Paint,32136,28,Dry
+2025-01-02,Paint Accessories,27742,27,Dry
+2025-01-03,Colorants,15840,13,Dry
+2025-01-04,Paint Accessories,41123,40,Dry
+2025-01-05,Paint Accessories,27034,22,Dry
+2025-01-06,Paint Accessories,17853,16,Dry
+2025-01-07,Automotive Paint,19766,18,Dry
+2025-01-08,Architectural Paint,19527,22,Dry
+2025-01-09,Architectural Paint,21531,17,Dry
+2025-01-10,Automotive Paint,27563,32,Dry
+2025-01-11,Industrial Coating,32286,39,Dry
+2025-01-12,Architectural Paint,18428,21,Dry
+2025-01-13,Architectural Paint,25535,26,Dry
+2025-01-14,Colorants,22261,27,Dry
+2025-01-15,Automotive Paint,27348,23,Dry
+2025-01-16,Colorants,29177,34,Dry
+2025-01-17,Colorants,27438,37,Dry
+2025-01-18,Architectural Paint,25494,24,Dry
+2025-01-19,Paint Accessories,28339,28,Dry
+2025-01-20,Automotive Paint,29388,27,Dry
+2025-01-21,Automotive Paint,34124,42,Dry
+2025-01-22,Paint Accessories,16606,14,Dry
+2025-01-23,Paint Accessories,15839,19,Dry
+2025-01-24,Paint Accessories,20989,18,Dry
+2025-01-25,Industrial Coating,40191,36,Dry
+2025-01-26,Colorants,18095,18,Dry
+2025-01-27,Automotive Paint,17529,24,Dry
+2025-01-28,Paint Accessories,22795,28,Dry
+2025-01-29,Colorants,16924,15,Dry
+2025-01-30,Colorants,19308,27,Dry
+2025-01-31,Automotive Paint,25639,29,Dry
+2025-02-01,Paint Accessories,36809,49,Dry
+2025-02-02,Paint Accessories,29808,41,Dry
+2025-02-03,Colorants,25049,31,Dry
+2025-02-04,Paint Accessories,18295,19,Dry
+2025-02-05,Automotive Paint,27702,29,Dry
+2025-02-06,Industrial Coating,27130,24,Dry
+2025-02-07,Paint Accessories,25165,20,Dry
+2025-02-08,Automotive Paint,36844,38,Dry
+2025-02-09,Industrial Coating,25279,23,Dry
+2025-02-10,Industrial Coating,27336,37,Dry
+2025-02-11,Automotive Paint,18088,19,Dry
+2025-02-12,Paint Accessories,33473,37,Dry
+2025-02-13,Architectural Paint,18050,21,Dry
+2025-02-14,Architectural Paint,30957,26,Dry
+2025-02-15,Automotive Paint,35310,42,Dry
+2025-02-16,Automotive Paint,20853,17,Dry
+2025-02-17,Paint Accessories,19370,23,Dry
+2025-02-18,Colorants,25431,33,Dry
+2025-02-19,Architectural Paint,16895,16,Dry
+2025-02-20,Architectural Paint,29949,36,Dry
+2025-02-21,Architectural Paint,29353,29,Dry
+2025-02-22,Architectural Paint,28365,36,Dry
+2025-02-23,Paint Accessories,19638,17,Dry
+2025-02-24,Automotive Paint,28544,37,Dry
+2025-02-25,Architectural Paint,28944,38,Dry
+2025-02-26,Architectural Paint,18797,22,Dry
+2025-02-27,Automotive Paint,15051,16,Dry
+2025-02-28,Industrial Coating,28135,36,Dry
+2025-03-01,Industrial Coating,46911,42,Dry
+2025-03-02,Architectural Paint,28762,33,Dry
+2025-03-03,Industrial Coating,33439,41,Dry
+2025-03-04,Paint Accessories,16766,15,Dry
+2025-03-05,Industrial Coating,22568,21,Dry
+2025-03-06,Automotive Paint,20460,26,Dry
+2025-03-07,Automotive Paint,29481,42,Dry
+2025-03-08,Architectural Paint,31157,37,Dry
+2025-03-09,Colorants,18586,26,Dry
+2025-03-10,Colorants,24269,26,Dry
+2025-03-11,Paint Accessories,27380,22,Dry
+2025-03-12,Colorants,33678,44,Dry
+2025-03-13,Paint Accessories,25920,26,Dry
+2025-03-14,Automotive Paint,21769,22,Dry
+2025-03-15,Automotive Paint,28616,32,Dry
+2025-03-16,Architectural Paint,19490,19,Dry
+2025-03-17,Colorants,18484,22,Dry
+2025-03-18,Colorants,22333,23,Dry
+2025-03-19,Industrial Coating,29533,39,Dry
+2025-03-20,Automotive Paint,24189,20,Dry
+2025-03-21,Colorants,26513,23,Dry
+2025-03-22,Paint Accessories,43776,61,Dry
+2025-03-23,Automotive Paint,23625,20,Dry
+2025-03-24,Automotive Paint,24424,29,Dry
+2025-03-25,Colorants,32342,29,Dry
+2025-03-26,Architectural Paint,33494,30,Dry
+2025-03-27,Architectural Paint,21408,23,Dry
+2025-03-28,Architectural Paint,26228,28,Dry
+2025-03-29,Paint Accessories,27249,35,Dry
+2025-03-30,Industrial Coating,19884,16,Dry
+2025-03-31,Paint Accessories,28217,34,Dry
+2025-04-01,Industrial Coating,22802,25,Dry
+2025-04-02,Paint Accessories,19573,18,Dry
+2025-04-03,Paint Accessories,39014,45,Dry
+2025-04-04,Paint Accessories,38163,33,Dry
+2025-04-05,Automotive Paint,46012,38,Dry
+2025-04-06,Paint Accessories,28537,25,Dry
+2025-04-07,Colorants,23198,28,Dry
+2025-04-08,Architectural Paint,38290,52,Dry
+2025-04-09,Automotive Paint,27586,28,Dry
+2025-04-10,Colorants,35796,37,Dry
+2025-04-11,Colorants,28010,30,Dry
+2025-04-12,Architectural Paint,42945,45,Dry
+2025-04-13,Paint Accessories,33546,43,Dry
+2025-04-14,Colorants,18010,16,Dry
+2025-04-15,Industrial Coating,40406,43,Dry
+2025-04-16,Industrial Coating,36993,38,Dry
+2025-04-17,Industrial Coating,31162,41,Dry
+2025-04-18,Paint Accessories,20908,25,Dry
+2025-04-19,Architectural Paint,32431,29,Dry
+2025-04-20,Paint Accessories,26511,27,Dry
+2025-04-21,Colorants,19563,21,Dry
+2025-04-22,Industrial Coating,28628,25,Dry
+2025-04-23,Industrial Coating,20768,22,Dry
+2025-04-24,Colorants,22640,28,Dry
+2025-04-25,Architectural Paint,20395,19,Dry
+2025-04-26,Colorants,48955,50,Dry
+2025-04-27,Paint Accessories,30979,33,Dry
+2025-04-28,Architectural Paint,38049,51,Dry
+2025-04-29,Colorants,32395,35,Dry
+2025-04-30,Paint Accessories,39261,33,Dry
+2025-05-01,Industrial Coating,27358,37,Dry
+2025-05-02,Industrial Coating,22759,24,Dry
+2025-05-03,Architectural Paint,33025,43,Dry
+2025-05-04,Colorants,23055,25,Dry
+2025-05-05,Colorants,19378,18,Dry
+2025-05-06,Automotive Paint,25700,31,Dry
+2025-05-07,Architectural Paint,29740,33,Dry
+2025-05-08,Architectural Paint,41624,37,Dry
+2025-05-09,Automotive Paint,19738,19,Dry
+2025-05-10,Industrial Coating,37329,41,Dry
+2025-05-11,Architectural Paint,23494,22,Dry
+2025-05-12,Automotive Paint,32415,34,Dry
+2025-05-13,Industrial Coating,32252,39,Dry
+2025-05-14,Paint Accessories,37843,34,Dry
+2025-05-15,Industrial Coating,25836,28,Dry
+2025-05-16,Automotive Paint,25599,24,Dry
+2025-05-17,Automotive Paint,48441,67,Dry
+2025-05-18,Architectural Paint,35432,34,Dry
+2025-05-19,Architectural Paint,33110,28,Dry
+2025-05-20,Paint Accessories,18057,19,Dry
+2025-05-21,Industrial Coating,40706,44,Dry
+2025-05-22,Colorants,20797,27,Dry
+2025-05-23,Architectural Paint,19388,22,Dry
+2025-05-24,Colorants,54268,52,Dry
+2025-05-25,Automotive Paint,21649,24,Dry
+2025-05-26,Paint Accessories,37345,35,Dry
+2025-05-27,Architectural Paint,36544,49,Dry
+2025-05-28,Architectural Paint,27504,24,Dry
+2025-05-29,Automotive Paint,33544,34,Dry
+2025-05-30,Automotive Paint,39045,47,Dry
+2025-05-31,Paint Accessories,40369,37,Dry
+2025-06-01,Paint Accessories,13006,11,Rainy
+2025-06-02,Automotive Paint,19074,18,Rainy
+2025-06-03,Colorants,18784,16,Rainy
+2025-06-04,Industrial Coating,12527,15,Rainy
+2025-06-05,Architectural Paint,17593,18,Rainy
+2025-06-06,Automotive Paint,11378,10,Rainy
+2025-06-07,Architectural Paint,24523,27,Rainy
+2025-06-08,Architectural Paint,16246,15,Rainy
+2025-06-09,Industrial Coating,19014,18,Rainy
+2025-06-10,Architectural Paint,19356,19,Rainy
+2025-06-11,Automotive Paint,9699,13,Rainy
+2025-06-12,Paint Accessories,10794,9,Rainy
+2025-06-13,Colorants,9091,10,Rainy
+2025-06-14,Paint Accessories,23647,31,Rainy
+2025-06-15,Paint Accessories,11482,13,Rainy
+2025-06-16,Colorants,15778,18,Rainy
+2025-06-17,Paint Accessories,14901,17,Rainy
+2025-06-18,Automotive Paint,12331,11,Rainy
+2025-06-19,Industrial Coating,12175,15,Rainy
+2025-06-20,Architectural Paint,9439,11,Rainy
+2025-06-21,Colorants,20709,26,Rainy
+2025-06-22,Architectural Paint,12673,12,Rainy
+2025-06-23,Industrial Coating,11272,12,Rainy
+2025-06-24,Automotive Paint,14715,21,Rainy
+2025-06-25,Industrial Coating,11891,14,Rainy
+2025-06-26,Paint Accessories,14236,20,Rainy
+2025-06-27,Paint Accessories,9826,12,Rainy
+2025-06-28,Colorants,23880,22,Rainy
+2025-06-29,Industrial Coating,10590,10,Rainy
+2025-06-30,Automotive Paint,11276,14,Rainy
+2025-07-01,Industrial Coating,10584,10,Rainy
+2025-07-02,Architectural Paint,17870,16,Rainy
+2025-07-03,Industrial Coating,17292,19,Rainy
+2025-07-04,Paint Accessories,16992,15,Rainy
+2025-07-05,Architectural Paint,19259,26,Rainy
+2025-07-06,Industrial Coating,13822,12,Rainy
+2025-07-07,Paint Accessories,17406,18,Rainy
+2025-07-08,Automotive Paint,13842,18,Rainy
+2025-07-09,Automotive Paint,18450,18,Rainy
+2025-07-10,Architectural Paint,15591,15,Rainy
+2025-07-11,Paint Accessories,17238,22,Rainy
+2025-07-12,Paint Accessories,17658,14,Rainy
+2025-07-13,Industrial Coating,17393,14,Rainy
+2025-07-14,Architectural Paint,9257,9,Rainy
+2025-07-15,Paint Accessories,18555,23,Rainy
+2025-07-16,Automotive Paint,18927,25,Rainy
+2025-07-17,Industrial Coating,14655,13,Rainy
+2025-07-18,Automotive Paint,12292,11,Rainy
+2025-07-19,Paint Accessories,23260,30,Rainy
+2025-07-20,Paint Accessories,13302,15,Rainy
+2025-07-21,Paint Accessories,19616,24,Rainy
+2025-07-22,Architectural Paint,9497,10,Rainy
+2025-07-23,Paint Accessories,13869,19,Rainy
+2025-07-24,Architectural Paint,14978,12,Rainy
+2025-07-25,Colorants,8171,7,Rainy
+2025-07-26,Architectural Paint,17437,15,Rainy
+2025-07-27,Colorants,14880,13,Rainy
+2025-07-28,Paint Accessories,10477,9,Rainy
+2025-07-29,Paint Accessories,14382,12,Rainy
+2025-07-30,Industrial Coating,9917,10,Rainy
+2025-07-31,Industrial Coating,16203,18,Rainy
+2025-08-01,Paint Accessories,19684,21,Rainy
+2025-08-02,Paint Accessories,23305,24,Rainy
+2025-08-03,Industrial Coating,16348,19,Rainy
+2025-08-04,Architectural Paint,19753,23,Rainy
+2025-08-05,Automotive Paint,10292,11,Rainy
+2025-08-06,Industrial Coating,12890,13,Rainy
+2025-08-07,Automotive Paint,11670,11,Rainy
+2025-08-08,Industrial Coating,15633,20,Rainy
+2025-08-09,Architectural Paint,25168,28,Rainy
+2025-08-10,Colorants,17955,16,Rainy
+2025-08-11,Colorants,18904,22,Rainy
+2025-08-12,Paint Accessories,9466,11,Rainy
+2025-08-13,Paint Accessories,17551,18,Rainy
+2025-08-14,Paint Accessories,14854,13,Rainy
+2025-08-15,Automotive Paint,14907,20,Rainy
+2025-08-16,Automotive Paint,19474,18,Rainy
+2025-08-17,Industrial Coating,17933,15,Rainy
+2025-08-18,Colorants,9902,8,Rainy
+2025-08-19,Industrial Coating,8310,7,Rainy
+2025-08-20,Colorants,12478,12,Rainy
+2025-08-21,Automotive Paint,14237,15,Rainy
+2025-08-22,Industrial Coating,8681,9,Rainy
+2025-08-23,Automotive Paint,16171,17,Rainy
+2025-08-24,Automotive Paint,12428,15,Rainy
+2025-08-25,Paint Accessories,13725,13,Rainy
+2025-08-26,Colorants,8348,8,Rainy
+2025-08-27,Colorants,14335,12,Rainy
+2025-08-28,Automotive Paint,12988,11,Rainy
+2025-08-29,Paint Accessories,17321,16,Rainy
+2025-08-30,Industrial Coating,20981,23,Rainy
+2025-08-31,Automotive Paint,16367,23,Rainy
+2025-09-01,Industrial Coating,19205,26,Rainy
+2025-09-02,Automotive Paint,18171,19,Rainy
+2025-09-03,Industrial Coating,13855,19,Rainy
+2025-09-04,Automotive Paint,14161,18,Rainy
+2025-09-05,Paint Accessories,15349,18,Rainy
+2025-09-06,Colorants,16551,21,Rainy
+2025-09-07,Industrial Coating,13058,14,Rainy

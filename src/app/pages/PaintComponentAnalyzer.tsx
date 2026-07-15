@@ -244,7 +244,7 @@ export default function PaintComponentAnalyzer() {
 
     const interval = window.setInterval(() => {
       setProcessingStep((current) => (current >= 4 ? 4 : current + 1));
-    }, 1200);
+    }, 1200); 
 
     return () => window.clearInterval(interval);
   }, [isAnalyzing]);
@@ -804,60 +804,20 @@ setTimeout(() => {
                     )}
 
                     {showAnalysisComplete && !isAnalyzing && (
-  <div className="absolute inset-0 z-40 flex items-center justify-center bg-black/70 backdrop-blur-sm animate-in fade-in duration-500">
+  <div className="absolute inset-0 z-40 flex items-center justify-center rounded-2xl bg-black/60 backdrop-blur-sm animate-in fade-in duration-300">
+    <div className="flex flex-col items-center text-center">
 
-    <div className="flex w-[420px] flex-col items-center rounded-2xl border border-green-300/30 bg-[#0f1720]/95 px-10 py-10 shadow-2xl">
-
-      <div className="mb-6 flex h-24 w-24 items-center justify-center rounded-full bg-green-500 shadow-[0_0_40px_rgba(34,197,94,0.5)]">
-        <CheckCircle2 className="h-14 w-14 text-white" />
+      <div className="mb-5 flex h-20 w-20 items-center justify-center rounded-full bg-green-500">
+        <CheckCircle2 className="h-10 w-10 text-white" />
       </div>
 
-      <h2 className="text-3xl font-bold text-white">
+      <h2 className="text-2xl font-bold text-white">
         Analysis Complete
       </h2>
 
-      <p className="mt-3 text-center text-sm leading-relaxed text-green-100">
-        Gemini AI successfully analyzed the uploaded paint sample.
+      <p className="mt-2 max-w-xs text-sm text-green-100">
+        Paint formula successfully generated.
       </p>
-
-      <p className="text-center text-sm text-green-100">
-        Paint mixture has been generated using your available inventory.
-      </p>
-
-      <div className="mt-8 w-full rounded-xl border border-green-400/20 bg-[#1a4d2e]/20 p-4">
-
-        <div className="mb-3 flex items-center justify-between">
-          <span className="text-sm text-green-200">
-            Vision Analysis
-          </span>
-
-          <CheckCircle2 className="h-5 w-5 text-green-400" />
-        </div>
-
-        <div className="mb-3 flex items-center justify-between">
-          <span className="text-sm text-green-200">
-            Inventory Matching
-          </span>
-
-          <CheckCircle2 className="h-5 w-5 text-green-400" />
-        </div>
-
-        <div className="flex items-center justify-between">
-          <span className="text-sm text-green-200">
-            Paint Formula Generated
-          </span>
-
-          <CheckCircle2 className="h-5 w-5 text-green-400" />
-        </div>
-
-      </div>
-
-      <div className="mt-6 flex items-center gap-2 rounded-full border border-green-400/30 bg-green-500/10 px-5 py-2">
-        <div className="h-2.5 w-2.5 rounded-full bg-green-400 animate-pulse" />
-        <span className="text-xs font-semibold tracking-[0.25em] text-green-200">
-          READY TO REVIEW RESULTS
-        </span>
-      </div>
 
     </div>
   </div>

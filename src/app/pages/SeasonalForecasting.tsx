@@ -1,646 +1,1446 @@
-  import { useMemo, useRef, useState, useEffect } from "react";
-  import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../components/ui/card";
-  import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../components/ui/table";
-  import { Badge } from "../components/ui/badge";
-  import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs";
-  import {
-    LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid,
-    Tooltip, ResponsiveContainer, ReferenceArea,
-  } from "recharts";
-  import {
-    TrendingUp, TrendingDown, AlertCircle, CheckCircle, Target, Lightbulb,
-    Calendar, Filter, Plus, Trash2,
-    Loader2, CheckCircle2,
-  } from "lucide-react";
+    import { useMemo, useState, useEffect } from "react";
+    import {
+      salesForecastAI, loadSalesData,
+    } from "../gemini-service/SalesForecasting";
 
+    import {
+      Card,
+      CardContent,
+      CardDescription,
+      CardHeader,
+      CardTitle,
+    } from "../components/ui/card";
 
-  const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-  const SEASON_FOR_MONTH = (m) => (m >= 10 || m <= 4) ? "Dry" : "Rainy"; // 0-indexed
+    import {
+      Table,
+      TableBody,
+      TableCell,
+      TableHead,
+      TableHeader,
+      TableRow,
+    } from "../components/ui/table";
 
-  // ── Helpers ────────────────────────────────────────────────────────────────
+    import { Badge } from "../components/ui/badge";
+    import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs";
 
-  const toCSV = (rows) => {
-    const header = "Month,Year,Season,Sales (PHP)";
-    const body = rows.map(r => `${r.month},${r.year},${r.season},${r.sales}`).join("\n");
-    return `${header}\n${body}`;
-  };
+    import {
+      LineChart,
+      Line,
+      XAxis,
+      YAxis,
+      CartesianGrid,
+      Tooltip,
+      ResponsiveContainer,
+      ReferenceArea,
+    } from "recharts";
 
-  // ── Main Component ─────────────────────────────────────────────────────────
+    import {
+      TrendingUp,
+      TrendingDown,
+      AlertCircle,
+      CheckCircle,
+      CheckCircle2,
+      Target,
+      Lightbulb,
+      Loader2,
+      Sparkles,
+      Database,
+      RefreshCw,
+    } from "lucide-react";
 
-  export default function SeasonalForecasting() {
+    interface SalesRecord {
+      id: string;
+      month: string;
+      year: number;
+      season: string;
+      sales: number;
+      category?: string;
+      unitsSold?: number;
+    }
 
-    // ── Sales Data (user-inputted) ───────────────────────────────────────────
-    const [salesData, setSalesData] = useState(() => {
-      try { return JSON.parse(localStorage.getItem("gpc_sales_data") || "[]"); }
-      catch { return []; }
-    });
+    // Constants
+    const MONTH_NAMES = [
+      "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+      "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"
+    ];
 
-    useEffect(() => {
-      localStorage.setItem("gpc_sales_data", JSON.stringify(salesData));
-    }, [salesData]);
+    const SEASON_FOR_MONTH = (m: number) =>
+      m >= 10 || m <= 4 ? "Dry" : "Rainy";
 
-    const [newRow, setNewRow] = useState({ month: "Jan", year: new Date().getFullYear(), sales: "" });
+    // Cache keys
+    const CACHE_KEY = 'paint_analyzer_forecast_data';
+    const CACHE_TIMESTAMP_KEY = 'paint_analyzer_forecast_timestamp';
+    const CACHE_DATA_COUNT_KEY = 'paint_analyzer_data_count';
 
-    const addRow = () => {
-      if (!newRow.sales || isNaN(parseFloat(newRow.sales))) return;
-      const monthIdx = MONTH_NAMES.indexOf(newRow.month);
-      const season = SEASON_FOR_MONTH(monthIdx);
-      const entry = {
-        id: `row-${Date.now()}`,
-        month: newRow.month,
-        year: newRow.year,
-        season,
-        sales: parseFloat(newRow.sales),
-      };
-      const sorted = [...salesData, entry].sort((a, b) => {
-        if (a.year !== b.year) return a.year - b.year;
-        return MONTH_NAMES.indexOf(a.month) - MONTH_NAMES.indexOf(b.month);
-      });
-      setSalesData(sorted);
-      setNewRow({ month: "Jan", year: new Date().getFullYear(), sales: "" });
-    };
+    export default function SeasonalForecasting() {
+      // ----------------------------
+      // Sales Data
+      // ----------------------------
+      const [salesData, setSalesData] = useState<SalesRecord[]>([]);
+      const [originalData, setOriginalData] = useState<SalesRecord[]>([]);
+      const [debugInfo, setDebugInfo] = useState<string>("");
 
-    const deleteRow = (id) => setSalesData(prev => prev.filter(r => r.id !== id));
-
-    // ── n8n — Sales Forecasting Agent ───────────────────────────────────────
-    const [forecastData, setForecastData] = useState(null);
-    const [forecastStatus, setForecastStatus] = useState("idle");
-
-    const runForecastAgent = async (data) => {
-      if (!data.length) return;
-      setForecastStatus("fetching");
-      try {
-        const res = await fetch(N8N_FORECAST_URL, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            salesData: data.map(r => ({ Month: r.month, Year: r.year, Season: r.season, "Sales (PHP)": r.sales })),
-            csvExport: toCSV(data),
-            source: "Paintelligent - Sales Forecasting",
-            timestamp: new Date().toISOString(),
-          }),
+      const aggregateSalesData = (data: SalesRecord[]) => {
+        const grouped = data.reduce((acc, item) => {
+          const key = `${item.month}-${item.year}`;
+          if (acc[key]) {
+            acc[key].sales += item.sales;
+            if (item.unitsSold) {
+              acc[key].unitsSold = (acc[key].unitsSold || 0) + item.unitsSold;
+            }
+            if (!acc[key].category && item.category) {
+              acc[key].category = item.category;
+            }
+          } else {
+            acc[key] = { ...item };
+          }
+          return acc;
+        }, {} as Record<string, SalesRecord>);
+        
+        return Object.values(grouped).sort((a, b) => {
+          if (a.year !== b.year) return a.year - b.year;
+          return MONTH_NAMES.indexOf(a.month.substring(0, 3)) - MONTH_NAMES.indexOf(b.month.substring(0, 3));
         });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const result = await res.json();
-        setForecastData(result);
-        setForecastStatus("success");
-        setTimeout(() => setForecastStatus("idle"), 3000);
-        return result;
-      } catch {
+      };
+
+      useEffect(() => {
+        const fetchSalesData = async () => {
+          try {
+            const rows = await loadSalesData();
+            console.log("Raw data rows (first 3):", rows.slice(0, 3));
+            console.log("First row keys:", Object.keys(rows[0] || {}));
+            
+            const formattedData: SalesRecord[] = rows.map((row: any, index: number) => {
+              const date = new Date(row.Date);
+              const category = row.Category || row["Category"] || row["Product Category"] || row["Product"] || row["category"] || "";
+              
+              return {
+                id: String(index + 1),
+                month: date.toLocaleString("en-US", { month: "long" }),
+                year: date.getFullYear(),
+                season: row.Season || "",
+                sales: Number(row["Total Sales (PHP)"] || 0),
+                category: category,
+                unitsSold: Number(row["Units Sold"] || 0),
+              };
+            });
+            
+            console.log("Formatted data with categories:", formattedData.slice(0, 5));
+            
+            setOriginalData(formattedData);
+            
+            const uniqueCategories = [...new Set(formattedData.map(r => r.category).filter(Boolean))];
+            console.log("Unique categories found:", uniqueCategories);
+            setDebugInfo(`Categories found: ${uniqueCategories.join(', ') || 'None'}`);
+            
+            const aggregated = aggregateSalesData(formattedData);
+            console.log("Aggregated data:", aggregated.slice(0, 5));
+            
+            setSalesData(aggregated);
+
+            const cachedDataCount = localStorage.getItem(CACHE_DATA_COUNT_KEY);
+            if (cachedDataCount && parseInt(cachedDataCount) === aggregated.length) {
+              const cachedForecast = localStorage.getItem(CACHE_KEY);
+              if (cachedForecast) {
+                try {
+                  const parsed = JSON.parse(cachedForecast);
+                  setForecastData(parsed);
+                  setForecastStatus("success");
+                  console.log("Loaded cached forecast data");
+                } catch (e) {
+                  console.error("Error parsing cached data:", e);
+                }
+              }
+            }
+          } catch (error) {
+            console.error("Error loading sales data:", error);
+          }
+        };
+        fetchSalesData();
+      }, []);
+
+      // ----------------------------
+      // AI States
+      // ----------------------------
+      const [forecastData, setForecastData] = useState<any>(null);
+      const [forecastStatus, setForecastStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
+      const [lastGenerated, setLastGenerated] = useState<string | null>(null);
+
+      useEffect(() => {
+        const timestamp = localStorage.getItem(CACHE_TIMESTAMP_KEY);
+        if (timestamp) {
+          const date = new Date(parseInt(timestamp));
+          setLastGenerated(date.toLocaleString());
+        }
+      }, []);
+
+      // ----------------------------
+      // Cache Functions
+      // ----------------------------
+      const saveToCache = (data: any) => {
+        try {
+          localStorage.setItem(CACHE_KEY, JSON.stringify(data));
+          localStorage.setItem(CACHE_TIMESTAMP_KEY, String(Date.now()));
+          localStorage.setItem(CACHE_DATA_COUNT_KEY, String(salesData.length));
+          const date = new Date();
+          setLastGenerated(date.toLocaleString());
+          console.log("Data cached successfully");
+        } catch (error) {
+          console.error("Error saving to cache:", error);
+        }
+      };
+
+      const clearCache = () => {
+        localStorage.removeItem(CACHE_KEY);
+        localStorage.removeItem(CACHE_TIMESTAMP_KEY);
+        localStorage.removeItem(CACHE_DATA_COUNT_KEY);
+        setForecastData(null);
         setForecastStatus("idle");
-      }
-    };
-
-    // ── n8n — Prescriptive Analytics Agent ──────────────────────────────────
-    const [prescriptiveData, setPrescriptiveData] = useState(null);
-    const [prescriptiveStatus, setPrescriptiveStatus] = useState("idle");
-
-    const runPrescriptiveAgent = async (data, forecast) => {
-      if (!data.length) return;
-      setPrescriptiveStatus("fetching");
-      try {
-        const res = await fetch(N8N_PRESCRIPTIVE_URL, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            salesData: data.map(r => ({ Month: r.month, Year: r.year, Season: r.season, "Sales (PHP)": r.sales })),
-            forecastData: forecast?.forecast || [],
-            csvExport: toCSV(data),
-            source: "Paintelligent - Prescriptive Analytics",
-            timestamp: new Date().toISOString(),
-          }),
-        });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const result = await res.json();
-        setPrescriptiveData(result);
-        setPrescriptiveStatus("success");
-        setTimeout(() => setPrescriptiveStatus("idle"), 3000);
-      } catch {
-        setPrescriptiveStatus("idle");
-      }
-    };
-
-    // ── Auto-run both agents on mount (fires when admin logs in) ────────────
-    useEffect(() => {
-      if (!salesData.length) return;
-      const init = async () => {
-        const forecast = await runForecastAgent(salesData);
-        await runPrescriptiveAgent(salesData, forecast);
+        setLastGenerated(null);
+        console.log("Cache cleared");
       };
-      init();
-    }, []);
 
+      // ----------------------------
+      // Calculate Forecast
+      // ----------------------------
+      const calculateForecast = () => {
+        if (!salesData.length) return [];
 
-    // ── Chart / view state ───────────────────────────────────────────────────
-    const [viewMode, setViewMode] = useState("monthly");
-    const [selectedMonth, setSelectedMonth] = useState("");
-    const [timeFilter, setTimeFilter] = useState("all");
-    const [chartKey, setChartKey] = useState(0);
-    const [isVisible, setIsVisible] = useState(false);
+        const sorted = [...salesData].sort((a, b) => {
+          if (a.year !== b.year) return a.year - b.year;
+          return MONTH_NAMES.indexOf(a.month.substring(0, 3)) - MONTH_NAMES.indexOf(b.month.substring(0, 3));
+        });
 
-    useEffect(() => {
-      const timer = setTimeout(() => {
-        setIsVisible(true);
-      }, 80);
-
-      return () => clearTimeout(timer);
-    }, []);
-    useEffect(() => { setChartKey(k => k + 1); }, [viewMode, timeFilter, selectedMonth, salesData, forecastData]);
-
-    // First available month for weekly selector
-    useEffect(() => {
-      if (salesData.length && !selectedMonth) {
-        setSelectedMonth(`${salesData[0].month} ${salesData[0].year}`);
-      }
-    }, [salesData]);
-
-    // ── Derived chart data ───────────────────────────────────────────────────
-    const historicalChartData = useMemo(() =>
-      salesData.map((r, i) => ({
-        id: `hist-${i}`,
-        month: `${r.month} ${r.year}`,
-        sales: r.sales,
-        season: r.season,
-        isForecast: false,
-        upperBound: null,
-        lowerBound: null,
-      })),
-      [salesData]
-    );
-
-    const forecastChartData = useMemo(() => {
-      if (!forecastData?.forecast) return [];
-      return forecastData.forecast.map((f, i) => ({
-        id: `fore-${i}`,
-        month: f.month,
-        sales: f.sales,
-        season: f.season || "Dry",
-        isForecast: true,
-        upperBound: f.upperBound ?? null,
-        lowerBound: f.lowerBound ?? null,
-      }));
-    }, [forecastData]);
-
-    const allMonthlyData = useMemo(() => [...historicalChartData, ...forecastChartData], [historicalChartData, forecastChartData]);
-
-    const filteredMonthlyData = useMemo(() => {
-      let data = allMonthlyData;
-      if (timeFilter !== "all") {
-        const hist = data.filter(d => !d.isForecast && d.month.includes(timeFilter));
-        const fore = data.filter(d => d.isForecast);
-        data = timeFilter === new Date().getFullYear().toString() ? [...hist, ...fore] : hist;
-      }
-      return data.map((d, i) => ({ ...d, id: `${chartKey}-${i}` }));
-    }, [allMonthlyData, timeFilter, chartKey]);
-
-    const weeklyChartData = useMemo(() => {
-      const row = salesData.find(r => `${r.month} ${r.year}` === selectedMonth);
-      if (!row) return [];
-      const base = row.sales / 4;
-      return ["Week 1", "Week 2", "Week 3", "Week 4"].map((week, i) => ({
-        id: `w-${i}`,
-        week,
-        sales: Math.round(base + (Math.random() * base * 0.1 - base * 0.05)),
-        season: row.season,
-      }));
-    }, [selectedMonth, salesData]);
-
-    const seasonalAreas = useMemo(() => {
-      const areas = [];
-      let areaIdx = 0;
-      const data = filteredMonthlyData;
-      for (let i = 0; i < data.length; i++) {
-        const curr = data[i];
-        const prev = data[i - 1];
-        if (i === 0 || prev?.season !== curr.season) {
-          let end = i;
-          while (end < data.length - 1 && data[end + 1].season === curr.season) end++;
-          areas.push({
-            key: `area-${chartKey}-${areaIdx++}`,
-            x1: curr.month,
-            x2: data[end].month,
-            fill: curr.season === "Dry" ? "#86efac" : "#d1fae5",
-            stroke: curr.season === "Dry" ? "#22c55e" : "#6ee7b7",
+        const lastThree = sorted.slice(-3);
+        const avgLastThree = lastThree.reduce((sum, r) => sum + r.sales, 0) / lastThree.length;
+        const totalAvg = salesData.reduce((sum, r) => sum + r.sales, 0) / salesData.length;
+        const growthRate = avgLastThree / (totalAvg || 1);
+        const lastMonth = sorted[sorted.length - 1];
+        const lastMonthIndex = MONTH_NAMES.indexOf(lastMonth.month.substring(0, 3));
+        
+        const forecast = [];
+        for (let i = 1; i <= 6; i++) {
+          const nextIndex = (lastMonthIndex + i) % 12;
+          const nextYear = lastMonthIndex + i >= 12 ? lastMonth.year + 1 : lastMonth.year;
+          const monthName = MONTH_NAMES[nextIndex];
+          const season = SEASON_FOR_MONTH(nextIndex + 1);
+          
+          const basePrediction = avgLastThree * Math.pow(growthRate, i * 0.15);
+          const variation = 1 + (Math.random() * 0.1 - 0.05);
+          const predictedSales = Math.round(basePrediction * variation);
+          
+          forecast.push({
+            month: `${monthName} ${nextYear}`,
+            sales: Math.max(predictedSales, 100),
+            season: season,
+            upperBound: Math.round(predictedSales * 1.15),
+            lowerBound: Math.round(predictedSales * 0.85)
           });
         }
-      }
-      return areas;
-    }, [filteredMonthlyData, chartKey]);
+        
+        return forecast;
+      };
 
-    // ── Computed summary stats ───────────────────────────────────────────────
-    const totalSales = useMemo(() => salesData.reduce((s, r) => s + r.sales, 0), [salesData]);
-    const drySales = useMemo(() => salesData.filter(r => r.season === "Dry").reduce((s, r) => s + r.sales, 0), [salesData]);
-    const rainySales = useMemo(() => salesData.filter(r => r.season === "Rainy").reduce((s, r) => s + r.sales, 0), [salesData]);
-    const availableMonths = useMemo(() => salesData.map(r => `${r.month} ${r.year}`), [salesData]);
+      // ----------------------------
+      // Gemini Forecast
+      // ----------------------------
+      const generateForecast = async () => {
+        if (!salesData.length) return;
 
-    const seasonalTrends = forecastData?.seasonalTrends || null;
-    const highDemand = prescriptiveData?.highDemandProducts || null;
-    const bestSelling = prescriptiveData?.bestSellingProducts || [];
-    const slowMoving = prescriptiveData?.slowMovingProducts || [];
-    const stockRecs = prescriptiveData?.stockRecommendations || [];
-    const marketing = prescriptiveData?.marketingStrategies || [];
+        setForecastStatus("loading");
 
-    // ── Years available for filter ────────────────────────────────────────────
-    const availableYears = useMemo(() => [...new Set(salesData.map(r => r.year))].sort(), [salesData]);
+        try {
+          const totalSales = salesData.reduce((sum, r) => sum + r.sales, 0);
+          const avgSales = totalSales / salesData.length;
+          const sorted = [...salesData].sort((a, b) => {
+            if (a.year !== b.year) return a.year - b.year;
+            return MONTH_NAMES.indexOf(a.month.substring(0, 3)) - MONTH_NAMES.indexOf(b.month.substring(0, 3));
+          });
+          const lastMonth = sorted[sorted.length - 1];
+          
+          const dryData = salesData.filter(r => r.season === "Dry");
+          const rainyData = salesData.filter(r => r.season === "Rainy");
+          const dryTotal = dryData.reduce((sum, r) => sum + r.sales, 0);
+          const rainyTotal = rainyData.reduce((sum, r) => sum + r.sales, 0);
+          const dryAvg = dryData.length ? dryTotal / dryData.length : 0;
+          const rainyAvg = rainyData.length ? rainyTotal / rainyData.length : 0;
+          
+          const calculatedForecast = calculateForecast();
 
-    return (
-  <div
-    className={`
-      min-h-screen bg-white p-6 space-y-6
-      transition-all duration-700 ease-out
-      ${
-        isVisible
-          ? "opacity-100 translate-y-0"
-          : "opacity-0 translate-y-5"
-      }
-    `}
-  >
-        {/* ── Sales Data Input ── */}
-        <Card>
-          <CardHeader>
-            <div className="flex items-center justify-between flex-wrap gap-3">
-              <div>
-                <CardTitle className="flex items-center gap-2 text-lg">
-                  <Calendar className="size-5 text-[#1a4d2e]" />
-                  Sales Data Input
-                </CardTitle>
-                <CardDescription>Enter monthly sales figures. Export as CSV to feed your n8n agents.</CardDescription>
-              </div>
+          const allCategories = [...new Set(originalData.map(r => r.category).filter(Boolean))];
+          console.log("All categories from original data:", allCategories);
+          
+          const categorySales = allCategories.map(cat => {
+            const items = originalData.filter(r => r.category === cat);
+            const total = items.reduce((sum, r) => sum + r.sales, 0);
+            const units = items.reduce((sum, r) => sum + (r.unitsSold || 0), 0);
+            const months = items.length;
+            return { category: cat, total, units, months };
+          }).sort((a, b) => b.total - a.total);
+
+          const categoryDetails = categorySales.map(cat => {
+            const catData = originalData.filter(r => r.category === cat.category);
+            const monthlyAvg = cat.total / cat.months;
+            const dryCat = catData.filter(r => r.season === "Dry");
+            const rainyCat = catData.filter(r => r.season === "Rainy");
+            const dryTotal = dryCat.reduce((sum, r) => sum + r.sales, 0);
+            const rainyTotal = rainyCat.reduce((sum, r) => sum + r.sales, 0);
+            const dryAvg = dryCat.length ? dryTotal / dryCat.length : 0;
+            const rainyAvg = rainyCat.length ? rainyTotal / rainyCat.length : 0;
+            return {
+              ...cat,
+              monthlyAvg,
+              dryTotal,
+              rainyTotal,
+              dryAvg,
+              rainyAvg,
+              bestSeason: dryAvg > rainyAvg ? 'Dry' : 'Rainy'
+            };
+          });
+
+          const prompt = `
+    Analyze the sales data and provide a comprehensive business analysis.
+
+    SALES DATA:
+    - Total Sales: ₱${totalSales.toLocaleString()}
+    - Average Monthly Sales: ₱${Math.round(avgSales).toLocaleString()}
+    - Records: ${salesData.length}
+    - Categories: ${allCategories.length > 0 ? allCategories.join(', ') : 'None'}
+
+    SEASONAL BREAKDOWN:
+    Dry Season: ₱${dryTotal.toLocaleString()} (${dryData.length} months, Avg: ₱${Math.round(dryAvg).toLocaleString()})
+    Rainy Season: ₱${rainyTotal.toLocaleString()} (${rainyData.length} months, Avg: ₱${Math.round(rainyAvg).toLocaleString()})
+
+    CATEGORY DETAILS:
+    ${categoryDetails.map(c => `${c.category}: ₱${c.total.toLocaleString()} (${c.units} units, ${c.months} months, Best: ${c.bestSeason})`).join('\n')}
+
+    Return ONLY valid JSON with this structure:
+    {
+      "seasonalTrends": {
+        "dry": {
+          "totalSales": ${dryTotal},
+          "averageMonthlySales": ${Math.round(dryAvg)},
+          "trend": "${dryAvg > rainyAvg ? 'increasing' : 'decreasing'}"
+        },
+        "rainy": {
+          "totalSales": ${rainyTotal},
+          "averageMonthlySales": ${Math.round(rainyAvg)},
+          "trend": "${rainyAvg > dryAvg ? 'increasing' : 'decreasing'}"
+        }
+      },
+      "highDemand": {
+        "dry": [
+          ${categoryDetails.filter(c => c.dryAvg > c.rainyAvg).slice(0, 4).map((c, i) => `{
+            "name": "${c.category}",
+            "units": ${Math.round(c.dryTotal / (c.months || 1)) || 50},
+            "revenue": ${Math.round(c.dryTotal * 0.3) || 10000}
+          }`).join(',')}
+        ],
+        "rainy": [
+          ${categoryDetails.filter(c => c.rainyAvg > c.dryAvg).slice(0, 4).map((c, i) => `{
+            "name": "${c.category}",
+            "units": ${Math.round(c.rainyTotal / (c.months || 1)) || 40},
+            "revenue": ${Math.round(c.rainyTotal * 0.25) || 8000}
+          }`).join(',')}
+        ]
+      },
+      "bestSellingProducts": [
+        ${categoryDetails.slice(0, 3).map((c, i) => `{
+          "name": "${c.category}",
+          "unitsSold": ${Math.round(c.total / 500) || 100},
+          "growth": "+${Math.round((c.dryAvg / (c.rainyAvg || 1) - 1) * 100) || 5}%"
+        }`).join(',')}
+      ],
+      "slowMovingProducts": [
+        ${categoryDetails.slice(-2).map((c, i) => `{
+          "name": "${c.category}",
+          "unitsSold": ${Math.round(c.total / 800) || 20},
+          "recommendation": "${c.total > totalSales / allCategories.length ? 'Review pricing and promotions' : 'Consider bundling or discounts'}"
+        }`).join(',')}
+      ],
+      "stockRecommendations": [
+        ${categoryDetails.map((c, i) => `{
+          "category": "${c.category}",
+          "items": [
+            {
+              "name": "${c.category}",
+              "currentStock": ${Math.round(c.total / 600) || 30},
+              "recommendedStock": ${Math.round(c.total / 400) || 50},
+              "action": "${c.total > totalSales / allCategories.length ? 'Increase' : 'Maintain'}"
+            }
+          ]
+        }`).join(',')}
+      ],
+      "marketingStrategies": [
+        {
+          "season": "Dry Season",
+          "targetCategories": [${categoryDetails.filter(c => c.dryAvg > c.rainyAvg).slice(0, 3).map(c => `"${c.category}"`).join(', ')}],
+          "strategies": [
+            "Launch outdoor promotions for ${categoryDetails.filter(c => c.dryAvg > c.rainyAvg).slice(0, 2).map(c => c.category).join(' and ')}",
+            "Create seasonal bundles featuring ${categoryDetails.filter(c => c.dryAvg > c.rainyAvg).slice(0, 3).map(c => c.category).join(', ')}",
+            "Run dry season discounts on ${categoryDetails.filter(c => c.dryAvg > c.rainyAvg).slice(0, 1).map(c => c.category).join(', ')} products",
+            "Implement targeted social media campaigns for ${categoryDetails.filter(c => c.dryAvg > c.rainyAvg).slice(0, 2).map(c => c.category).join(' & ')}",
+            "Offer bundle deals: Buy 2 get 1 free on selected ${categoryDetails.filter(c => c.dryAvg > c.rainyAvg).slice(0, 1).map(c => c.category).join(', ')} items"
+          ]
+        },
+        {
+          "season": "Rainy Season",
+          "targetCategories": [${categoryDetails.filter(c => c.rainyAvg > c.dryAvg).slice(0, 3).map(c => `"${c.category}"`).join(', ')}],
+          "strategies": [
+            "Focus on indoor solutions for ${categoryDetails.filter(c => c.rainyAvg > c.dryAvg).slice(0, 2).map(c => c.category).join(' and ')}",
+            "Launch weather-proof campaigns targeting ${categoryDetails.filter(c => c.rainyAvg > c.dryAvg).slice(0, 1).map(c => c.category).join(', ')}",
+            "Create rainy season bundles for ${categoryDetails.filter(c => c.rainyAvg > c.dryAvg).slice(0, 3).map(c => c.category).join(', ')}",
+            "Offer free delivery promotions for ${categoryDetails.filter(c => c.rainyAvg > c.dryAvg).slice(0, 2).map(c => c.category).join(' & ')}",
+            "Implement loyalty programs for repeat buyers of ${categoryDetails.filter(c => c.rainyAvg > c.dryAvg).slice(0, 1).map(c => c.category).join(', ')}"
+          ]
+        }
+      ],
+      "forecast": ${JSON.stringify(calculatedForecast)}
+    }`;
+
+          const response = await salesForecastAI.models.generateContent({
+            model: "gemini-2.5-flash",
+            contents: prompt,
+          });
+
+          const cleaned = response.text
+            .replace(/```json/g, "")
+            .replace(/```/g, "")
+            .trim();
+
+          const result = JSON.parse(cleaned);
+
+          console.log("AI Response:", result);
+
+          saveToCache(result);
+          setForecastData(result);
+          setForecastStatus("success");
+
+        } catch (error) {
+          console.error("AI Generation Error:", error);
+          setForecastStatus("error");
+        }
+      };
+
+      useEffect(() => {
+        if (forecastStatus === "success" && forecastData) {
+          setTimeout(() => {
+            const resultsElement = document.getElementById('ai-results');
+            if (resultsElement) {
+              resultsElement.scrollIntoView({
+                behavior: 'smooth',
+                block: 'start'
+              });
+            }
+          }, 300);
+        }
+      }, [forecastStatus, forecastData]);
+
+      // ----------------------------
+      // UI States
+      // ----------------------------
+      const [viewMode, setViewMode] = useState("monthly");
+      const [selectedMonth, setSelectedMonth] = useState("");
+      const [timeFilter, setTimeFilter] = useState("all");
+      const [chartKey, setChartKey] = useState(0);
+      const [isVisible, setIsVisible] = useState(false);
+
+      useEffect(() => {
+        const timer = setTimeout(() => setIsVisible(true), 80);
+        return () => clearTimeout(timer);
+      }, []);
+
+      useEffect(() => {
+        setChartKey((k) => k + 1);
+      }, [viewMode, timeFilter, selectedMonth, salesData, forecastData]);
+
+      useEffect(() => {
+        if (salesData.length && !selectedMonth) {
+          setSelectedMonth(`${salesData[0].month.substring(0, 3)} ${salesData[0].year}`);
+        }
+      }, [salesData]);
+
+      // Historical Chart
+      const historicalChartData = useMemo(
+        () =>
+          salesData.map((row, index) => ({
+            id: `hist-${index}`,
+            month: `${row.month.substring(0, 3)} ${row.year}`,
+            sales: row.sales,
+            season: row.season,
+            isForecast: false,
+            upperBound: null,
+            lowerBound: null,
+          })),
+        [salesData]
+      );
+
+      // Forecast Chart
+      const forecastChartData = useMemo(() => {
+        if (!forecastData?.forecast) return [];
+        return forecastData.forecast.map((item: any, index: number) => ({
+          id: `forecast-${index}`,
+          month: item.month,
+          sales: item.sales,
+          season: item.season ?? "Dry",
+          isForecast: true,
+          upperBound: item.upperBound ?? null,
+          lowerBound: item.lowerBound ?? null,
+        }));
+      }, [forecastData]);
+
+      const allMonthlyData = useMemo(
+        () => [...historicalChartData, ...forecastChartData],
+        [historicalChartData, forecastChartData]
+      );
+
+      // Filter
+      const filteredMonthlyData = useMemo(() => {
+        let data = allMonthlyData;
+        if (timeFilter !== "all") {
+          const historical = data.filter(
+            (d) => !d.isForecast && d.month.includes(timeFilter)
+          );
+          const forecast = data.filter((d) => d.isForecast);
+          data = timeFilter === String(new Date().getFullYear())
+            ? [...historical, ...forecast]
+            : historical;
+        }
+        return data.map((item, index) => ({
+          ...item,
+          id: `${chartKey}-${index}`,
+        }));
+      }, [allMonthlyData, timeFilter, chartKey]);
+
+      // Weekly Chart
+      const weeklyChartData = useMemo(() => {
+        const row = salesData.find(
+          (r) => `${r.month.substring(0, 3)} ${r.year}` === selectedMonth
+        );
+        if (!row) return [];
+        const base = row.sales / 4;
+        return ["Week 1", "Week 2", "Week 3", "Week 4"].map((week, index) => ({
+          id: `week-${index}`,
+          week,
+          sales: Math.round(base + (Math.random() * base * 0.1 - base * 0.05)),
+          season: row.season,
+        }));
+      }, [salesData, selectedMonth]);
+
+      // Seasonal Areas
+      const seasonalAreas = useMemo(() => {
+        const areas: any[] = [];
+        let areaIndex = 0;
+        for (let i = 0; i < filteredMonthlyData.length; i++) {
+          const current = filteredMonthlyData[i];
+          const previous = filteredMonthlyData[i - 1];
+          if (i === 0 || previous?.season !== current.season) {
+            let end = i;
+            while (
+              end < filteredMonthlyData.length - 1 &&
+              filteredMonthlyData[end + 1].season === current.season
+            ) {
+              end++;
+            }
+            areas.push({
+              key: `area-${chartKey}-${areaIndex++}`,
+              x1: current.month,
+              x2: filteredMonthlyData[end].month,
+              fill: current.season === "Dry" ? "#86efac" : "#d1fae5",
+              stroke: current.season === "Dry" ? "#22c55e" : "#6ee7b7",
+            });
+          }
+        }
+        return areas;
+      }, [filteredMonthlyData, chartKey]);
+
+      // ── Computed summary stats ──
+      const totalSales = useMemo(
+        () => salesData.reduce((sum, row) => sum + row.sales, 0),
+        [salesData]
+      );
+
+      const drySales = useMemo(
+        () =>
+          salesData
+            .filter((row) => row.season === "Dry")
+            .reduce((sum, row) => sum + row.sales, 0),
+        [salesData]
+      );
+
+      const rainySales = useMemo(
+        () =>
+          salesData
+            .filter((row) => row.season === "Rainy")
+            .reduce((sum, row) => sum + row.sales, 0),
+        [salesData]
+      );
+
+      const availableMonths = useMemo(
+        () => salesData.map((row) => `${row.month.substring(0, 3)} ${row.year}`),
+        [salesData]
+      );
+
+      // ── AI Results ──
+      const seasonalTrends = forecastData?.seasonalTrends ?? null;
+      const highDemand = forecastData?.highDemand ?? null;
+      const bestSelling = forecastData?.bestSellingProducts ?? [];
+      const slowMoving = forecastData?.slowMovingProducts ?? [];
+      const stockRecs = forecastData?.stockRecommendations ?? [];
+      const marketing = forecastData?.marketingStrategies ?? [];
+
+      // ── Available Years ──
+      const availableYears = useMemo(
+        () => [...new Set(salesData.map((row) => row.year))].sort(),
+        [salesData]
+      );
+
+      const uniqueCategories = useMemo(
+        () => [...new Set(originalData.map(r => r.category).filter(Boolean))],
+        [originalData]
+      );
+
+      return (
+        <div
+          className={`
+            min-h-screen bg-white p-6 pb-10 space-y-6 transition-all duration-700 ease-out
+            ${isVisible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-5"}
+          `}
+        >
+          {/* ── Debug Info ── */}
+          {salesData.length > 0 && (
+            <div className="text-xs text-gray-500 bg-gray-50 p-2 rounded border border-gray-200">
+              <strong>Data Info:</strong> {salesData.length} records • 
+              <strong> Categories:</strong> {uniqueCategories.length > 0 ? uniqueCategories.join(', ') : 'None found'} • 
+              <strong> Years:</strong> {availableYears.join(', ')}
             </div>
-          </CardHeader>
-          <CardContent>
-            {/* Add row form */}
-            <div className="flex gap-2 mb-4 flex-wrap">
-              <select value={newRow.month} onChange={e => setNewRow(p => ({ ...p, month: e.target.value }))}
-                className="border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#1a4d2e]">
-                {MONTH_NAMES.map(m => <option key={m} value={m}>{m}</option>)}
-              </select>
-              <input type="number" value={newRow.year} onChange={e => setNewRow(p => ({ ...p, year: parseInt(e.target.value) }))}
-                placeholder="Year" min={2000} max={2100}
-                className="border-2 border-gray-300 rounded-lg px-3 py-2 text-sm w-24 focus:outline-none focus:border-[#1a4d2e]" />
-              <input type="number" value={newRow.sales} onChange={e => setNewRow(p => ({ ...p, sales: e.target.value }))}
-                placeholder="Sales (PHP)" min={0}
-                className="border-2 border-gray-300 rounded-lg px-3 py-2 text-sm w-44 focus:outline-none focus:border-[#1a4d2e]" />
-              <button onClick={addRow}
-                className="flex items-center gap-2 bg-[#1a4d2e] hover:bg-[#2d6b45] text-white px-4 py-2 rounded-lg text-sm font-medium">
-                <Plus className="size-4" /> Add
+          )}
+
+          {/* ── Summary Cards ── */}
+          {salesData.length > 0 && (
+            <>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+                <Card className="shadow-md border-0 bg-gradient-to-r from-green-700 to-green-600 text-white">
+                  <CardContent className="py-6">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm opacity-80">Total Sales</p>
+                        <h2 className="text-3xl font-bold mt-1">
+                          ₱{totalSales.toLocaleString()}
+                        </h2>
+                        <p className="text-xs mt-2 opacity-70">
+                          {salesData.length} records
+                        </p>
+                      </div>
+                      <TrendingUp className="w-10 h-10 opacity-70" />
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card className="shadow-md border-l-4 border-green-500">
+                  <CardContent className="py-6">
+                    <div className="flex justify-between items-center">
+                      <div>
+                        <p className="text-sm text-gray-500">Dry Season</p>
+                        <h2 className="text-2xl font-bold text-green-700">
+                          ₱{drySales.toLocaleString()}
+                        </h2>
+                        <p className="text-xs text-gray-500 mt-1">
+                          {salesData.filter((r) => r.season === "Dry").length} Months
+                        </p>
+                      </div>
+                      <TrendingUp className="w-9 h-9 text-green-500" />
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card className="shadow-md border-l-4 border-blue-500">
+                  <CardContent className="py-6">
+                    <div className="flex justify-between items-center">
+                      <div>
+                        <p className="text-sm text-gray-500">Rainy Season</p>
+                        <h2 className="text-2xl font-bold text-blue-700">
+                          ₱{rainySales.toLocaleString()}
+                        </h2>
+                        <p className="text-xs text-gray-500 mt-1">
+                          {salesData.filter((r) => r.season === "Rainy").length} Months
+                        </p>
+                      </div>
+                      <TrendingDown className="w-9 h-9 text-blue-500" />
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* ================= Sales Trend Chart ================= */}
+              <Card className="shadow-lg border-0">
+                <CardHeader className="border-b bg-gray-50">
+                  <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+                    <div>
+                      <CardTitle className="text-xl font-bold">
+                        {viewMode === "monthly"
+                          ? "Sales Trend Analysis"
+                          : `Weekly Sales Analysis • ${selectedMonth}`}
+                      </CardTitle>
+                      <CardDescription>
+                        Compare historical sales with AI-generated forecasts.
+                      </CardDescription>
+                    </div>
+                    <div className="flex items-center gap-3 flex-wrap">
+                      {viewMode === "monthly" && (
+                        <select
+                          value={timeFilter}
+                          onChange={(e) => setTimeFilter(e.target.value)}
+                          className="border rounded-lg px-3 py-2 text-sm"
+                        >
+                          <option value="all">All Years</option>
+                          {availableYears.map((year) => (
+                            <option key={year} value={String(year)}>
+                              {year}
+                            </option>
+                          ))}
+                        </select>
+                      )}
+                      <div className="flex bg-gray-100 rounded-lg p-1">
+                        <button
+                          onClick={() => setViewMode("monthly")}
+                          className={`px-4 py-2 rounded-md text-sm transition ${
+                            viewMode === "monthly"
+                              ? "bg-green-700 text-white"
+                              : "text-gray-600"
+                          }`}
+                        >
+                          Monthly
+                        </button>
+                        <button
+                          onClick={() => setViewMode("weekly")}
+                          className={`px-4 py-2 rounded-md text-sm transition ${
+                            viewMode === "weekly"
+                              ? "bg-green-700 text-white"
+                              : "text-gray-600"
+                          }`}
+                        >
+                          Weekly
+                        </button>
+                      </div>
+                      {viewMode === "weekly" && (
+                        <select
+                          value={selectedMonth}
+                          onChange={(e) => setSelectedMonth(e.target.value)}
+                          className="border rounded-lg px-3 py-2 text-sm"
+                        >
+                          {availableMonths.map((month) => (
+                            <option key={month}>{month}</option>
+                          ))}
+                        </select>
+                      )}
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent className="pt-6">
+                  <ResponsiveContainer width="100%" height={420}>
+                    <LineChart
+                      data={viewMode === "monthly" ? filteredMonthlyData : weeklyChartData}
+                      margin={{ top: 20, right: 30, left: 10, bottom: 30 }}
+                    >
+                      <defs>
+                        <linearGradient id="historicalGradient" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor="#166534" stopOpacity={0.35} />
+                          <stop offset="100%" stopColor="#166534" stopOpacity={0} />
+                        </linearGradient>
+                        <linearGradient id="forecastGradient" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor="#22c55e" stopOpacity={0.35} />
+                          <stop offset="100%" stopColor="#22c55e" stopOpacity={0} />
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="4 4" stroke="#E5E7EB" />
+                      {viewMode === "monthly" &&
+                        seasonalAreas.map((area) => (
+                          <ReferenceArea
+                            key={area.key}
+                            x1={area.x1}
+                            x2={area.x2}
+                            fill={area.fill}
+                            fillOpacity={0.15}
+                            strokeOpacity={0}
+                          />
+                        ))}
+                      <XAxis
+                        dataKey={viewMode === "monthly" ? "month" : "week"}
+                        tick={{ fontSize: 12 }}
+                        angle={viewMode === "monthly" ? -35 : 0}
+                        textAnchor={viewMode === "monthly" ? "end" : "middle"}
+                        height={70}
+                      />
+                      <YAxis
+                        tick={{ fontSize: 12 }}
+                        tickFormatter={(value) => `₱${(value / 1000).toFixed(0)}k`}
+                      />
+                      <Tooltip
+                        cursor={{ stroke: "#166534", strokeDasharray: "5 5" }}
+                        contentStyle={{
+                          borderRadius: 12,
+                          border: "none",
+                          boxShadow: "0 10px 30px rgba(0,0,0,.15)",
+                        }}
+                        formatter={(value: number) => [
+                          `₱${Number(value).toLocaleString()}`,
+                          "Sales",
+                        ]}
+                        labelFormatter={(label) => {
+                          const point = allMonthlyData.find((d) => d.month === label);
+                          return point
+                            ? `${label} • ${point.season} ${
+                                point.isForecast ? "(Forecast)" : "(Historical)"
+                              }`
+                            : label;
+                        }}
+                      />
+                      {viewMode === "monthly" ? (
+                        <>
+                          <Line
+                            type="monotone"
+                            dataKey={(d) => (!d.isForecast ? d.sales : null)}
+                            stroke="#166534"
+                            strokeWidth={4}
+                            dot={{ r: 4, fill: "#166534" }}
+                            activeDot={{ r: 7 }}
+                            connectNulls={false}
+                            name="Historical Sales"
+                          />
+                          <Line
+                            type="monotone"
+                            dataKey={(d) => (d.isForecast ? d.sales : null)}
+                            stroke="#22C55E"
+                            strokeWidth={4}
+                            strokeDasharray="8 6"
+                            dot={{ r: 4, fill: "#22C55E" }}
+                            activeDot={{ r: 7 }}
+                            connectNulls
+                            name="Forecast"
+                          />
+                          <Line
+                            dataKey="upperBound"
+                            stroke="#86EFAC"
+                            strokeWidth={2}
+                            strokeDasharray="3 3"
+                            dot={false}
+                            name="Upper Bound"
+                          />
+                          <Line
+                            dataKey="lowerBound"
+                            stroke="#86EFAC"
+                            strokeWidth={2}
+                            strokeDasharray="3 3"
+                            dot={false}
+                            name="Lower Bound"
+                          />
+                        </>
+                      ) : (
+                        <Line
+                          type="monotone"
+                          dataKey="sales"
+                          stroke="#166534"
+                          strokeWidth={4}
+                          dot={{ r: 5, fill: "#166534" }}
+                          activeDot={{ r: 8 }}
+                          name="Weekly Sales"
+                        />
+                      )}
+                    </LineChart>
+                  </ResponsiveContainer>
+                  <div className="mt-6 flex flex-wrap items-center justify-center gap-6 rounded-lg bg-gray-50 p-4 text-sm">
+                    <div className="flex items-center gap-2">
+                      <span className="h-1.5 w-8 rounded bg-green-900"></span>
+                      Historical Sales
+                    </div>
+                    {forecastData && (
+                      <div className="flex items-center gap-2">
+                        <span className="h-1.5 w-8 border-t-2 border-dashed border-green-500"></span>
+                        Forecast
+                      </div>
+                    )}
+                    <div className="flex items-center gap-2">
+                      <span className="w-4 h-4 rounded bg-green-200"></span>
+                      Dry Season
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="w-4 h-4 rounded bg-emerald-100"></span>
+                      Rainy Season
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </>
+          )}
+
+          {/* ── Generate Report Button ── */}
+          {salesData.length > 0 && forecastStatus !== "success" && (
+            <div className="flex justify-center">
+              <button
+                onClick={generateForecast}
+                disabled={forecastStatus === "loading"}
+                className="flex items-center gap-3 rounded-lg bg-[#1a4d2e] px-8 py-4 text-white hover:bg-[#2d6b45] disabled:opacity-60 transition-all shadow-lg hover:shadow-xl"
+              >
+                {forecastStatus === "loading" ? (
+                  <>
+                    <Loader2 className="size-5 animate-spin" />
+                    Generating...
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="size-5" />
+                    Generate AI Forecast Report
+                  </>
+                )}
               </button>
             </div>
+          )}
 
-            {salesData.length === 0 ? (
-              <div className="text-center py-12 text-gray-400 border-2 border-dashed border-gray-200 rounded-lg">
-                <Calendar className="size-10 mx-auto mb-2 opacity-40" />
-                <p className="font-medium">No sales data yet</p>
-                <p className="text-sm">Add monthly entries above or import a CSV file.</p>
-              </div>
-            ) : (
-              <div className="overflow-auto max-h-72">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Month</TableHead>
-                      <TableHead>Year</TableHead>
-                      <TableHead>Season</TableHead>
-                      <TableHead>Sales (PHP)</TableHead>
-                      <TableHead></TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {salesData.map(r => (
-                      <TableRow key={r.id}>
-                        <TableCell className="font-medium">{r.month}</TableCell>
-                        <TableCell>{r.year}</TableCell>
-                        <TableCell>
-                          <Badge variant="secondary" className={r.season === "Dry" ? "bg-green-100 text-green-800" : "bg-blue-100 text-blue-800"}>
-                            {r.season}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="font-semibold">₱{r.sales.toLocaleString()}</TableCell>
-                        <TableCell>
-                          <button onClick={() => deleteRow(r.id)} className="text-red-400 hover:text-red-600 transition-colors">
-                            <Trash2 className="size-4" />
-                          </button>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* ── Summary Cards ── */}
-        {salesData.length > 0 && (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <Card className="border-l-4 border-[#1a4d2e]">
-              <CardContent className="pt-5">
-                <p className="text-sm text-gray-500">Total Sales</p>
-                <p className="text-2xl font-bold text-gray-900">₱{totalSales.toLocaleString()}</p>
-                <p className="text-xs text-gray-400 mt-1">{salesData.length} months recorded</p>
-              </CardContent>
-            </Card>
-            <Card className="border-l-4 border-green-500">
-              <CardContent className="pt-5">
-                <p className="text-sm text-gray-500 flex items-center gap-1"><TrendingUp className="size-4 text-green-500" /> Dry Season</p>
-                <p className="text-2xl font-bold text-gray-900">₱{drySales.toLocaleString()}</p>
-                <p className="text-xs text-gray-400 mt-1">{salesData.filter(r => r.season === "Dry").length} months</p>
-              </CardContent>
-            </Card>
-            <Card className="border-l-4 border-blue-400">
-              <CardContent className="pt-5">
-                <p className="text-sm text-gray-500 flex items-center gap-1"><TrendingDown className="size-4 text-blue-500" /> Rainy Season</p>
-                <p className="text-2xl font-bold text-gray-900">₱{rainySales.toLocaleString()}</p>
-                <p className="text-xs text-gray-400 mt-1">{salesData.filter(r => r.season === "Rainy").length} months</p>
-              </CardContent>
-            </Card>
-          </div>
-        )}
-
-        {/* ── Charts ── */}
-        {salesData.length > 0 && (
-          <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between flex-wrap gap-3">
-                <CardTitle className="text-lg">
-                  {viewMode === "monthly" ? "Monthly Sales Trend" : `Weekly Breakdown — ${selectedMonth}`}
-                </CardTitle>
-                <div className="flex items-center gap-3 flex-wrap">
-                  {viewMode === "monthly" && (
-                    <select value={timeFilter} onChange={e => setTimeFilter(e.target.value)}
-                      className="border-2 border-[#1a4d2e] rounded-lg px-3 py-2 text-sm focus:outline-none">
-                      <option value="all">All Years</option>
-                      {availableYears.map(y => <option key={y} value={String(y)}>{y}</option>)}
-                    </select>
-                  )}
-                  <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-1">
-                    <button onClick={() => setViewMode("monthly")}
-                      className={`px-3 py-1.5 rounded-md text-sm font-medium transition-all ${viewMode === "monthly" ? "bg-[#1a4d2e] text-white" : "text-gray-600"}`}>
-                      <Calendar className="size-4 inline mr-1" />Monthly
-                    </button>
-                    <button onClick={() => setViewMode("weekly")} disabled={!salesData.length}
-                      className={`px-3 py-1.5 rounded-md text-sm font-medium transition-all disabled:opacity-40 ${viewMode === "weekly" ? "bg-[#1a4d2e] text-white" : "text-gray-600"}`}>
-                      <Filter className="size-4 inline mr-1" />Weekly
-                    </button>
+          {/* ── Loading State ── */}
+          {forecastStatus === "loading" && (
+            <Card className="shadow-lg border-0 bg-gradient-to-r from-green-50 to-emerald-50">
+              <CardContent className="py-12">
+                <div className="flex flex-col items-center justify-center text-center">
+                  <Loader2 className="size-12 text-green-700 animate-spin mb-4" />
+                  <h3 className="text-xl font-semibold text-gray-800">
+                    AI is Analyzing Your Data...
+                  </h3>
+                  <p className="text-gray-600 mt-2">
+                    Generating seasonal insights, product performance, and strategic recommendations.
+                  </p>
+                  <div className="mt-6 w-64 h-2 bg-gray-200 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-green-600 rounded-full animate-pulse"
+                      style={{ width: '60%' }}
+                    />
                   </div>
-                  {viewMode === "weekly" && (
-                    <select value={selectedMonth} onChange={e => setSelectedMonth(e.target.value)}
-                      className="border-2 border-[#1a4d2e] rounded-lg px-3 py-2 text-sm focus:outline-none">
-                      {availableMonths.map(m => <option key={m} value={m}>{m}</option>)}
-                    </select>
-                  )}
                 </div>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <ResponsiveContainer width="100%" height={350} key={`container-${chartKey}`}>
-                <LineChart data={viewMode === "monthly" ? filteredMonthlyData : weeklyChartData} key={`chart-${chartKey}`}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  {viewMode === "monthly" && seasonalAreas.map(a => (
-                    <ReferenceArea key={a.key} x1={a.x1} x2={a.x2} fill={a.fill} fillOpacity={0.5} stroke={a.stroke} strokeOpacity={0.5} ifOverflow="extendDomain" />
-                  ))}
-                  <XAxis dataKey={viewMode === "monthly" ? "month" : "week"} angle={viewMode === "monthly" ? -45 : 0}
-                    textAnchor={viewMode === "monthly" ? "end" : "middle"} height={viewMode === "monthly" ? 80 : 60}
-                    interval="preserveStartEnd" tick={{ fontSize: 11 }} />
-                  <YAxis tickFormatter={v => `₱${(v / 1000).toFixed(0)}k`} />
-                  <Tooltip formatter={(v, name) => [`₱${Number(v).toLocaleString()}`, name]}
-                    labelFormatter={label => {
-                      const pt = allMonthlyData.find(d => d.month === label);
-                      return pt ? `${label} (${pt.season}) ${pt.isForecast ? "— Forecast" : "— Historical"}` : label;
-                    }} />
-                  {viewMode === "monthly" ? (
-                    <>
-                      <Line dataKey={e => e.isForecast ? null : e.sales} type="monotone" stroke="#1a4d2e" strokeWidth={3} dot={false} name="Historical Sales" connectNulls={false} isAnimationActive={false} key={`hist-${chartKey}`} />
-                      <Line dataKey={e => e.isForecast ? e.sales : null} type="monotone" stroke="#15803d" strokeWidth={3} strokeDasharray="8 4" dot={false} name="Forecasted Sales" connectNulls isAnimationActive={false} key={`fore-${chartKey}`} />
-                      <Line dataKey="upperBound" type="monotone" stroke="#86efac" strokeWidth={1.5} strokeDasharray="3 3" dot={false} name="Upper Bound" connectNulls={false} isAnimationActive={false} key={`ub-${chartKey}`} />
-                      <Line dataKey="lowerBound" type="monotone" stroke="#86efac" strokeWidth={1.5} strokeDasharray="3 3" dot={false} name="Lower Bound" connectNulls={false} isAnimationActive={false} key={`lb-${chartKey}`} />
-                    </>
-                  ) : (
-                    <Line dataKey="sales" type="monotone" stroke="#1a4d2e" strokeWidth={3} name="Weekly Sales" isAnimationActive={false} key={`weekly-${chartKey}`} />
-                  )}
-                </LineChart>
-              </ResponsiveContainer>
-
-              {/* Chart legend */}
-              <div className="flex items-center gap-4 mt-3 flex-wrap text-xs text-gray-600">
-                <span className="flex items-center gap-1"><span className="inline-block w-6 h-0.5 bg-[#1a4d2e]" /> Historical</span>
-                {forecastData && <span className="flex items-center gap-1"><span className="inline-block w-6 h-0.5 bg-green-600 border-t-2 border-dashed border-green-600" /> Forecast (n8n)</span>}
-                <span className="flex items-center gap-1"><span className="inline-block w-4 h-3 rounded bg-green-200 opacity-70" /> Dry Season</span>
-                <span className="flex items-center gap-1"><span className="inline-block w-4 h-3 rounded bg-green-100 opacity-70" /> Rainy Season</span>
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* ── n8n Forecast — Seasonal Trends ── */}
-        {seasonalTrends && (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <Card className="border-l-4 border-blue-400">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2"><TrendingDown className="size-5 text-blue-500" /> Rainy Season (Jun–Oct)</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <div className="flex justify-between"><span className="text-gray-500">Total Sales</span><span className="font-bold">₱{seasonalTrends.rainy?.totalSales?.toLocaleString()}</span></div>
-                <div className="flex justify-between"><span className="text-gray-500">Avg Monthly</span><span className="font-bold">₱{seasonalTrends.rainy?.averageMonthlySales?.toLocaleString()}</span></div>
-                <div className="flex justify-between"><span className="text-gray-500">Trend</span><Badge variant="secondary" className="bg-blue-100 text-blue-800">{seasonalTrends.rainy?.trend}</Badge></div>
               </CardContent>
             </Card>
-            <Card className="border-l-4 border-green-500">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2"><TrendingUp className="size-5 text-green-600" /> Dry Season (Nov–May)</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <div className="flex justify-between"><span className="text-gray-500">Total Sales</span><span className="font-bold">₱{seasonalTrends.dry?.totalSales?.toLocaleString()}</span></div>
-                <div className="flex justify-between"><span className="text-gray-500">Avg Monthly</span><span className="font-bold">₱{seasonalTrends.dry?.averageMonthlySales?.toLocaleString()}</span></div>
-                <div className="flex justify-between"><span className="text-gray-500">Trend</span><Badge variant="secondary" className="bg-green-100 text-green-800">{seasonalTrends.dry?.trend}</Badge></div>
+          )}
+
+          {/* ── Error State ── */}
+          {forecastStatus === "error" && (
+            <Card className="border-2 border-red-200 bg-red-50">
+              <CardContent className="py-8">
+                <div className="flex flex-col items-center text-center">
+                  <AlertCircle className="size-12 text-red-500 mb-4" />
+                  <h3 className="text-xl font-semibold text-red-700">
+                    Failed to Generate Forecast
+                  </h3>
+                  <p className="text-red-600 mt-2">
+                    There was an error processing your request. Please try again.
+                  </p>
+                  <button
+                    onClick={generateForecast}
+                    className="mt-4 px-6 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
+                  >
+                    Try Again
+                  </button>
+                </div>
               </CardContent>
             </Card>
-          </div>
-        )}
+          )}
 
-        {/* ── n8n Prescriptive — High Demand Products ── */}
-        {highDemand && (
-          <Tabs defaultValue="dry" className="w-full">
-            <TabsList className="grid w-full max-w-md grid-cols-2">
-              <TabsTrigger value="dry">Dry Season</TabsTrigger>
-              <TabsTrigger value="rainy">Rainy Season</TabsTrigger>
-            </TabsList>
-            {["dry", "rainy"].map(s => (
-              <TabsContent key={s} value={s}>
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Top Products — {s === "dry" ? "Dry Season (Nov–May)" : "Rainy Season (Jun–Oct)"}</CardTitle>
+          {/* ================= AI Results Container ================= */}
+          {forecastData && forecastStatus === "success" && (
+            <div id="ai-results" className="space-y-6">
+              {/* ── Seasonal Analysis ── */}
+              {seasonalTrends && (
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  <Card className="shadow-md border-l-4 border-blue-500">
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2 text-blue-700">
+                        <TrendingDown className="w-5 h-5" />
+                        Rainy Season Analysis
+                      </CardTitle>
+                      <CardDescription>Based on {salesData.filter(r => r.season === "Rainy").length} months</CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div className="flex justify-between">
+                        <span>Total Sales</span>
+                        <span className="font-bold">
+                          ₱{seasonalTrends.rainy?.totalSales?.toLocaleString() || 0}
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Average Monthly Sales</span>
+                        <span className="font-bold">
+                          ₱{seasonalTrends.rainy?.averageMonthlySales?.toLocaleString() || 0}
+                        </span>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span>Sales Trend</span>
+                        <Badge className="bg-blue-100 text-blue-700">
+                          {seasonalTrends.rainy?.trend || "N/A"}
+                        </Badge>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  <Card className="shadow-md border-l-4 border-green-600">
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2 text-green-700">
+                        <TrendingUp className="w-5 h-5" />
+                        Dry Season Analysis
+                      </CardTitle>
+                      <CardDescription>Based on {salesData.filter(r => r.season === "Dry").length} months</CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div className="flex justify-between">
+                        <span>Total Sales</span>
+                        <span className="font-bold">
+                          ₱{seasonalTrends.dry?.totalSales?.toLocaleString() || 0}
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Average Monthly Sales</span>
+                        <span className="font-bold">
+                          ₱{seasonalTrends.dry?.averageMonthlySales?.toLocaleString() || 0}
+                        </span>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span>Sales Trend</span>
+                        <Badge className="bg-green-100 text-green-700">
+                          {seasonalTrends.dry?.trend || "N/A"}
+                        </Badge>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+              )}
+
+              {/* ── High Demand Products ── */}
+              {highDemand && (
+                <Card className="shadow-lg border-0">
+                  <CardHeader className="border-b bg-gray-50">
+                    <CardTitle className="flex items-center gap-2 text-xl">
+                      <Target className="w-5 h-5 text-green-700" />
+                      High Demand Products
+                    </CardTitle>
+                    <CardDescription>
+                      Top-performing categories for each season
+                    </CardDescription>
                   </CardHeader>
-                  <CardContent>
+                  <CardContent className="pt-6">
+                    <Tabs defaultValue="dry" className="w-full">
+                      <TabsList className="grid w-full max-w-sm grid-cols-2 mb-6">
+                        <TabsTrigger value="dry">🌞 Dry Season</TabsTrigger>
+                        <TabsTrigger value="rainy">🌧 Rainy Season</TabsTrigger>
+                      </TabsList>
+                      {["dry", "rainy"].map((season) => (
+                        <TabsContent key={season} value={season}>
+                          <Card className="shadow-sm border">
+                            <CardHeader>
+                              <div className="flex justify-between items-center">
+                                <div>
+                                  <CardTitle className="text-lg">
+                                    {season === "dry" ? "Dry Season" : "Rainy Season"}
+                                  </CardTitle>
+                                  <CardDescription>
+                                    {season === "dry" ? "November – May" : "June – October"}
+                                  </CardDescription>
+                                </div>
+                                <Badge
+                                  className={
+                                    season === "dry"
+                                      ? "bg-green-700 text-white"
+                                      : "bg-blue-600 text-white"
+                                  }
+                                >
+                                  {(highDemand[season] || []).length} Categories
+                                </Badge>
+                              </div>
+                            </CardHeader>
+                            <CardContent>
+                              <Table>
+                                <TableHeader>
+                                  <TableRow>
+                                    <TableHead className="w-20">Rank</TableHead>
+                                    <TableHead>Category</TableHead>
+                                    <TableHead>Units</TableHead>
+                                    <TableHead>Revenue</TableHead>
+                                  </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                  {(highDemand[season] || []).map((product: any, index: number) => (
+                                    <TableRow key={index} className="hover:bg-gray-50 transition-colors">
+                                      <TableCell>
+                                        <Badge
+                                          className={
+                                            season === "dry"
+                                              ? "bg-green-700"
+                                              : "bg-blue-600"
+                                          }
+                                        >
+                                          #{index + 1}
+                                        </Badge>
+                                      </TableCell>
+                                      <TableCell>
+                                        <p className="font-semibold">{product.name}</p>
+                                      </TableCell>
+                                      <TableCell className="font-medium">
+                                        {product.units?.toLocaleString() || 0}
+                                      </TableCell>
+                                      <TableCell className="font-bold">
+                                        ₱{product.revenue?.toLocaleString() || 0}
+                                      </TableCell>
+                                    </TableRow>
+                                  ))}
+                                </TableBody>
+                              </Table>
+                            </CardContent>
+                          </Card>
+                        </TabsContent>
+                      ))}
+                    </Tabs>
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* ── Business Analytics ── */}
+            {stockRecs.length > 0 && (
+    <Card className="shadow-lg border-0 overflow-hidden">
+      <div className="bg-gradient-to-r from-green-700 to-green-600 px-6 py-4">
+        <div className="flex items-center gap-3">
+          <Lightbulb className="w-5 h-5 text-white" />
+          <div>
+            <h3 className="text-lg font-bold text-white">AI Business Analytics</h3>
+            <p className="text-green-100 text-sm">Inventory recommendations from seasonal analysis</p>
+          </div>
+        </div>
+      </div>
+
+      <CardContent className="pt-4 px-6 pb-6">
+        {(() => {
+          // Group categories by action
+          const groupedByAction = stockRecs.reduce((acc: any, category: any) => {
+            const action = category.items?.[0]?.action || 'Maintain';
+            if (!acc[action]) acc[action] = [];
+            acc[action].push(category);
+            return acc;
+          }, {});
+
+          // Define action order and colors
+          const actionOrder = ['Increase', 'Maintain'];
+          const actionColors: Record<string, string> = {
+            'Increase': 'border-red-500 bg-red-50/30',
+            'Maintain': 'border-green-500 bg-green-50/30'
+          };
+          const actionDotColors: Record<string, string> = {
+            'Increase': 'bg-red-500',
+            'Maintain': 'bg-green-500'
+          };
+          const actionBadgeColors: Record<string, string> = {
+            'Increase': 'bg-red-100 text-red-700',
+            'Maintain': 'bg-green-100 text-green-700'
+          };
+
+          return (
+            <div className="space-y-6">
+              {actionOrder.filter(action => groupedByAction[action]).map((action) => (
+                <div key={action} className={`border-l-4 ${actionColors[action]} rounded-r-lg p-4`}>
+                  {/* Action Header with Legend */}
+                  <div className="flex items-center gap-3 mb-4 pb-3 border-b border-gray-200">
+                    <span className={`w-3 h-3 rounded-full ${actionDotColors[action]}`}></span>
+                    <h4 className="text-sm font-semibold text-gray-700">{action} Stock</h4>
+                    <Badge className={`${actionBadgeColors[action]} text-xs`}>
+                      {groupedByAction[action].length} categories
+                    </Badge>
+                  </div>
+
+                  {/* Combined Table for all categories in this action group */}
+                  <div className="overflow-x-auto">
                     <Table>
                       <TableHeader>
-                        <TableRow>
-                          <TableHead>Rank</TableHead><TableHead>Product</TableHead>
-                          <TableHead>Units Sold</TableHead><TableHead>Revenue</TableHead><TableHead>Status</TableHead>
+                        <TableRow className="bg-gray-50/50">
+                          <TableHead className="text-xs font-semibold text-gray-700">Category</TableHead>
+                          <TableHead className="text-xs font-semibold text-gray-700">Product</TableHead>
+                          <TableHead className="text-xs font-semibold text-gray-700 text-center">Current</TableHead>
+                          <TableHead className="text-xs font-semibold text-gray-700 text-center">Recommended</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {(highDemand[s] || []).map((p, i) => (
-                          <TableRow key={i}>
-                            <TableCell><Badge className={s === "dry" ? "bg-[#1a4d2e]" : "bg-blue-600"}>#{i + 1}</Badge></TableCell>
-                            <TableCell className="font-medium">{p.name}</TableCell>
-                            <TableCell>{p.units?.toLocaleString()}</TableCell>
-                            <TableCell>₱{p.revenue?.toLocaleString()}</TableCell>
-                            <TableCell><Badge variant="secondary" className={s === "dry" ? "bg-green-100 text-green-800" : "bg-blue-100 text-blue-800"}>{s === "dry" ? "High Demand" : "Weather-Specific"}</Badge></TableCell>
-                          </TableRow>
+                        {groupedByAction[action].map((category: any, idx: number) => (
+                          category.items?.map((item: any, i: number) => (
+                            <TableRow key={`${idx}-${i}`} className="hover:bg-gray-50/50 transition-colors">
+                              <TableCell>
+                                <p className="font-medium text-gray-800 text-sm">
+                                  {i === 0 ? category.category : ''}
+                                </p>
+                              </TableCell>
+                              <TableCell>
+                                <p className="font-medium text-gray-800 text-sm">{item.name}</p>
+                              </TableCell>
+                              <TableCell className="text-center text-sm">
+                                {item.currentStock}
+                              </TableCell>
+                              <TableCell className="text-center text-sm font-bold text-green-700">
+                                {item.recommendedStock}
+                              </TableCell>
+                            </TableRow>
+                          ))
                         ))}
                       </TableBody>
                     </Table>
-                  </CardContent>
-                </Card>
-              </TabsContent>
-            ))}
-          </Tabs>
-        )}
+                  </div>
+                </div>
+              ))}
 
-        {/* ── n8n Prescriptive — Full analytics section ── */}
-        {prescriptiveData && (
-          <div className="bg-gradient-to-r from-green-50 to-green-100 p-6 rounded-lg border-2 border-green-300 space-y-6">
-
-            {/* Stock Recommendations */}
-            {stockRecs.length > 0 && (
-              <div>
-                <h2 className="font-semibold text-gray-800 mb-4 flex items-center gap-2">
-                  <div className="size-2 bg-[#1a4d2e] rounded-full" />
-                  Stock Recommendations
-                </h2>
-                <div className="space-y-4">
-                  {stockRecs.map((cat, idx) => (
-                    <Card key={idx} className={`border-l-4 ${idx === 0 ? "border-red-600" : idx === 1 ? "border-yellow-500" : "border-green-600"}`}>
-                      <CardHeader>
-                        <CardTitle className="flex items-center gap-2 text-base">
-                          {idx < 2 ? <AlertCircle className="size-5" /> : <CheckCircle className="size-5 text-green-600" />}
-                          {cat.category}
-                        </CardTitle>
-                      </CardHeader>
-                      <CardContent>
-                        <Table>
-                          <TableHeader>
-                            <TableRow>
-                              <TableHead>Product</TableHead><TableHead>Current Stock</TableHead>
-                              <TableHead>Recommended</TableHead><TableHead>Action</TableHead>
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {(cat.items || []).map((item, i) => (
-                              <TableRow key={i}>
-                                <TableCell className="font-medium">{item.name}</TableCell>
-                                <TableCell className="font-semibold">{item.currentStock} units</TableCell>
-                                <TableCell className="text-green-700 font-medium">{item.recommendedStock} units</TableCell>
-                                <TableCell><Badge variant="secondary" className={idx === 0 ? "bg-red-600 text-white" : idx === 1 ? "bg-yellow-500 text-white" : "bg-green-600 text-white"}>{item.action}</Badge></TableCell>
-                              </TableRow>
-                            ))}
-                          </TableBody>
-                        </Table>
-                      </CardContent>
-                    </Card>
-                  ))}
+              {/* Legend */}
+              <div className="mt-2 pt-3 border-t border-gray-200">
+                <div className="flex flex-wrap items-center gap-4 text-xs text-gray-500">
+                  <span className="flex items-center gap-1.5">
+                    <span className="w-3 h-3 rounded-full bg-red-500"></span>
+                    Increase Stock
+                  </span>
+                  <span className="flex items-center gap-1.5">
+                    <span className="w-3 h-3 rounded-full bg-green-500"></span>
+                    Maintain Stock
+                  </span>
                 </div>
               </div>
-            )}
+            </div>
+          );
+        })()}
+      </CardContent>
+    </Card>
+  )}
 
-            {/* Best & Slow Moving */}
-            {(bestSelling.length > 0 || slowMoving.length > 0) && (
-              <div>
-                <h2 className="font-semibold text-gray-800 mb-4 flex items-center gap-2">
-                  <div className="size-2 bg-[#1a4d2e] rounded-full" />
-                  Product Performance Analysis
-                </h2>
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                  {bestSelling.length > 0 && (
-                    <Card className="border-l-4 border-green-500">
-                      <CardHeader>
-                        <CardTitle className="flex items-center gap-2 text-base"><TrendingUp className="size-5 text-green-600" /> Best-Selling Products</CardTitle>
-                      </CardHeader>
-                      <CardContent>
-                        <Table>
-                          <TableHeader><TableRow><TableHead>Product</TableHead><TableHead>Units</TableHead><TableHead>Growth</TableHead></TableRow></TableHeader>
-                          <TableBody>
-                            {bestSelling.map((p, i) => (
-                              <TableRow key={i}>
-                                <TableCell className="font-medium">{p.name}</TableCell>
-                                <TableCell>{p.unitsSold?.toLocaleString()}</TableCell>
-                                <TableCell><Badge className="bg-green-100 text-green-800">{p.growth}</Badge></TableCell>
-                              </TableRow>
-                            ))}
-                          </TableBody>
-                        </Table>
-                      </CardContent>
-                    </Card>
-                  )}
-                  {slowMoving.length > 0 && (
-                    <Card className="border-l-4 border-lime-600">
-                      <CardHeader>
-                        <CardTitle className="flex items-center gap-2 text-base"><TrendingDown className="size-5 text-lime-700" /> Slow-Moving Products</CardTitle>
-                      </CardHeader>
-                      <CardContent>
-                        <Table>
-                          <TableHeader><TableRow><TableHead>Product</TableHead><TableHead>Units</TableHead><TableHead>Recommendation</TableHead></TableRow></TableHeader>
-                          <TableBody>
-                            {slowMoving.map((p, i) => (
-                              <TableRow key={i}>
-                                <TableCell className="font-medium">{p.name}</TableCell>
-                                <TableCell className="text-lime-700">{p.unitsSold}</TableCell>
-                                <TableCell><Badge variant="secondary" className="bg-lime-100 text-lime-800 text-xs">{p.recommendation}</Badge></TableCell>
-                              </TableRow>
-                            ))}
-                          </TableBody>
-                        </Table>
-                      </CardContent>
-                    </Card>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {/* Marketing Strategies */}
-            {marketing.length > 0 && (
-              <div>
-                <h3 className="font-semibold text-gray-800 mb-4 flex items-center gap-2">
-                  <Target className="size-5 text-[#1a4d2e]" /> Marketing Strategy Recommendations
-                </h3>
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                  {marketing.map((strat, idx) => (
-                    <Card key={idx} className={`border-l-4 ${idx === 0 ? "border-green-500" : "border-blue-400"}`}>
-                      <CardHeader>
-                        <CardTitle className="flex items-center gap-2 text-base">
-                          <Lightbulb className={`size-5 ${idx === 0 ? "text-green-600" : "text-blue-500"}`} />
-                          {strat.season}
-                        </CardTitle>
-                      </CardHeader>
-                      <CardContent>
-                        <ul className="space-y-2">
-                          {(strat.strategies || []).map((item, i) => (
-                            <li key={i} className="flex items-start gap-2">
-                              <CheckCircle className={`size-4 mt-0.5 flex-shrink-0 ${idx === 0 ? "text-green-600" : "text-blue-500"}`} />
-                              <span className="text-sm text-gray-700">{item}</span>
-                            </li>
+              {/* ── Product Performance Analysis ── */}
+              {(bestSelling.length > 0 || slowMoving.length > 0) && (
+                <section className="space-y-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-green-100 to-green-200 flex items-center justify-center shadow-sm">
+                      <Target className="size-5 text-[#1a4d2e]" />
+                    </div>
+                    <div>
+                      <h2 className="text-xl font-bold text-gray-900 tracking-tight">Product Performance</h2>
+                      <p className="text-sm text-gray-500">Best and slowest moving products analysis</p>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+                    {/* Best Selling */}
+                    {bestSelling.length > 0 && (
+                      <Card className="shadow-lg border-0 hover:shadow-xl transition-all duration-300">
+                        <CardHeader className="bg-gradient-to-r from-green-50 to-emerald-50 border-b border-green-100 py-3.5">
+                          <div className="flex items-center gap-2.5">
+                            <div className="w-7 h-7 rounded-lg bg-green-600 flex items-center justify-center">
+                              <TrendingUp className="size-4 text-white" />
+                            </div>
+                            <div>
+                              <CardTitle className="text-sm font-semibold text-green-800">
+                                Best-Selling Products
+                              </CardTitle>
+                              <CardDescription className="text-xs text-green-600">
+                                Top performers by units sold
+                              </CardDescription>
+                            </div>
+                          </div>
+                        </CardHeader>
+                        <CardContent className="space-y-3 pt-4">
+                          {bestSelling.map((product: any, index: number) => (
+                            <div key={index} className="border rounded-lg p-3 hover:shadow-md transition">
+                              <div className="flex justify-between items-center">
+                                <div>
+                                  <h4 className="font-semibold text-gray-800 text-sm">{product.name}</h4>
+                                  <p className="text-xs text-gray-500">
+                                    {product.unitsSold?.toLocaleString() || 0} units
+                                  </p>
+                                </div>
+                                <Badge className="bg-green-100 text-green-700 text-xs">{product.growth || "N/A"}</Badge>
+                              </div>
+                              <div className="w-full h-1.5 rounded-full bg-gray-200 overflow-hidden mt-2">
+                                <div
+                                  className="h-full bg-green-600 rounded-full"
+                                  style={{
+                                    width: `${Math.min(
+                                      ((product.unitsSold || 0) /
+                                        Math.max(...bestSelling.map((p: any) => p.unitsSold || 1))) *
+                                        100,
+                                      100
+                                    )}%`,
+                                  }}
+                                />
+                              </div>
+                            </div>
                           ))}
-                        </ul>
-                      </CardContent>
-                    </Card>
-                  ))}
+                        </CardContent>
+                      </Card>
+                    )}
+
+                    {/* Slow Moving */}
+                {slowMoving.length > 0 && (
+    <Card className="shadow-lg border-0 hover:shadow-xl transition-all duration-300">
+      <CardHeader className="bg-gradient-to-r from-orange-50 to-amber-50 border-b border-orange-100 py-3.5">
+        <div className="flex items-center gap-2.5">
+          <div className="w-7 h-7 rounded-lg bg-orange-500 flex items-center justify-center">
+            <TrendingDown className="size-4 text-white" />
+          </div>
+          <div>
+            <CardTitle className="text-sm font-semibold text-orange-800">
+              Slow-Moving Products
+            </CardTitle>
+            <CardDescription className="text-xs text-orange-600">
+              Products requiring attention
+            </CardDescription>
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-3 pt-4">
+        {slowMoving.map((product: any, index: number) => (
+          <div key={index} className="border rounded-lg p-3 hover:shadow-md transition">
+            <div className="flex flex-col gap-2">
+              <div className="flex items-start justify-between gap-2">
+                <div className="flex-1 min-w-0">
+                  <h4 className="font-semibold text-gray-800 text-sm break-words">
+                    {product.name}
+                  </h4>
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    {product.unitsSold?.toLocaleString() || 0} units sold
+                  </p>
+                </div>
+                <AlertCircle className="size-4 text-orange-500 flex-shrink-0 mt-0.5" />
+              </div>
+              <div className="w-full">
+                <Badge 
+                  variant="secondary" 
+                  className="bg-orange-100 text-orange-700 text-xs font-medium px-3 py-1.5 h-auto whitespace-normal break-words"
+                >
+                  {(() => {
+                    const rec = product.recommendation || "Review needed";
+                    if (rec.toLowerCase().includes('bundl')) return 'Bundle or discount';
+                    if (rec.toLowerCase().includes('price')) return 'Review pricing';
+                    if (rec.toLowerCase().includes('promot')) return 'Run promotions';
+                    if (rec.toLowerCase().includes('delist')) return 'Consider delisting';
+                    return rec.length > 30 ? rec.substring(0, 30) + '...' : rec;
+                  })()}
+                </Badge>
+              </div>
+            </div>
+          </div>
+        ))}
+      </CardContent>
+    </Card>
+  )}
+                  </div>
+                </section>
+              )}
+
+              {/* ── Marketing Strategy Recommendations ── */}
+              {marketing.length > 0 && (
+                <section className="space-y-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-yellow-100 to-amber-200 flex items-center justify-center shadow-sm">
+                      <Lightbulb className="size-5 text-yellow-700" />
+                    </div>
+                    <div>
+                      <h2 className="text-xl font-bold text-gray-900 tracking-tight">Marketing Strategies</h2>
+                      <p className="text-sm text-gray-500">AI-generated promotional strategies for each season</p>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+                    {marketing.map((strategy: any, index: number) => {
+                      const drySeason = (strategy.season || "").toLowerCase().includes("dry");
+                      return (
+                        <Card key={index} className="border-0 shadow-lg hover:shadow-xl transition-all duration-300 overflow-hidden">
+                          <div className={`${drySeason ? "bg-gradient-to-r from-green-600 to-emerald-600" : "bg-gradient-to-r from-blue-600 to-cyan-600"} px-4 py-3`}>
+                            <div className="flex items-center gap-2.5">
+                              <div className="w-7 h-7 rounded-lg bg-white/20 flex items-center justify-center backdrop-blur-sm">
+                                <Lightbulb className={`size-4 text-white`} />
+                              </div>
+                              <div>
+                                <h3 className="text-sm font-semibold text-white">
+                                  {strategy.season}
+                                </h3>
+                                <p className="text-xs text-white/70">
+                                  {drySeason ? "November – May" : "June – October"}
+                                </p>
+                              </div>
+                              <Badge className={`ml-auto ${drySeason ? "bg-white/20 text-white" : "bg-white/20 text-white"} border-0`}>
+                                {(strategy.strategies || []).length} strategies
+                              </Badge>
+                            </div>
+                          </div>
+
+                          <CardContent className="pt-4 px-4 pb-4">
+                            <div className="grid gap-2.5">
+                              {(strategy.strategies || []).map((item: string, i: number) => (
+                                <div key={i} className="flex gap-3 rounded-xl border border-gray-100 bg-white p-3 hover:shadow-md transition-all hover:border-gray-200">
+                                  <div className={`flex h-7 w-7 items-center justify-center rounded-full flex-shrink-0 ${drySeason ? "bg-green-100" : "bg-blue-100"}`}>
+                                    <CheckCircle2 className={`size-4 ${drySeason ? "text-green-600" : "text-blue-600"}`} />
+                                  </div>
+                                  <div className="flex-1">
+                                    <p className="text-sm font-medium text-gray-700">Strategy {i + 1}</p>
+                                    <p className="text-sm leading-relaxed text-gray-600 break-words mt-0.5">{item}</p>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                            {strategy.targetCategories && strategy.targetCategories.length > 0 && (
+                              <div className="mt-3 pt-2 border-t border-gray-100">
+                                <p className="text-xs text-gray-500">
+                                  <span className="font-medium">Target Categories:</span> {strategy.targetCategories.join(', ')}
+                                </p>
+                              </div>
+                            )}
+                          </CardContent>
+                        </Card>
+                      );
+                    })}
+                  </div>
+                </section>
+              )}
+            </div>
+          )}
+
+          {/* ================= Empty State ================= */}
+          {!salesData.length && (
+            <Card className="border border-dashed border-gray-300 shadow-sm">
+              <CardContent className="flex flex-col items-center justify-center py-16 text-center">
+                <TrendingUp className="size-14 text-gray-300 mb-4" />
+                <h2 className="text-2xl font-bold text-gray-700">No Sales Records Found</h2>
+                <p className="mt-2 max-w-md text-gray-500 text-sm">
+                  Please ensure your sales data is loaded to generate forecasts and insights.
+                </p>
+                <div className="mt-6 flex flex-wrap justify-center gap-2">
+                  <Badge className="bg-[#1a4d2e] text-white">Sales Forecast</Badge>
+                  <Badge className="bg-green-600 text-white">Inventory Insights</Badge>
+                  <Badge className="bg-blue-600 text-white">AI Analytics</Badge>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* ── Cache Status Bar ── */}
+          {forecastStatus === "success" && lastGenerated && (
+            <div className="fixed bottom-0 left-0 right-0 bg-green-50 border-t border-green-200 px-4 py-2 shadow-lg z-50">
+              <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2">
+                <div className="flex items-center gap-2 text-xs text-green-700">
+                  <Database className="size-3.5 flex-shrink-0" />
+                  <span className="text-center sm:text-left">
+                    Cached • Generated: {lastGenerated}
+                  </span>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={generateForecast}
+                    className="flex items-center gap-1 px-2.5 py-1 text-xs bg-green-600 text-white rounded hover:bg-green-700 transition whitespace-nowrap"
+                  >
+                    <RefreshCw className="size-3" />
+                    Regenerate
+                  </button>
+                  <button
+                    onClick={clearCache}
+                    className="flex items-center gap-1 px-2.5 py-1 text-xs bg-red-500 text-white rounded hover:bg-red-600 transition whitespace-nowrap"
+                  >
+                    Clear Cache
+                  </button>
                 </div>
               </div>
-            )}
-          </div>
-        )}
-
-        {/* Empty state when no data and no prescriptive */}
-        {salesData.length === 0 && !prescriptiveData && (
-          <Card className="border-dashed border-2 border-gray-300">
-            <CardContent className="py-16 text-center">
-              <TrendingUp className="size-14 text-gray-300 mx-auto mb-3" />
-              <p className="text-lg font-semibold text-gray-400">No data yet</p>
-              <p className="text-sm text-gray-400 mt-1">Add monthly sales entries above to get started. Then run your n8n agents for forecasting and prescriptive analytics.</p>
-            </CardContent>
-          </Card>
-        )}
-      </div>
-    );
-  }
+            </div>
+          )}
+        </div>
+      );
+    }
