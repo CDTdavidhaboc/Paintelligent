@@ -3,18 +3,27 @@ import {
   useContext,
   useState,
   useEffect,
+  ReactNode,
 } from "react";
 
-const AuthContext = createContext(null);
+interface AuthContextType {
+  isAuthenticated: boolean;
+  loading: boolean;
+  login: () => void;
+  logout: () => void;
+}
 
-export function AuthProvider({ children }) {
+const AuthContext = createContext<AuthContextType | null>(null);
+
+export function AuthProvider({ children }: { children: ReactNode }) {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [loading, setLoading] = useState(true); // Add loading state
 
   useEffect(() => {
-    const auth =
-      localStorage.getItem("isAuthenticated") === "true";
-
+    // Check auth status
+    const auth = localStorage.getItem("isAuthenticated") === "true";
     setIsAuthenticated(auth);
+    setLoading(false); // Set loading to false after check
   }, []);
 
   const login = () => {
@@ -31,6 +40,7 @@ export function AuthProvider({ children }) {
     <AuthContext.Provider
       value={{
         isAuthenticated,
+        loading, // Add loading to the context value
         login,
         logout,
       }}
@@ -41,5 +51,9 @@ export function AuthProvider({ children }) {
 }
 
 export function useAuth() {
-  return useContext(AuthContext);
+  const context = useContext(AuthContext);
+  if (!context) {
+    throw new Error("useAuth must be used within an AuthProvider");
+  }
+  return context;
 }
