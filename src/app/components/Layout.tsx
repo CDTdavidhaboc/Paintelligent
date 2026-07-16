@@ -11,6 +11,27 @@ export default function Layout() {
 
   const [currentDate, setCurrentDate] = useState("");
   const [currentSeason, setCurrentSeason] = useState("");
+  const [userName, setUserName] = useState("Admin");
+
+  // Function to load user name from localStorage
+  const loadUserName = () => {
+    const savedUserData = localStorage.getItem("userProfileData");
+    if (savedUserData) {
+      try {
+        const parsedData = JSON.parse(savedUserData);
+        if (parsedData.name) {
+          setUserName(parsedData.name);
+        } else {
+          setUserName(userEmail || "Admin");
+        }
+      } catch (error) {
+        console.error("Error parsing user data:", error);
+        setUserName(userEmail || "Admin");
+      }
+    } else {
+      setUserName(userEmail || "Admin");
+    }
+  };
 
   useEffect(() => {
     const updateDateTime = () => {
@@ -26,6 +47,34 @@ export default function Layout() {
     updateDateTime();
     const interval = setInterval(updateDateTime, 60000);
     return () => clearInterval(interval);
+  }, []);
+
+  // Load user name on mount and when userEmail changes
+  useEffect(() => {
+    loadUserName();
+  }, [userEmail]);
+
+  // Listen for changes in localStorage (works across tabs)
+  useEffect(() => {
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === "userProfileData") {
+        loadUserName();
+      }
+    };
+
+    window.addEventListener("storage", handleStorageChange);
+    return () => window.removeEventListener("storage", handleStorageChange);
+  }, []);
+
+  // Custom event listener for same-tab updates
+  useEffect(() => {
+    const handleProfileUpdate = () => {
+      loadUserName();
+    };
+
+    // Listen for custom event dispatched from UserProfile
+    window.addEventListener("profileUpdated", handleProfileUpdate);
+    return () => window.removeEventListener("profileUpdated", handleProfileUpdate);
   }, []);
 
   const isActive = (path) => {
@@ -46,7 +95,7 @@ export default function Layout() {
           <div className="flex items-center gap-3">
             <img src={garciaLogo} alt="Paintelligent Logo" className="h-10 w-auto object-contain" />
             <div>
-              <p className="font-bold text-base leading-tight">Hello, {userEmail || "Admin"}!</p>
+              <p className="font-bold text-base leading-tight">Hello, {userName}!</p>
               <p className="text-xs text-green-200">{currentSeason} · {currentDate}</p>
             </div>
           </div>
