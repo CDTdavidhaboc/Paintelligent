@@ -2,7 +2,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../co
 import { Badge } from "../components/ui/badge";
 import { 
   LogOut, User, Mail, Phone, MapPin, Calendar, Shield, Activity, Building2, Clock, Camera, 
-  Edit2, Save, X, UserPlus, Award, CheckCircle, Pencil, UserCircle, Check 
+  Edit2, Save, X, UserPlus, Award, CheckCircle, Pencil, UserCircle, Check, Plus, Trash2, Building, Users, Search
 } from "lucide-react";
 import { useNavigate } from "react-router";
 import { useAuth } from "../context/AuthContext";
@@ -23,12 +23,10 @@ const DEFAULT_USER_DATA = {
   }),
   employeeId: `EMP-${Date.now().toString().slice(-6)}`,
   permissions: ["Seasonal Forecast", "Paint Analyzer"],
-  activityStats: [
-    { label: "Total Sessions", value: "0" },
-    { label: "Reports Generated", value: "0" },
-    { label: "Analyses Completed", value: "0" },
-    { label: "Average Session Time", value: "0 hrs" },
-  ],
+  contacts: [
+    { id: 1, name: "John Doe", email: "john@example.com", phone: "+1 234 567 890", role: "Manager" },
+    { id: 2, name: "Jane Smith", email: "jane@example.com", phone: "+1 234 567 891", role: "Coordinator" }
+  ]
 };
 
 // Ensure both permissions always exist
@@ -48,6 +46,7 @@ export default function UserProfile() {
   const [isNewUser, setIsNewUser] = useState(false);
   const [showNotification, setShowNotification] = useState(false);
   const [notificationMessage, setNotificationMessage] = useState("");
+  const [searchTerm, setSearchTerm] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const notificationTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -79,6 +78,11 @@ export default function UserProfile() {
       const existingPermissions = parsedData.permissions || [];
       const combinedPermissions = [...new Set([...existingPermissions, ...ENSURE_PERMISSIONS])];
       parsedData.permissions = combinedPermissions;
+      
+      // Initialize contacts if they don't exist
+      if (!parsedData.contacts) {
+        parsedData.contacts = DEFAULT_USER_DATA.contacts;
+      }
       
       setUserData(parsedData);
       setTempUserData(parsedData);
@@ -138,21 +142,28 @@ export default function UserProfile() {
 
   // Save user data to localStorage
   const saveUserData = (data: any) => {
-    // Remove department if it exists (cleanup)
-    delete data.department;
-    
-    // FORCE both permissions to always exist when saving
-    const existingPermissions = data.permissions || [];
-    const combinedPermissions = [...new Set([...existingPermissions, ...ENSURE_PERMISSIONS])];
-    
-    const dataToSave = {
-      ...data,
-      permissions: combinedPermissions
-    };
-    
-    localStorage.setItem("userProfileData", JSON.stringify(dataToSave));
-    setUserData(dataToSave);
-    setIsNewUser(false);
+    try {
+      // Remove department if it exists (cleanup)
+      delete data.department;
+      
+      // FORCE both permissions to always exist when saving
+      const existingPermissions = data.permissions || [];
+      const combinedPermissions = [...new Set([...existingPermissions, ...ENSURE_PERMISSIONS])];
+      
+      const dataToSave = {
+        ...data,
+        permissions: combinedPermissions
+      };
+      
+      localStorage.setItem("userProfileData", JSON.stringify(dataToSave));
+      setUserData(dataToSave);
+      setIsNewUser(false);
+      
+      return true;
+    } catch (error) {
+      console.error("Error saving user data:", error);
+      return false;
+    }
   };
 
   // Handle edit toggle
@@ -170,27 +181,37 @@ export default function UserProfile() {
     setIsEditing(!isEditing);
   };
 
-  // Handle save
+  // Handle save - ENHANCED with better error handling
   const handleSave = () => {
-    // Save user data to localStorage
-    saveUserData(tempUserData);
-    
-    // Save profile picture if changed
-    if (tempProfilePicture !== profilePicture) {
-      if (tempProfilePicture) {
-        localStorage.setItem('userProfilePicture', tempProfilePicture);
-        setProfilePicture(tempProfilePicture);
-      } else {
-        localStorage.removeItem('userProfilePicture');
-        setProfilePicture(null);
+    try {
+      // Save user data to localStorage
+      const saveSuccess = saveUserData(tempUserData);
+      
+      if (!saveSuccess) {
+        showNotificationMessage("Error saving profile data ❌");
+        return;
       }
+      
+      // Save profile picture if changed
+      if (tempProfilePicture !== profilePicture) {
+        if (tempProfilePicture) {
+          localStorage.setItem('userProfilePicture', tempProfilePicture);
+          setProfilePicture(tempProfilePicture);
+        } else {
+          localStorage.removeItem('userProfilePicture');
+          setProfilePicture(null);
+        }
+      }
+      
+      setIsEditing(false);
+      showNotificationMessage("Profile saved successfully! ✅");
+      
+      // Dispatch custom event to notify Layout component about the update
+      window.dispatchEvent(new Event('profileUpdated'));
+    } catch (error) {
+      console.error("Save error:", error);
+      showNotificationMessage("Error saving profile ❌");
     }
-    
-    setIsEditing(false);
-    showNotificationMessage("Profile saved successfully! ✅");
-    
-    // Dispatch custom event to notify Layout component about the update
-    window.dispatchEvent(new Event('profileUpdated'));
   };
 
   // Handle input change
@@ -201,15 +222,47 @@ export default function UserProfile() {
     }));
   };
 
-  // UPDATED: Handle logout with proper cleanup
+  // Contact management functions
+  const handleAddContact = () => {
+    const newContact = {
+      id: Date.now(),
+      name: "",
+      email: "",
+      phone: "",
+      role: ""
+    };
+    setTempUserData(prev => ({
+      ...prev,
+      contacts: [...(prev.contacts || []), newContact]
+    }));
+  };
+
+  const handleRemoveContact = (id: number) => {
+    setTempUserData(prev => ({
+      ...prev,
+      contacts: (prev.contacts || []).filter(contact => contact.id !== id)
+    }));
+  };
+
+  const handleContactChange = (id: number, field: string, value: string) => {
+    setTempUserData(prev => ({
+      ...prev,
+      contacts: (prev.contacts || []).map(contact => 
+        contact.id === id ? { ...contact, [field]: value } : contact
+      )
+    }));
+  };
+
+  // UPDATED: Handle logout WITHOUT clearing user profile data
   const handleLogout = () => {
     const confirmLogout = window.confirm("Are you sure you want to log out?");
     if (confirmLogout) {
       try {
-        // Clear ALL user data from localStorage
+        // Only clear authentication flag
         localStorage.removeItem('isAuthenticated');
-        localStorage.removeItem('userProfileData');
-        localStorage.removeItem('userProfilePicture');
+        
+        // IMPORTANT: Keep user profile data for next login
+        // userProfileData and userProfilePicture are preserved in localStorage
         
         // Call the logout function from context
         logout();
@@ -311,6 +364,14 @@ export default function UserProfile() {
 
   const displayData = isEditing ? tempUserData : userData;
   const displayPicture = isEditing ? tempProfilePicture : profilePicture;
+
+  // Filter contacts based on search term - MOVED AFTER displayData is defined
+  const filteredContacts = (displayData.contacts || []).filter(contact =>
+    contact.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    contact.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    contact.phone.includes(searchTerm) ||
+    contact.role.toLowerCase().includes(searchTerm.toLowerCase())
+  );
 
   return (
     <div className="p-8 space-y-6 bg-gray-50 min-h-screen relative">
@@ -569,69 +630,135 @@ export default function UserProfile() {
           </CardContent>
         </Card>
 
-        {/* Account Details */}
+        {/* Contacts - Compact Version with Search */}
         <Card className="shadow-md hover:shadow-lg transition-shadow">
-          <CardHeader className="bg-gradient-to-r from-gray-50 to-white border-b">
-            <CardTitle className="flex items-center gap-2 text-xl">
-              <div className="p-2 bg-[#1a4d2e] rounded-lg">
-                <Calendar className="size-5 text-white" />
+          <CardHeader className="bg-gradient-to-r from-gray-50 to-white border-b py-4">
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <div className="p-1.5 bg-[#1a4d2e] rounded-lg">
+                <Users className="size-4 text-white" />
               </div>
-              Account Details
+              Contacts
             </CardTitle>
           </CardHeader>
-          <CardContent className="space-y-5 pt-6">
-            <div className="flex items-start gap-4 p-3 rounded-lg hover:bg-gray-50 transition-colors">
-              <div className="p-2 bg-amber-50 rounded-lg">
-                <Calendar className="size-5 text-amber-600" />
-              </div>
-              <div className="flex-1">
-                <p className="text-sm font-medium text-gray-500 mb-1">Member Since</p>
-                <p className="font-semibold text-gray-900">{displayData.joinDate}</p>
-                <p className="text-xs text-gray-500 mt-1">
-                  {isNewUser ? "Welcome to Paintelligent! 🎉" : "Member"}
-                </p>
-              </div>
+          <CardContent className="pt-4">
+            {/* Search Bar */}
+            <div className="relative mb-4">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 size-4 text-gray-400" />
+              <input
+                type="text"
+                placeholder="Search contacts by name, email, phone, or role..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pl-9 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1a4d2e] focus:border-transparent text-sm"
+              />
+              {searchTerm && (
+                <button
+                  onClick={() => setSearchTerm("")}
+                  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                >
+                  <X className="size-4" />
+                </button>
+              )}
             </div>
-            {isEditing ? (
-              <div className="flex items-start gap-4 p-3 rounded-lg hover:bg-gray-50 transition-colors">
-                <div className="p-2 bg-indigo-50 rounded-lg">
-                  <Award className="size-5 text-indigo-600" />
-                </div>
-                <div className="flex-1">
-                  <p className="text-sm font-medium text-gray-500 mb-1">Employee ID</p>
-                  <input
-                    type="text"
-                    value={displayData.employeeId || ''}
-                    onChange={(e) => handleInputChange('employeeId', e.target.value)}
-                    className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#1a4d2e] focus:border-transparent"
-                    placeholder="Employee ID"
-                  />
-                </div>
+
+            {/* Add Contact Button */}
+            {isEditing && (
+              <div className="flex justify-end mb-3">
+                <button
+                  onClick={handleAddContact}
+                  className="flex items-center gap-1 px-3 py-1.5 bg-[#1a4d2e] hover:bg-[#2d6b45] text-white text-sm rounded-lg transition-all"
+                >
+                  <Plus className="size-3.5" />
+                  Add Contact
+                </button>
               </div>
-            ) : (
-              displayData.employeeId && (
-                <div className="flex items-start gap-4 p-3 rounded-lg hover:bg-gray-50 transition-colors">
-                  <div className="p-2 bg-indigo-50 rounded-lg">
-                    <Award className="size-5 text-indigo-600" />
-                  </div>
-                  <div className="flex-1">
-                    <p className="text-sm font-medium text-gray-500 mb-1">Employee ID</p>
-                    <p className="font-semibold text-gray-900">{displayData.employeeId}</p>
-                  </div>
-                </div>
-              )
             )}
-            <div className="flex items-start gap-4 p-3 rounded-lg hover:bg-gray-50 transition-colors">
-              <div className="p-2 bg-green-50 rounded-lg">
-                <Shield className="size-5 text-green-600" />
-              </div>
-              <div className="flex-1">
-                <p className="text-sm font-medium text-gray-500 mb-1">Account Status</p>
-                <Badge className="bg-green-600 hover:bg-green-700 mt-1 px-3 py-1">
-                  <div className="size-2 bg-white rounded-full mr-2"></div>
-                  Active & Verified
-                </Badge>
-              </div>
+            
+            {/* Contacts List - Compact */}
+            <div className="space-y-2 max-h-[400px] overflow-y-auto pr-1">
+              {filteredContacts.length > 0 ? (
+                filteredContacts.map((contact: any) => (
+                  <div key={contact.id} className="p-2.5 border border-gray-200 rounded-lg hover:border-[#1a4d2e] transition-colors">
+                    {isEditing ? (
+                      <div className="space-y-1.5">
+                        <div className="flex gap-1.5">
+                          <input
+                            type="text"
+                            value={contact.name}
+                            onChange={(e) => handleContactChange(contact.id, 'name', e.target.value)}
+                            placeholder="Name"
+                            className="flex-1 p-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-[#1a4d2e]"
+                          />
+                          <input
+                            type="email"
+                            value={contact.email}
+                            onChange={(e) => handleContactChange(contact.id, 'email', e.target.value)}
+                            placeholder="Email"
+                            className="flex-1 p-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-[#1a4d2e]"
+                          />
+                        </div>
+                        <div className="flex gap-1.5">
+                          <input
+                            type="text"
+                            value={contact.phone}
+                            onChange={(e) => handleContactChange(contact.id, 'phone', e.target.value)}
+                            placeholder="Phone"
+                            className="flex-1 p-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-[#1a4d2e]"
+                          />
+                          <input
+                            type="text"
+                            value={contact.role}
+                            onChange={(e) => handleContactChange(contact.id, 'role', e.target.value)}
+                            placeholder="Role"
+                            className="flex-1 p-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-[#1a4d2e]"
+                          />
+                          <button
+                            onClick={() => handleRemoveContact(contact.id)}
+                            className="p-1 bg-red-500 hover:bg-red-600 text-white rounded transition-colors"
+                          >
+                            <Trash2 className="size-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex items-center justify-between">
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium text-gray-900 text-sm">{contact.name}</p>
+                          <div className="flex flex-wrap gap-2 mt-0.5 text-xs text-gray-600">
+                            <span className="flex items-center gap-0.5">
+                              <Mail className="size-3" />
+                              {contact.email}
+                            </span>
+                            <span className="flex items-center gap-0.5">
+                              <Phone className="size-3" />
+                              {contact.phone}
+                            </span>
+                            <span className="flex items-center gap-0.5">
+                              <Shield className="size-3" />
+                              {contact.role}
+                            </span>
+                          </div>
+                        </div>
+                        <Badge className="bg-[#1a4d2e] text-xs ml-2 flex-shrink-0">
+                          Contact
+                        </Badge>
+                      </div>
+                    )}
+                  </div>
+                ))
+              ) : (
+                <p className="text-gray-500 text-sm text-center py-4">
+                  {searchTerm ? "No contacts match your search" : "No contacts added yet"}
+                </p>
+              )}
+            </div>
+
+            {/* Contact Count */}
+            <div className="mt-3 pt-2 border-t border-gray-200 flex justify-between text-xs text-gray-500">
+              <span>{filteredContacts.length} contact{filteredContacts.length !== 1 ? 's' : ''}</span>
+              {searchTerm && filteredContacts.length !== (displayData.contacts || []).length && (
+                <span>Showing {filteredContacts.length} of {(displayData.contacts || []).length}</span>
+              )}
             </div>
           </CardContent>
         </Card>
@@ -671,28 +798,6 @@ export default function UserProfile() {
                 No permissions assigned yet
               </div>
             )}
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Activity Stats */}
-      <Card className="border-t-4 border-[#1a4d2e] shadow-md">
-        <CardHeader className="bg-gradient-to-r from-gray-50 to-white">
-          <CardTitle className="text-xl">Activity Statistics</CardTitle>
-          <CardDescription>
-            {isNewUser 
-              ? "Start using the system to see your stats here" 
-              : "Your usage statistics and activity summary"}
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="pt-6">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-            {displayData.activityStats && displayData.activityStats.map((stat: { label: string; value: string }, index: number) => (
-              <div key={index} className="p-4 bg-blue-50 rounded-lg border border-blue-100">
-                <p className="text-sm text-gray-600 mb-1">{stat.label}</p>
-                <p className="text-lg font-bold text-gray-900">{stat.value}</p>
-              </div>
-            ))}
           </div>
         </CardContent>
       </Card>
