@@ -498,6 +498,45 @@ export default function PaintComponentAnalyzer() {
   }, [isAnalyzing]);
 
   // ============================================================
+  // SUPABASE: Clear data
+  // ============================================================
+  const clearSupabaseData = async () => {
+    if (!userEmail) return;
+    
+    try {
+      setSyncStatus("syncing");
+      setSyncMessage("🔄 Clearing data from cloud...");
+      
+      // Save null values to clear the data
+      const dataToSave = {
+        inventory_data: null,
+        inventory_data_name: null,
+        color_analysis: null,
+        uploaded_image: null,
+        uploaded_file_name: null,
+        uploaded_file_size: null,
+        batch_size: 0.1,
+        last_fetched: null,
+      };
+
+      const success = await saveUserData(userEmail, dataToSave);
+      
+      if (success) {
+        setSyncStatus("success");
+        setSyncMessage("✅ Data cleared from cloud");
+        console.log("✅ Data cleared from Supabase");
+      } else {
+        setSyncStatus("error");
+        setSyncMessage("❌ Failed to clear data");
+      }
+    } catch (error) {
+      console.error("Error clearing user data:", error);
+      setSyncStatus("error");
+      setSyncMessage("❌ Failed to clear data");
+    }
+  };
+
+  // ============================================================
   // HANDLERS
   // ============================================================
 
@@ -523,12 +562,16 @@ export default function PaintComponentAnalyzer() {
   };
 
   const handleClearSavedData = () => {
+    // Clear local state
     setIsDataSaved(false);
     setUploadedData(null);
     setUploadedDataName("");
     setColorAnalysis(null);
     setAnalyzeError("");
     if (csvInputRef.current) csvInputRef.current.value = "";
+    
+    // Clear from Supabase
+    clearSupabaseData();
   };
 
   const processFile = (file: File) => {
@@ -627,11 +670,15 @@ export default function PaintComponentAnalyzer() {
   };
 
   const handleRemoveData = () => {
+    // Clear local state
     setUploadedData(null);
     setUploadedDataName("");
     setUploadError("");
     setIsDataSaved(false);
     if (csvInputRef.current) csvInputRef.current.value = "";
+    
+    // Clear from Supabase
+    clearSupabaseData();
   };
 
   const analyzeWithGemini = async (imageBase64: string | null) => {
@@ -1130,7 +1177,7 @@ Required JSON format:
                       <Button
                         onClick={handleRemoveData}
                         variant="outline"
-                        className="border-gray-300 text-gray-600 hover:bg-gray-50 text-xs h-7 px-2"
+                        className="border-red-300 text-red-600 hover:bg-red-50 text-xs h-7 px-2"
                       >
                         <X className="size-3 mr-1" />
                         Remove
