@@ -7,6 +7,7 @@ import {
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { useState, useEffect, useRef } from "react";
+import { getUserData, saveUserProfile } from "../lib/supabase";
 
 // Default user data for new users
 const DEFAULT_USER_DATA = {
@@ -38,6 +39,7 @@ export default function UserProfile() {
   
   // States
   const [isEditing, setIsEditing] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [lastLoginDate, setLastLoginDate] = useState("");
   const [profilePicture, setProfilePicture] = useState<string | null>(null);
   const [tempProfilePicture, setTempProfilePicture] = useState<string | null>(null);
@@ -50,58 +52,120 @@ export default function UserProfile() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const notificationTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Load user data from localStorage on mount
-  useEffect(() => {
-    const savedUserData = localStorage.getItem("userProfileData");
-    const savedPicture = localStorage.getItem("userProfilePicture");
-    const isNew = !savedUserData;
-    
-    setIsNewUser(isNew);
-    
-    if (savedPicture) {
-      setProfilePicture(savedPicture);
-      setTempProfilePicture(savedPicture);
-    }
+  // Get user-specific storage keys
+  const getUserStorageKey = (key: string) => {
+    return `user_${userEmail}_${key}`;
+  };
 
-    if (savedUserData) {
-      const parsedData = JSON.parse(savedUserData);
+  // Load user data from Supabase AND localStorage
+  useEffect(() => {
+    const loadUserData = async () => {
+      if (!userEmail) {
+        setIsLoading(false);
+        return;
+      }
+
+      try {
+        // FIRST: Try to load from Supabase (source of truth)
+        const supabaseData = await getUserData(userEmail);
+        
+        if (supabaseData) {
+          console.log("📥 Loaded user data from Supabase:", supabaseData);
+          
+          // Build user data from Supabase
+          const profileData = {
+            name: supabaseData.full_name || supabaseData.name || "New User",
+            phone: supabaseData.phone || "",
+            role: supabaseData.role || "User",
+            location: supabaseData.location || "",
+            address: supabaseData.address || "",
+            email: userEmail,
+            joinDate: supabaseData.join_date || new Date().toLocaleDateString('en-US', { 
+              month: 'long', 
+              day: 'numeric', 
+              year: 'numeric' 
+            }),
+            employeeId: supabaseData.employee_id || `EMP-${Date.now().toString().slice(-6)}`,
+            permissions: supabaseData.permissions || ["Seasonal Forecast", "Paint Analyzer"],
+            contacts: supabaseData.contacts || DEFAULT_USER_DATA.contacts,
+          };
+          
+          setUserData(profileData);
+          setTempUserData(profileData);
+          setIsNewUser(false);
+          
+          // Cache in localStorage for faster loading
+          const userDataKey = getUserStorageKey('profileData');
+          localStorage.setItem(userDataKey, JSON.stringify(profileData));
+          
+          setIsLoading(false);
+          return;
+        }
+      } catch (error) {
+        console.error("Error loading from Supabase:", error);
+      }
+
+      // SECOND: Fallback to localStorage
+      const userDataKey = getUserStorageKey('profileData');
+      const userPictureKey = getUserStorageKey('profilePicture');
       
-      // Ensure email is set from auth context if not in saved data
-      if (!parsedData.email && userEmail) {
-        parsedData.email = userEmail;
+      let savedUserData = localStorage.getItem(userDataKey);
+      let savedPicture = localStorage.getItem(userPictureKey);
+      
+      if (!savedUserData) {
+        savedUserData = localStorage.getItem("userProfileData");
+      }
+      if (!savedPicture) {
+        savedPicture = localStorage.getItem("userProfilePicture");
       }
       
-      // Remove department if it exists (cleanup old data)
-      delete parsedData.department;
+      const isNew = !savedUserData;
+      setIsNewUser(isNew);
       
-      // FORCE both permissions to always exist
-      const existingPermissions = parsedData.permissions || [];
-      const combinedPermissions = [...new Set([...existingPermissions, ...ENSURE_PERMISSIONS])];
-      parsedData.permissions = combinedPermissions;
-      
-      // Initialize contacts if they don't exist
-      if (!parsedData.contacts) {
-        parsedData.contacts = DEFAULT_USER_DATA.contacts;
+      if (savedPicture) {
+        setProfilePicture(savedPicture);
+        setTempProfilePicture(savedPicture);
+      }
+
+      if (savedUserData) {
+        const parsedData = JSON.parse(savedUserData);
+        
+        if (!parsedData.email && userEmail) {
+          parsedData.email = userEmail;
+        }
+        
+        delete parsedData.department;
+        
+        const existingPermissions = parsedData.permissions || [];
+        const combinedPermissions = [...new Set([...existingPermissions, ...ENSURE_PERMISSIONS])];
+        parsedData.permissions = combinedPermissions;
+        
+        if (!parsedData.contacts) {
+          parsedData.contacts = DEFAULT_USER_DATA.contacts;
+        }
+        
+        setUserData(parsedData);
+        setTempUserData(parsedData);
+      } else {
+        const emailName = userEmail?.split('@')[0] || "New User";
+        const formattedName = emailName
+          .split(/[._-]/)
+          .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+          .join(' ');
+        
+        const defaultData = {
+          ...DEFAULT_USER_DATA,
+          name: formattedName || "New User",
+          email: userEmail || "",
+        };
+        setUserData(defaultData);
+        setTempUserData(defaultData);
       }
       
-      setUserData(parsedData);
-      setTempUserData(parsedData);
-    } else {
-      // New user - start with default data but set name from email
-      const emailName = userEmail?.split('@')[0] || "New User";
-      const formattedName = emailName
-        .split(/[._-]/)
-        .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-        .join(' ');
-      
-      const defaultData = {
-        ...DEFAULT_USER_DATA,
-        name: formattedName || "New User",
-        email: userEmail || "",
-      };
-      setUserData(defaultData);
-      setTempUserData(defaultData);
-    }
+      setIsLoading(false);
+    };
+
+    loadUserData();
   }, [userEmail]);
 
   // Update last login date
@@ -128,25 +192,21 @@ export default function UserProfile() {
     setNotificationMessage(message);
     setShowNotification(true);
     
-    // Clear any existing timeout
     if (notificationTimeoutRef.current) {
       clearTimeout(notificationTimeoutRef.current);
     }
     
-    // Hide notification after 3 seconds
     notificationTimeoutRef.current = setTimeout(() => {
       setShowNotification(false);
       notificationTimeoutRef.current = null;
     }, 3000);
   };
 
-  // Save user data to localStorage
-  const saveUserData = (data: any) => {
+  // Save user data to localStorage AND Supabase
+  const saveUserData = async (data: any) => {
     try {
-      // Remove department if it exists (cleanup)
       delete data.department;
       
-      // FORCE both permissions to always exist when saving
       const existingPermissions = data.permissions || [];
       const combinedPermissions = [...new Set([...existingPermissions, ...ENSURE_PERMISSIONS])];
       
@@ -155,7 +215,30 @@ export default function UserProfile() {
         permissions: combinedPermissions
       };
       
-      localStorage.setItem("userProfileData", JSON.stringify(dataToSave));
+      // Save to localStorage
+      const userDataKey = getUserStorageKey('profileData');
+      localStorage.setItem(userDataKey, JSON.stringify(dataToSave));
+      localStorage.setItem('userProfileData', JSON.stringify(dataToSave));
+      
+      // Save to Supabase
+      if (userEmail) {
+        const supabaseSuccess = await saveUserProfile(userEmail, {
+          name: dataToSave.name,
+          phone: dataToSave.phone,
+          role: dataToSave.role,
+          location: dataToSave.location,
+          address: dataToSave.address,
+          joinDate: dataToSave.joinDate,
+          employeeId: dataToSave.employeeId,
+          permissions: dataToSave.permissions,
+          contacts: dataToSave.contacts,
+        });
+        
+        if (!supabaseSuccess) {
+          console.warn("Failed to save to Supabase, but localStorage saved");
+        }
+      }
+      
       setUserData(dataToSave);
       setIsNewUser(false);
       
@@ -169,35 +252,34 @@ export default function UserProfile() {
   // Handle edit toggle
   const handleEditToggle = () => {
     if (isEditing) {
-      // Cancel edit - revert changes
       setTempUserData(userData);
       setTempProfilePicture(profilePicture);
       showNotificationMessage("Changes cancelled");
     } else {
-      // Start editing - copy current data to temp
       setTempUserData(userData);
       setTempProfilePicture(profilePicture);
     }
     setIsEditing(!isEditing);
   };
 
-  // Handle save - ENHANCED with better error handling
-  const handleSave = () => {
+  // Handle save with event dispatching
+  const handleSave = async () => {
     try {
-      // Save user data to localStorage
-      const saveSuccess = saveUserData(tempUserData);
+      const saveSuccess = await saveUserData(tempUserData);
       
       if (!saveSuccess) {
         showNotificationMessage("Error saving profile data ❌");
         return;
       }
       
-      // Save profile picture if changed
       if (tempProfilePicture !== profilePicture) {
+        const userPictureKey = getUserStorageKey('profilePicture');
         if (tempProfilePicture) {
+          localStorage.setItem(userPictureKey, tempProfilePicture);
           localStorage.setItem('userProfilePicture', tempProfilePicture);
           setProfilePicture(tempProfilePicture);
         } else {
+          localStorage.removeItem(userPictureKey);
           localStorage.removeItem('userProfilePicture');
           setProfilePicture(null);
         }
@@ -206,8 +288,13 @@ export default function UserProfile() {
       setIsEditing(false);
       showNotificationMessage("Profile saved successfully! ✅");
       
-      // Dispatch custom event to notify Layout component about the update
+      // Dispatch events to notify Layout
+      console.log("📤 Dispatching profileUpdated event with data:", tempUserData.name);
+      window.dispatchEvent(new CustomEvent('profileUpdated', { 
+        detail: { name: tempUserData.name } 
+      }));
       window.dispatchEvent(new Event('profileUpdated'));
+      
     } catch (error) {
       console.error("Save error:", error);
       showNotificationMessage("Error saving profile ❌");
@@ -253,26 +340,19 @@ export default function UserProfile() {
     }));
   };
 
-  // UPDATED: Handle logout WITHOUT clearing user profile data
+  // UserProfile.tsx - Updated handleLogout
   const handleLogout = () => {
     const confirmLogout = window.confirm("Are you sure you want to log out?");
     if (confirmLogout) {
       try {
-        // Clear authentication data
-        localStorage.removeItem('isAuthenticated');
-        localStorage.removeItem('userToken');
-        localStorage.removeItem('userEmail');
-        localStorage.removeItem('userId');
-        
-        // Call the logout function from context
+        // Call logout from context (which now clears everything)
         logout();
         
-        // Navigate to login with replace to prevent going back
-        navigate("/login", { replace: true });
+        // Force navigation to login
+        window.location.href = "/login";
       } catch (error) {
         console.error("Logout error:", error);
-        // Force navigation even if there's an error
-        navigate("/login", { replace: true });
+        window.location.href = "/login";
       }
     }
   };
@@ -280,7 +360,6 @@ export default function UserProfile() {
   // Handle profile picture change
   const handleProfilePictureClick = () => {
     if (isEditing) {
-      // Reset the file input value so onChange fires even for the same file
       if (fileInputRef.current) {
         fileInputRef.current.value = '';
       }
@@ -291,13 +370,11 @@ export default function UserProfile() {
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file && isEditing) {
-      // Check if file is an image
       if (!file.type.startsWith('image/')) {
         showNotificationMessage("Please select an image file");
         return;
       }
       
-      // Check file size (max 5MB)
       if (file.size > 5 * 1024 * 1024) {
         showNotificationMessage("Image size should be less than 5MB");
         return;
@@ -316,11 +393,10 @@ export default function UserProfile() {
     }
   };
 
-  // Handle remove profile picture (only in edit mode)
+  // Handle remove profile picture
   const handleRemovePicture = () => {
     if (isEditing) {
       setTempProfilePicture(null);
-      // Reset file input
       if (fileInputRef.current) {
         fileInputRef.current.value = '';
       }
@@ -372,6 +448,17 @@ export default function UserProfile() {
     contact.phone.includes(searchTerm) ||
     contact.role.toLowerCase().includes(searchTerm.toLowerCase())
   );
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <div className="size-12 border-4 border-[#1a4d2e] border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="mt-4 text-gray-600">Loading profile...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="p-8 space-y-6 bg-gray-50 min-h-screen relative">
@@ -461,6 +548,7 @@ export default function UserProfile() {
         </div>
       </div>
 
+      {/* Rest of the component remains the same... */}
       {/* Profile Overview Card */}
       <Card className={`border-l-4 ${isNewUser ? 'border-green-500' : 'border-[#1a4d2e]'} shadow-lg`}>
         <CardHeader className="pb-6">
@@ -491,7 +579,6 @@ export default function UserProfile() {
                   )}
                 </div>
                 
-                {/* Remove button (X) - bottom left, only in edit mode and when picture exists */}
                 {isEditing && displayPicture && (
                   <button
                     onClick={handleRemovePicture}
@@ -502,7 +589,6 @@ export default function UserProfile() {
                   </button>
                 )}
                 
-                {/* Camera button - bottom right, only in edit mode */}
                 {isEditing && (
                   <button
                     onClick={handleProfilePictureClick}
@@ -630,7 +716,7 @@ export default function UserProfile() {
           </CardContent>
         </Card>
 
-        {/* Contacts - Compact Version with Search */}
+        {/* Contacts */}
         <Card className="shadow-md hover:shadow-lg transition-shadow">
           <CardHeader className="bg-gradient-to-r from-gray-50 to-white border-b py-4">
             <CardTitle className="flex items-center gap-2 text-lg">
@@ -641,7 +727,6 @@ export default function UserProfile() {
             </CardTitle>
           </CardHeader>
           <CardContent className="pt-4">
-            {/* Search Bar */}
             <div className="relative mb-4">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 size-4 text-gray-400" />
               <input
@@ -661,7 +746,6 @@ export default function UserProfile() {
               )}
             </div>
 
-            {/* Add Contact Button */}
             {isEditing && (
               <div className="flex justify-end mb-3">
                 <button
@@ -674,7 +758,6 @@ export default function UserProfile() {
               </div>
             )}
             
-            {/* Contacts List - Compact */}
             <div className="space-y-2 max-h-[400px] overflow-y-auto pr-1">
               {filteredContacts.length > 0 ? (
                 filteredContacts.map((contact: any) => (
@@ -753,7 +836,6 @@ export default function UserProfile() {
               )}
             </div>
 
-            {/* Contact Count */}
             <div className="mt-3 pt-2 border-t border-gray-200 flex justify-between text-xs text-gray-500">
               <span>{filteredContacts.length} contact{filteredContacts.length !== 1 ? 's' : ''}</span>
               {searchTerm && filteredContacts.length !== (displayData.contacts || []).length && (
@@ -802,7 +884,6 @@ export default function UserProfile() {
         </CardContent>
       </Card>
 
-      {/* Add animation styles */}
       <style>{`
         @keyframes slideIn {
           from {

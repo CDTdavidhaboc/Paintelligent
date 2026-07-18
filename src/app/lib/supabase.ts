@@ -11,7 +11,7 @@ if (!supabaseUrl || !supabaseAnonKey) {
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 // ============================================================
-// USER AUTHENTICATION - Using only user_data table
+// USER AUTHENTICATION
 // ============================================================
 
 // Register new user
@@ -86,7 +86,6 @@ export const loginUser = async (email: string, password: string) => {
       .from('user_data')
       .select('*')
       .eq('email', email)
-      .eq('password', password) // In production, compare hashed passwords!
       .maybeSingle();
 
     if (error) {
@@ -101,14 +100,25 @@ export const loginUser = async (email: string, password: string) => {
       };
     }
 
+    // In production, compare hashed passwords!
+    if (data.password !== password) {
+      return { 
+        success: false, 
+        error: 'Invalid email or password.' 
+      };
+    }
+
     console.log('✅ User logged in successfully!');
     
-    // Generate a simple token
+    // Generate a simple token (in production, use JWT)
     const token = btoa(`${email}:${Date.now()}`);
+    
+    // Return user data without password
+    const { password: _, ...userWithoutPassword } = data;
     
     return { 
       success: true, 
-      user: data,
+      user: userWithoutPassword,
       token: token
     };
   } catch (error: any) {
@@ -121,11 +131,12 @@ export const loginUser = async (email: string, password: string) => {
 // USER DATA STORAGE
 // ============================================================
 
-// Save user data to Supabase
+// Save user data to Supabase (for PaintComponentAnalyzer)
 export const saveUserData = async (email: string, data: any) => {
   console.log('📤 Saving data for user:', email);
   
   try {
+    // Prepare the payload with proper field mapping
     const payload = {
       email: email,
       inventory_data: data.inventory_data || null,
@@ -139,7 +150,7 @@ export const saveUserData = async (email: string, data: any) => {
       updated_at: new Date().toISOString(),
     };
 
-    // Remove password and full_name from payload if they exist (don't overwrite them)
+    // Only update, don't overwrite authentication fields
     const { error } = await supabase
       .from('user_data')
       .update(payload)
@@ -177,6 +188,144 @@ export const getUserData = async (email: string) => {
     return data;
   } catch (error: any) {
     console.error('❌ Error getting user data:', error);
+    return null;
+  }
+};
+
+// ============================================================
+// USER PROFILE (for UserProfile component)
+// ============================================================
+
+// Save user profile to Supabase
+export const saveUserProfile = async (email: string, profileData: any) => {
+  console.log('📤 Saving user profile for:', email);
+  
+  try {
+    // Map profile data to database fields
+    const payload = {
+      email: email,
+      full_name: profileData.name || null,
+      phone: profileData.phone || null,
+      role: profileData.role || null,
+      location: profileData.location || null,
+      address: profileData.address || null,
+      join_date: profileData.joinDate || null,
+      employee_id: profileData.employeeId || null,
+      permissions: profileData.permissions || [],
+      contacts: profileData.contacts || [],
+      updated_at: new Date().toISOString(),
+    };
+
+    const { error } = await supabase
+      .from('user_data')
+      .update(payload)
+      .eq('email', email);
+
+    if (error) {
+      console.error('❌ Supabase Error:', error);
+      throw error;
+    }
+
+    console.log('✅ User profile saved successfully!');
+    return true;
+  } catch (error: any) {
+    console.error('❌ Error saving user profile:', error);
+    return false;
+  }
+};
+
+// Get user profile from Supabase
+export const getUserProfile = async (email: string) => {
+  console.log('📥 Fetching user profile for:', email);
+
+  try {
+    const { data, error } = await supabase
+      .from('user_data')
+      .select('full_name, phone, role, location, address, join_date, employee_id, permissions, contacts')
+      .eq('email', email)
+      .maybeSingle();
+
+    if (error) {
+      console.error('❌ Supabase Error:', error);
+      throw error;
+    }
+
+    if (!data) return null;
+
+    // Map database fields back to profile format
+    return {
+      name: data.full_name || 'New User',
+      phone: data.phone || '',
+      role: data.role || 'User',
+      location: data.location || '',
+      address: data.address || '',
+      joinDate: data.join_date || new Date().toLocaleDateString('en-US', { 
+        month: 'long', 
+        day: 'numeric', 
+        year: 'numeric' 
+      }),
+      employeeId: data.employee_id || `EMP-${Date.now().toString().slice(-6)}`,
+      permissions: data.permissions || ['Seasonal Forecast', 'Paint Analyzer'],
+      contacts: data.contacts || [],
+    };
+  } catch (error: any) {
+    console.error('❌ Error getting user profile:', error);
+    return null;
+  }
+};
+
+// ============================================================
+// PROFILE PICTURE
+// ============================================================
+
+// Save profile picture to Supabase
+export const saveProfilePicture = async (email: string, pictureData: string | null) => {
+  console.log('📸 Saving profile picture for:', email);
+  
+  try {
+    const payload = {
+      email: email,
+      profile_picture: pictureData || null,
+      updated_at: new Date().toISOString(),
+    };
+
+    const { error } = await supabase
+      .from('user_data')
+      .update(payload)
+      .eq('email', email);
+
+    if (error) {
+      console.error('❌ Supabase Error:', error);
+      throw error;
+    }
+
+    console.log('✅ Profile picture saved successfully!');
+    return true;
+  } catch (error: any) {
+    console.error('❌ Error saving profile picture:', error);
+    return false;
+  }
+};
+
+// Get profile picture from Supabase
+export const getProfilePicture = async (email: string) => {
+  console.log('📥 Fetching profile picture for:', email);
+
+  try {
+    const { data, error } = await supabase
+      .from('user_data')
+      .select('profile_picture')
+      .eq('email', email)
+      .maybeSingle();
+
+    if (error) {
+      console.error('❌ Supabase Error:', error);
+      throw error;
+    }
+
+    return data?.profile_picture || null;
+  } catch (error: any) {
+    console.error('❌ Error getting profile picture:', error);
     return null;
   }
 };
