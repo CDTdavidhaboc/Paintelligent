@@ -1,165 +1,86 @@
-import { Outlet, Link, useLocation } from "react-router";
-import { BarChart3, Palette, User } from "lucide-react";
+// src/app/components/Layout.tsx
+import { Outlet, NavLink } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
-import { useState, useEffect } from "react";
-import garciaLogo from "@/assets/logo.png";
+import logo from "@/assets/logo.png";
 
-// Garcia Paint Center - Main Layout
 export default function Layout() {
-  const location = useLocation();
-  const { logout, userEmail } = useAuth();
+  const { userEmail } = useAuth();
 
-  const [currentDate, setCurrentDate] = useState("");
-  const [currentSeason, setCurrentSeason] = useState("");
-  const [userName, setUserName] = useState("Admin");
+  // Get user name from email or use default
+  const userName = userEmail ? userEmail.split('@')[0] : "New User";
+  const displayName = userName.charAt(0).toUpperCase() + userName.slice(1);
 
-  // Function to load user name from localStorage
-  const loadUserName = () => {
-    const savedUserData = localStorage.getItem("userProfileData");
-    if (savedUserData) {
-      try {
-        const parsedData = JSON.parse(savedUserData);
-        if (parsedData.name) {
-          setUserName(parsedData.name);
-        } else {
-          setUserName(userEmail || "Admin");
-        }
-      } catch (error) {
-        console.error("Error parsing user data:", error);
-        setUserName(userEmail || "Admin");
-      }
-    } else {
-      setUserName(userEmail || "Admin");
-    }
-  };
-
-  useEffect(() => {
-    const updateDateTime = () => {
-      const now = new Date();
-      const month = now.toLocaleString("en-US", { month: "long" });
-      const day = now.getDate();
-      const year = now.getFullYear();
-      setCurrentDate(`${month} ${day}, ${year}`);
-      const monthIndex = now.getMonth();
-      const isDrySeason = monthIndex >= 10 || monthIndex <= 4;
-      setCurrentSeason(isDrySeason ? "Dry Season" : "Rainy Season");
-    };
-    updateDateTime();
-    const interval = setInterval(updateDateTime, 60000);
-    return () => clearInterval(interval);
-  }, []);
-
-  // Load user name on mount and when userEmail changes
-  useEffect(() => {
-    loadUserName();
-  }, [userEmail]);
-
-  // Listen for changes in localStorage (works across tabs)
-  useEffect(() => {
-    const handleStorageChange = (e: StorageEvent) => {
-      if (e.key === "userProfileData") {
-        loadUserName();
-      }
-    };
-
-    window.addEventListener("storage", handleStorageChange);
-    return () => window.removeEventListener("storage", handleStorageChange);
-  }, []);
-
-  // Custom event listener for same-tab updates
-  useEffect(() => {
-    const handleProfileUpdate = () => {
-      loadUserName();
-    };
-
-    // Listen for custom event dispatched from UserProfile
-    window.addEventListener("profileUpdated", handleProfileUpdate);
-    return () => window.removeEventListener("profileUpdated", handleProfileUpdate);
-  }, []);
-
-  const isActive = (path) => {
-    if (path === "/seasonal-forecasting") {
-      return location.pathname === "/" || location.pathname === "/seasonal-forecasting";
-    }
-    return location.pathname === path;
-  };
+  // Get current date
+  const now = new Date();
+  const month = now.toLocaleString('default', { month: 'long' });
+  const day = now.getDate();
+  const year = now.getFullYear();
 
   return (
-    <div className="flex flex-col h-screen bg-gray-50">
-
+    <div className="min-h-screen bg-gray-50">
       {/* Top Navigation Bar */}
-      <header className="bg-[#1a4d2e] text-white shadow-xl flex-shrink-0">
-        <div className="flex items-center justify-between px-6 py-3">
-
-          {/* Logo + Greeting */}
-          <div className="flex items-center gap-3">
-            <img src={garciaLogo} alt="Paintelligent Logo" className="h-10 w-auto object-contain" />
-            <div>
-              <p className="font-bold text-base leading-tight">Hello, {userName}!</p>
-              <p className="text-xs text-green-200">{currentSeason} · {currentDate}</p>
+      <nav className="bg-[#1a4d2e] border-b border-[#2d6b45] sticky top-0 z-50 shadow-lg">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex justify-between items-center h-16">
+            {/* Left: Logo and Greeting */}
+            <div className="flex items-center gap-3">
+              <img src={logo} alt="Paintelligent" className="h-8 w-auto" />
+              <div>
+                <p className="text-sm font-medium text-white">
+                  Hello, {displayName}! 😊
+                </p>
+                <p className="text-xs text-green-300">
+                  {month} {day}, {year}
+                </p>
+              </div>
+            </div>
+            
+            {/* Right: Navigation Links with active states */}
+            <div className="flex items-center space-x-8">
+              <NavLink 
+                to="/" 
+                className={({ isActive }) =>
+                  `text-sm font-medium transition-colors ${
+                    isActive 
+                      ? "text-green-300 font-semibold" 
+                      : "text-green-100 hover:text-green-300"
+                  }`
+                }
+                end
+              >
+                Sales Forecasting
+              </NavLink>
+              <NavLink 
+                to="/paint-analyzer" 
+                className={({ isActive }) =>
+                  `text-sm font-medium transition-colors ${
+                    isActive 
+                      ? "text-green-300 font-semibold" 
+                      : "text-green-100 hover:text-green-300"
+                  }`
+                }
+              >
+                Paint Analyzer
+              </NavLink>
+              <NavLink 
+                to="/user-profile" 
+                className={({ isActive }) =>
+                  `text-sm font-medium transition-colors ${
+                    isActive 
+                      ? "text-green-300 font-semibold" 
+                      : "text-green-100 hover:text-green-300"
+                  }`
+                }
+              >
+                User Profile
+              </NavLink>
             </div>
           </div>
-
-          {/* Nav Links */}
-          <nav className="flex items-center gap-1">
-           <Link
-  to="/seasonal-forecasting"
-  className={`group flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition-all duration-200 ${
-    isActive("/seasonal-forecasting")
-      ? "bg-white text-[#1a4d2e] shadow-lg shadow-black/10"
-      : "text-green-100 hover:bg-white/10 hover:text-white hover:translate-x-1"
-  }`}
->
-  <BarChart3
-    className={`size-5 transition-transform duration-200 ${
-      isActive("/seasonal-forecasting")
-        ? "text-[#2d6b45]"
-        : "group-hover:scale-110"
-    }`}
-  />
-  <span>Sales Forecasting</span>
-</Link>
-
-<Link
-  to="/paint-analyzer"
-  className={`group flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition-all duration-200 ${
-    isActive("/paint-analyzer")
-      ? "bg-white text-[#1a4d2e] shadow-lg shadow-black/10"
-      : "text-green-100 hover:bg-white/10 hover:text-white hover:translate-x-1"
-  }`}
->
-  <Palette
-    className={`size-5 transition-transform duration-200 ${
-      isActive("/paint-analyzer")
-        ? "text-[#2d6b45]"
-        : "group-hover:rotate-12 group-hover:scale-110"
-    }`}
-  />
-  <span>Paint Analyzer</span>
-</Link>
-            <Link
-  to="/user-profile"
-  className={`group flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition-all duration-200 ${
-    isActive("/user-profile")
-      ? "bg-white text-[#1a4d2e] shadow-lg shadow-black/10"
-      : "text-green-100 hover:bg-white/10 hover:text-white hover:translate-x-1"
-  }`}
->
-  <User
-    className={`size-5 transition-transform duration-200 ${
-      isActive("/user-profile")
-        ? "text-[#2d6b45]"
-        : "group-hover:scale-110"
-    }`}
-  />
-  <span>User Profile</span>
-</Link>
-          </nav>
         </div>
-      </header>
+      </nav>
 
-      {/* Main Content */}
-      <main className="flex-1 overflow-auto">
+      {/* Page Content - NO PADDING */}
+      <main>
         <Outlet />
       </main>
     </div>

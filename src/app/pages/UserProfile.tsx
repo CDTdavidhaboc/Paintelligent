@@ -4,7 +4,7 @@ import {
   LogOut, User, Mail, Phone, MapPin, Calendar, Shield, Activity, Building2, Clock, Camera, 
   Edit2, Save, X, UserPlus, Award, CheckCircle, Pencil, UserCircle, Check, Plus, Trash2, Building, Users, Search
 } from "lucide-react";
-import { useNavigate } from "react-router";
+import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { useState, useEffect, useRef } from "react";
 
@@ -258,11 +258,11 @@ export default function UserProfile() {
     const confirmLogout = window.confirm("Are you sure you want to log out?");
     if (confirmLogout) {
       try {
-        // Only clear authentication flag
+        // Clear authentication data
         localStorage.removeItem('isAuthenticated');
-        
-        // IMPORTANT: Keep user profile data for next login
-        // userProfileData and userProfilePicture are preserved in localStorage
+        localStorage.removeItem('userToken');
+        localStorage.removeItem('userEmail');
+        localStorage.removeItem('userId');
         
         // Call the logout function from context
         logout();
@@ -365,8 +365,8 @@ export default function UserProfile() {
   const displayData = isEditing ? tempUserData : userData;
   const displayPicture = isEditing ? tempProfilePicture : profilePicture;
 
-  // Filter contacts based on search term - MOVED AFTER displayData is defined
-  const filteredContacts = (displayData.contacts || []).filter(contact =>
+  // Filter contacts based on search term
+  const filteredContacts = (displayData.contacts || []).filter((contact: any) =>
     contact.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     contact.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
     contact.phone.includes(searchTerm) ||

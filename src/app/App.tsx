@@ -1,68 +1,67 @@
-import { useEffect } from "react";
-import { RouterProvider, createBrowserRouter, Outlet } from "react-router";
-import { AuthProvider } from "./context/AuthContext";
-import Layout from "./components/Layout";
-import SeasonalForecasting from "./pages/SeasonalForecasting";
-import PaintComponentAnalyzer from "./pages/PaintComponentAnalyzer";
-import UserProfile from "./pages/UserProfile";
+// src/app/App.tsx
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { AuthProvider, useAuth } from "./context/AuthContext";
 import Login from "./pages/Login";
-import ProtectedRoute from "./components/ProtectedRoute";
+import Register from "./pages/Register";
+import Layout from "./components/Layout";
+import PaintComponentAnalyzer from "./pages/PaintComponentAnalyzer";
+import SeasonalForecasting from "./pages/SeasonalForecasting";
+import UserProfile from "./pages/UserProfile";
 
-// Root component that provides the AuthContext
-function Root() {
-  useEffect(() => {
-    // Suppress Recharts duplicate key warnings
-    const originalError = console.error;
-    console.error = (...args) => {
-      if (
-        typeof args[0] === 'string' &&
-        args[0].includes('Encountered two children with the same key')
-      ) {
-        return;
-      }
-      originalError.apply(console, args);
-    };
+function AppRoutes() {
+  const { isAuthenticated, loading } = useAuth();
 
-    return () => {
-      console.error = originalError;
-    };
-  }, []);
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <div className="size-12 border-4 border-[#1a4d2e] border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="mt-4 text-gray-600">Loading...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <AuthProvider>
-      <Outlet />
-    </AuthProvider>
+    <Routes>
+      {/* Public Routes */}
+      <Route 
+        path="/login" 
+        element={!isAuthenticated ? <Login /> : <Navigate to="/" replace />} 
+      />
+      <Route 
+        path="/register" 
+        element={!isAuthenticated ? <Register /> : <Navigate to="/" replace />} 
+      />
+      
+      {/* Protected Routes */}
+      <Route
+        path="/*"
+        element={
+          isAuthenticated ? (
+            <Layout />
+          ) : (
+            <Navigate to="/login" replace />
+          )
+        }
+      >
+        <Route index element={<SeasonalForecasting />} />
+        <Route path="paint-analyzer" element={<PaintComponentAnalyzer />} />
+        <Route path="user-profile" element={<UserProfile />} />
+        <Route path="seasonal-forecasting" element={<SeasonalForecasting />} />
+      </Route>
+    </Routes>
   );
 }
 
-const router = createBrowserRouter([
-  {
-    element: <Root />,
-    children: [
-      {
-        path: "/login",
-        Component: Login,
-      },
-      {
-        path: "/",
-        Component: ProtectedRoute,
-        children: [
-          {
-            path: "/",
-            Component: Layout,
-            children: [
-              { index: true, Component: SeasonalForecasting },
-              { path: "seasonal-forecasting", Component: SeasonalForecasting },
-              { path: "paint-analyzer", Component: PaintComponentAnalyzer },
-              { path: "user-profile", Component: UserProfile },
-            ],
-          },
-        ],
-      },
-    ],
-  },
-]);
-
-export default function App() {
-  return <RouterProvider router={router} />;
+function App() {
+  return (
+    <BrowserRouter>
+      <AuthProvider>
+        <AppRoutes />
+      </AuthProvider>
+    </BrowserRouter>
+  );
 }
+
+export default App;

@@ -34,10 +34,14 @@ import {
   File,
   Save,
   RefreshCw,
+  Cloud,
+  CloudOff,
 } from "lucide-react";
 import Papa from "papaparse";
 import { GoogleGenAI } from "@google/genai";
 import * as XLSX from "xlsx";
+import { useAuth } from "../context/AuthContext";
+import { saveUserData, getUserData } from "../lib/supabase";
 
 type InventoryItem = Record<string, string>;
 
@@ -336,6 +340,11 @@ const loadInventory = (uploadedData: any[] | null) => {
 // ============================================================
 
 export default function PaintComponentAnalyzer() {
+  const { userEmail } = useAuth();
+  const [isLoading, setIsLoading] = useState(true);
+  const [syncStatus, setSyncStatus] = useState<"idle" | "syncing" | "success" | "error">("idle");
+  const [syncMessage, setSyncMessage] = useState("");
+
   const [colorAnalysis, setColorAnalysis] = useState<ColorAnalysis | null>(null);
   const [batchSizeLiters, setBatchSizeLiters] = useState(0.1);
   const [uploadedImage, setUploadedImage] = useState<string | null>(null);
@@ -358,101 +367,116 @@ export default function PaintComponentAnalyzer() {
   const [isDataSaved, setIsDataSaved] = useState(false);
 
   // ============================================================
-  // PERSISTENCE: Load saved data from localStorage on mount
+  // SUPABASE: Load saved data on mount
   // ============================================================
   useEffect(() => {
-    // Load saved inventory data
-    const savedData = localStorage.getItem("savedInventoryData");
-    const savedDataName = localStorage.getItem("savedInventoryDataName");
-    
-    if (savedData && savedDataName) {
-      try {
-        const parsedData = JSON.parse(savedData);
-        setUploadedData(parsedData);
-        setUploadedDataName(savedDataName);
-        setIsDataSaved(true);
-      } catch (err) {
-        console.error("Error loading saved data:", err);
+    const loadData = async () => {
+      if (!userEmail) {
+        setIsLoading(false);
+        return;
       }
-    }
-    
-    // Load saved analysis results
-    const savedAnalysis = localStorage.getItem("savedColorAnalysis");
-    if (savedAnalysis) {
+
       try {
-        const parsed = JSON.parse(savedAnalysis);
-        setColorAnalysis(parsed);
-        // Restore lastFetched if available
-        if (parsed.lastFetched) {
-          setLastFetched(new Date(parsed.lastFetched));
+        const data = await getUserData(userEmail);
+        
+        if (data) {
+          // Restore inventory data
+          if (data.inventory_data) {
+            setUploadedData(data.inventory_data);
+            setUploadedDataName(data.inventory_data_name || "");
+            setIsDataSaved(true);
+          }
+          
+          // Restore analysis results
+          if (data.color_analysis) {
+            setColorAnalysis(data.color_analysis);
+          }
+          
+          // Restore uploaded image
+          if (data.uploaded_image) {
+            setUploadedImage(data.uploaded_image);
+            setUploadedFileName(data.uploaded_file_name || "");
+            setUploadedFileSize(data.uploaded_file_size || "");
+          }
+          
+          // Restore batch size
+          if (data.batch_size) {
+            setBatchSizeLiters(data.batch_size);
+          }
+          
+          // Restore last fetched
+          if (data.last_fetched) {
+            setLastFetched(new Date(data.last_fetched));
+          }
+          
+          setSyncStatus("success");
+          setSyncMessage("✅ Data loaded from cloud");
+        } else {
+          setSyncStatus("idle");
+          setSyncMessage("No saved data found");
         }
-      } catch (err) {
-        console.error("Error loading saved analysis:", err);
+      } catch (error) {
+        console.error("Error loading user data:", error);
+        setSyncStatus("error");
+        setSyncMessage("❌ Failed to load data from cloud");
+      } finally {
+        setIsLoading(false);
       }
-    }
-    
-    // Load saved uploaded image
-    const savedImage = localStorage.getItem("savedUploadedImage");
-    const savedFileName = localStorage.getItem("savedUploadedFileName");
-    const savedFileSize = localStorage.getItem("savedUploadedFileSize");
-    
-    if (savedImage) {
-      setUploadedImage(savedImage);
-      setUploadedFileName(savedFileName || "");
-      setUploadedFileSize(savedFileSize || "");
-    }
-    
-    // Load saved batch size
-    const savedBatchSize = localStorage.getItem("savedBatchSize");
-    if (savedBatchSize) {
+    };
+
+    loadData();
+  }, [userEmail]);
+
+  // ============================================================
+  // SUPABASE: Save to cloud when data changes (debounced)
+  // ============================================================
+  useEffect(() => {
+    const saveToCloud = async () => {
+      if (!userEmail) return;
+      
+      setSyncStatus("syncing");
+      setSyncMessage("🔄 Syncing to cloud...");
+
       try {
-        const parsed = parseFloat(savedBatchSize);
-        if (!isNaN(parsed)) {
-          setBatchSizeLiters(parsed);
+        const dataToSave = {
+          inventory_data: uploadedData,
+          inventory_data_name: uploadedDataName,
+          color_analysis: colorAnalysis,
+          uploaded_image: uploadedImage,
+          uploaded_file_name: uploadedFileName,
+          uploaded_file_size: uploadedFileSize,
+          batch_size: batchSizeLiters,
+          last_fetched: lastFetched ? lastFetched.toISOString() : null,
+        };
+
+        const success = await saveUserData(userEmail, dataToSave);
+        
+        if (success) {
+          setSyncStatus("success");
+          setSyncMessage("✅ Data synced to cloud");
+        } else {
+          setSyncStatus("error");
+          setSyncMessage("❌ Sync failed");
         }
-      } catch (err) {
-        console.error("Error loading saved batch size:", err);
+      } catch (error) {
+        console.error("Error saving user data:", error);
+        setSyncStatus("error");
+        setSyncMessage("❌ Sync failed");
       }
-    }
-  }, []);
+    };
+
+    // Debounce saves to avoid too many writes
+    const timeoutId = setTimeout(() => {
+      if (userEmail && (uploadedData || colorAnalysis || uploadedImage)) {
+        saveToCloud();
+      }
+    }, 2000);
+
+    return () => clearTimeout(timeoutId);
+  }, [userEmail, uploadedData, uploadedDataName, colorAnalysis, uploadedImage, uploadedFileName, uploadedFileSize, batchSizeLiters, lastFetched]);
 
   // ============================================================
-  // PERSISTENCE: Save to localStorage when data changes
-  // ============================================================
-  
-  // Save colorAnalysis to localStorage whenever it changes
-  useEffect(() => {
-    if (colorAnalysis) {
-      const dataToSave = {
-        ...colorAnalysis,
-        lastFetched: lastFetched ? lastFetched.toISOString() : null,
-      };
-      localStorage.setItem("savedColorAnalysis", JSON.stringify(dataToSave));
-    } else {
-      localStorage.removeItem("savedColorAnalysis");
-    }
-  }, [colorAnalysis, lastFetched]);
-
-  // Save uploaded image to localStorage
-  useEffect(() => {
-    if (uploadedImage) {
-      localStorage.setItem("savedUploadedImage", uploadedImage);
-      localStorage.setItem("savedUploadedFileName", uploadedFileName);
-      localStorage.setItem("savedUploadedFileSize", uploadedFileSize);
-    } else {
-      localStorage.removeItem("savedUploadedImage");
-      localStorage.removeItem("savedUploadedFileName");
-      localStorage.removeItem("savedUploadedFileSize");
-    }
-  }, [uploadedImage, uploadedFileName, uploadedFileSize]);
-
-  // Save batch size to localStorage
-  useEffect(() => {
-    localStorage.setItem("savedBatchSize", String(batchSizeLiters));
-  }, [batchSizeLiters]);
-
-  // ============================================================
-  // END PERSISTENCE
+  // ANIMATION & EFFECTS
   // ============================================================
 
   useEffect(() => {
@@ -473,6 +497,10 @@ export default function PaintComponentAnalyzer() {
     return () => window.clearInterval(interval);
   }, [isAnalyzing]);
 
+  // ============================================================
+  // HANDLERS
+  // ============================================================
+
   const handleSaveData = () => {
     if (!uploadedData || uploadedData.length === 0) {
       setUploadError("No data to save. Please upload a file first.");
@@ -480,8 +508,6 @@ export default function PaintComponentAnalyzer() {
     }
 
     try {
-      localStorage.setItem("savedInventoryData", JSON.stringify(uploadedData));
-      localStorage.setItem("savedInventoryDataName", uploadedDataName);
       setIsDataSaved(true);
       setUploadError("");
       
@@ -492,13 +518,11 @@ export default function PaintComponentAnalyzer() {
       setTimeout(() => successMsg.remove(), 3000);
     } catch (err) {
       console.error("Error saving data:", err);
-      setUploadError("Failed to save data to localStorage.");
+      setUploadError("Failed to save data.");
     }
   };
 
   const handleClearSavedData = () => {
-    localStorage.removeItem("savedInventoryData");
-    localStorage.removeItem("savedInventoryDataName");
     setIsDataSaved(false);
     setUploadedData(null);
     setUploadedDataName("");
@@ -940,6 +964,17 @@ Required JSON format:
   const isDataLoaded = uploadedData !== null && uploadedData.length > 0;
   const isAnalyzerEnabled = isDataSaved && isDataLoaded;
 
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <Loader2 className="size-12 animate-spin text-[#1a4d2e] mx-auto" />
+          <p className="mt-4 text-gray-600">Loading your data...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div
       className={`
@@ -957,6 +992,35 @@ Required JSON format:
             </p>
           )}
         </div>
+        {/* Sync Status Indicator */}
+        {userEmail && (
+          <div className="flex items-center gap-2 text-xs">
+            {syncStatus === "syncing" && (
+              <>
+                <Loader2 className="size-3 animate-spin text-yellow-500" />
+                <span className="text-yellow-600">Syncing...</span>
+              </>
+            )}
+            {syncStatus === "success" && (
+              <>
+                <Cloud className="size-3 text-green-500" />
+                <span className="text-green-600">Cloud Synced</span>
+              </>
+            )}
+            {syncStatus === "error" && (
+              <>
+                <CloudOff className="size-3 text-red-500" />
+                <span className="text-red-600">Sync Error</span>
+              </>
+            )}
+            {syncStatus === "idle" && userEmail && (
+              <>
+                <Cloud className="size-3 text-gray-400" />
+                <span className="text-gray-400">Not Synced</span>
+              </>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Minimal Inventory Source */}
