@@ -41,7 +41,11 @@ import Papa from "papaparse";
 import { GoogleGenAI } from "@google/genai";
 import * as XLSX from "xlsx";
 import { useAuth } from "../context/AuthContext";
-import { saveUserData, getUserData } from "../lib/supabase";
+import { 
+  savePaintAnalyzerData, 
+  getPaintAnalyzerData, 
+  clearPaintAnalyzerData 
+} from "../lib/supabase";
 
 type InventoryItem = Record<string, string>;
 
@@ -377,7 +381,7 @@ export default function PaintComponentAnalyzer() {
       }
 
       try {
-        const data = await getUserData(userEmail);
+        const data = await getPaintAnalyzerData(userEmail);
         
         if (data) {
           // Restore inventory data
@@ -438,7 +442,7 @@ export default function PaintComponentAnalyzer() {
       setSyncMessage("🔄 Syncing to cloud...");
 
       try {
-        const dataToSave = {
+        const success = await savePaintAnalyzerData(userEmail, {
           inventory_data: uploadedData,
           inventory_data_name: uploadedDataName,
           color_analysis: colorAnalysis,
@@ -447,9 +451,7 @@ export default function PaintComponentAnalyzer() {
           uploaded_file_size: uploadedFileSize,
           batch_size: batchSizeLiters,
           last_fetched: lastFetched ? lastFetched.toISOString() : null,
-        };
-
-        const success = await saveUserData(userEmail, dataToSave);
+        });
         
         if (success) {
           setSyncStatus("success");
@@ -507,19 +509,7 @@ export default function PaintComponentAnalyzer() {
       setSyncStatus("syncing");
       setSyncMessage("🔄 Clearing data from cloud...");
       
-      // Save null values to clear the data
-      const dataToSave = {
-        inventory_data: null,
-        inventory_data_name: null,
-        color_analysis: null,
-        uploaded_image: null,
-        uploaded_file_name: null,
-        uploaded_file_size: null,
-        batch_size: 0.1,
-        last_fetched: null,
-      };
-
-      const success = await saveUserData(userEmail, dataToSave);
+      const success = await clearPaintAnalyzerData(userEmail);
       
       if (success) {
         setSyncStatus("success");

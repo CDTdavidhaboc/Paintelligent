@@ -43,6 +43,7 @@ export const registerUser = async (email: string, password: string, fullName: st
       email: email,
       password: password, // In production, hash this!
       full_name: fullName,
+      // Paint Analyzer columns
       inventory_data: null,
       inventory_data_name: null,
       color_analysis: null,
@@ -50,6 +51,11 @@ export const registerUser = async (email: string, password: string, fullName: st
       uploaded_file_name: null,
       uploaded_file_size: null,
       batch_size: 0.1,
+      // Sales Forecasting columns (separate from Paint Analyzer)
+      sales_data: null,
+      sales_data_name: null,
+      forecast_data: null,
+      // Shared columns
       last_fetched: null,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
@@ -128,17 +134,25 @@ export const loginUser = async (email: string, password: string) => {
 };
 
 // ============================================================
-// USER DATA STORAGE
+// PAINT ANALYZER - Data Storage (Uses: inventory_data, inventory_data_name, color_analysis, uploaded_image, uploaded_file_name, uploaded_file_size, batch_size)
 // ============================================================
 
-// Save user data to Supabase (for PaintComponentAnalyzer)
-export const saveUserData = async (email: string, data: any) => {
-  console.log('📤 Saving data for user:', email);
+// Save Paint Analyzer data to Supabase
+export const savePaintAnalyzerData = async (email: string, data: {
+  inventory_data?: any[];
+  inventory_data_name?: string;
+  color_analysis?: any;
+  uploaded_image?: string;
+  uploaded_file_name?: string;
+  uploaded_file_size?: string;
+  batch_size?: number;
+  last_fetched?: string | null;
+}) => {
+  console.log('🎨 Saving Paint Analyzer data for user:', email);
   
   try {
-    // Prepare the payload with proper field mapping
     const payload = {
-      email: email,
+      // Paint Analyzer specific columns
       inventory_data: data.inventory_data || null,
       inventory_data_name: data.inventory_data_name || null,
       color_analysis: data.color_analysis || null,
@@ -146,11 +160,11 @@ export const saveUserData = async (email: string, data: any) => {
       uploaded_file_name: data.uploaded_file_name || null,
       uploaded_file_size: data.uploaded_file_size || null,
       batch_size: data.batch_size || 0.1,
+      // Shared columns
       last_fetched: data.last_fetched || null,
       updated_at: new Date().toISOString(),
     };
 
-    // Only update, don't overwrite authentication fields
     const { error } = await supabase
       .from('user_data')
       .update(payload)
@@ -161,18 +175,187 @@ export const saveUserData = async (email: string, data: any) => {
       throw error;
     }
 
-    console.log('✅ Data saved successfully!');
+    console.log('✅ Paint Analyzer data saved successfully!');
     return true;
   } catch (error: any) {
-    console.error('❌ Error saving user data:', error);
+    console.error('❌ Error saving Paint Analyzer data:', error);
     return false;
   }
 };
 
-// Get user data from Supabase
-export const getUserData = async (email: string) => {
-  console.log('📥 Fetching data for user:', email);
+// Get Paint Analyzer data from Supabase
+export const getPaintAnalyzerData = async (email: string) => {
+  console.log('🎨 Fetching Paint Analyzer data for user:', email);
 
+  try {
+    const { data, error } = await supabase
+      .from('user_data')
+      .select('inventory_data, inventory_data_name, color_analysis, uploaded_image, uploaded_file_name, uploaded_file_size, batch_size, last_fetched')
+      .eq('email', email)
+      .maybeSingle();
+
+    if (error) {
+      console.error('❌ Supabase Error:', error);
+      throw error;
+    }
+
+    return data;
+  } catch (error: any) {
+    console.error('❌ Error getting Paint Analyzer data:', error);
+    return null;
+  }
+};
+
+// Clear Paint Analyzer data from Supabase
+export const clearPaintAnalyzerData = async (email: string) => {
+  console.log('🗑️ Clearing Paint Analyzer data for user:', email);
+  
+  try {
+    const { error } = await supabase
+      .from('user_data')
+      .update({
+        // Clear Paint Analyzer specific columns
+        inventory_data: null,
+        inventory_data_name: null,
+        color_analysis: null,
+        uploaded_image: null,
+        uploaded_file_name: null,
+        uploaded_file_size: null,
+        batch_size: 0.1,
+        // Shared columns
+        last_fetched: null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('email', email);
+
+    if (error) {
+      console.error('❌ Supabase Error:', error);
+      throw error;
+    }
+
+    console.log('✅ Paint Analyzer data cleared successfully!');
+    return true;
+  } catch (error: any) {
+    console.error('❌ Error clearing Paint Analyzer data:', error);
+    return false;
+  }
+};
+
+// ============================================================
+// SALES FORECASTING - Data Storage (Uses: sales_data, sales_data_name, forecast_data)
+// ============================================================
+
+// Save Sales Forecasting data to Supabase
+export const saveSalesForecastData = async (email: string, data: {
+  sales_data?: any[];
+  sales_data_name?: string;
+  forecast_data?: any;
+  last_fetched?: string | null;
+}) => {
+  console.log('📊 Saving Sales Forecast data for user:', email);
+  
+  try {
+    const payload = {
+      // Sales Forecasting specific columns (separate from Paint Analyzer)
+      sales_data: data.sales_data || null,
+      sales_data_name: data.sales_data_name || null,
+      forecast_data: data.forecast_data || null,
+      // Shared columns
+      last_fetched: data.last_fetched || null,
+      updated_at: new Date().toISOString(),
+    };
+
+    const { error } = await supabase
+      .from('user_data')
+      .update(payload)
+      .eq('email', email);
+
+    if (error) {
+      console.error('❌ Supabase Error:', error);
+      throw error;
+    }
+
+    console.log('✅ Sales Forecast data saved successfully!');
+    return true;
+  } catch (error: any) {
+    console.error('❌ Error saving Sales Forecast data:', error);
+    return false;
+  }
+};
+
+// Get Sales Forecasting data from Supabase
+export const getSalesForecastData = async (email: string) => {
+  console.log('📊 Fetching Sales Forecast data for user:', email);
+
+  try {
+    const { data, error } = await supabase
+      .from('user_data')
+      .select('sales_data, sales_data_name, forecast_data, last_fetched')
+      .eq('email', email)
+      .maybeSingle();
+
+    if (error) {
+      console.error('❌ Supabase Error:', error);
+      throw error;
+    }
+
+    return data;
+  } catch (error: any) {
+    console.error('❌ Error getting Sales Forecast data:', error);
+    return null;
+  }
+};
+
+// Clear Sales Forecasting data from Supabase
+export const clearSalesForecastData = async (email: string) => {
+  console.log('🗑️ Clearing Sales Forecast data for user:', email);
+  
+  try {
+    const { error } = await supabase
+      .from('user_data')
+      .update({
+        // Clear Sales Forecasting specific columns
+        sales_data: null,
+        sales_data_name: null,
+        forecast_data: null,
+        // Shared columns
+        last_fetched: null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('email', email);
+
+    if (error) {
+      console.error('❌ Supabase Error:', error);
+      throw error;
+    }
+
+    console.log('✅ Sales Forecast data cleared successfully!');
+    return true;
+  } catch (error: any) {
+    console.error('❌ Error clearing Sales Forecast data:', error);
+    return false;
+  }
+};
+
+// ============================================================
+// LEGACY / COMPATIBILITY - Keep for backward compatibility
+// ============================================================
+
+// Save user data to Supabase (DEPRECATED - Use savePaintAnalyzerData or saveSalesForecastData)
+export const saveUserData = async (email: string, data: any) => {
+  console.log('⚠️ Using deprecated saveUserData. Use savePaintAnalyzerData or saveSalesForecastData instead.');
+  
+  // Check if the data contains sales_data to determine which function to use
+  if (data.sales_data !== undefined || data.forecast_data !== undefined) {
+    return saveSalesForecastData(email, data);
+  }
+  return savePaintAnalyzerData(email, data);
+};
+
+// Get user data from Supabase (DEPRECATED - Use getPaintAnalyzerData or getSalesForecastData)
+export const getUserData = async (email: string) => {
+  console.log('⚠️ Using deprecated getUserData. Use getPaintAnalyzerData or getSalesForecastData instead.');
+  // Return both paint analyzer and sales forecast data for backward compatibility
   try {
     const { data, error } = await supabase
       .from('user_data')
