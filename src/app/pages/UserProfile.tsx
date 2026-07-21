@@ -6,7 +6,7 @@ import {
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { getUserData, saveUserProfile } from "../lib/supabase";
 
 // Default user data for new users
@@ -49,6 +49,7 @@ export default function UserProfile() {
   const [showNotification, setShowNotification] = useState(false);
   const [notificationMessage, setNotificationMessage] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
+  const [localAddress, setLocalAddress] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const notificationTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -92,6 +93,7 @@ export default function UserProfile() {
           
           setUserData(profileData);
           setTempUserData(profileData);
+          setLocalAddress(profileData.address || '');
           setIsNewUser(false);
           
           // Cache in localStorage for faster loading
@@ -146,6 +148,7 @@ export default function UserProfile() {
         
         setUserData(parsedData);
         setTempUserData(parsedData);
+        setLocalAddress(parsedData.address || '');
       } else {
         const emailName = userEmail?.split('@')[0] || "New User";
         const formattedName = emailName
@@ -160,6 +163,7 @@ export default function UserProfile() {
         };
         setUserData(defaultData);
         setTempUserData(defaultData);
+        setLocalAddress(defaultData.address || '');
       }
       
       setIsLoading(false);
@@ -240,6 +244,7 @@ export default function UserProfile() {
       }
       
       setUserData(dataToSave);
+      setLocalAddress(dataToSave.address || '');
       setIsNewUser(false);
       
       return true;
@@ -254,10 +259,12 @@ export default function UserProfile() {
     if (isEditing) {
       setTempUserData(userData);
       setTempProfilePicture(profilePicture);
+      setLocalAddress(userData.address || '');
       showNotificationMessage("Changes cancelled");
     } else {
       setTempUserData(userData);
       setTempProfilePicture(profilePicture);
+      setLocalAddress(userData.address || '');
     }
     setIsEditing(!isEditing);
   };
@@ -301,13 +308,13 @@ export default function UserProfile() {
     }
   };
 
-  // Handle input change
-  const handleInputChange = (field: string, value: string) => {
+  // Handle input change - memoized to prevent recreation
+  const handleInputChange = useCallback((field: string, value: string) => {
     setTempUserData(prev => ({
       ...prev,
       [field]: value
     }));
-  };
+  }, []);
 
   // Contact management functions
   const handleAddContact = () => {
@@ -404,9 +411,57 @@ export default function UserProfile() {
     }
   };
 
-  // Editable field component
-  const EditableField = ({ label, value, field, type = "text", icon: Icon }: any) => {
-    if (isEditing) {
+  const displayData = isEditing ? tempUserData : userData;
+  const displayPicture = isEditing ? tempProfilePicture : profilePicture;
+
+  // Sync localAddress with displayData.address
+  useEffect(() => {
+    setLocalAddress(displayData.address || '');
+  }, [displayData.address]);
+
+  // Filter contacts based on search term
+  const filteredContacts = useMemo(() => {
+    return (displayData.contacts || []).filter((contact: any) =>
+      contact.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      contact.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      contact.phone.includes(searchTerm) ||
+      contact.role.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+  }, [displayData.contacts, searchTerm]);
+
+  // Editable field component - defined outside with useMemo
+  const EditableField = useMemo(() => {
+    return ({ label, value, field, type = "text", icon: Icon }: any) => {
+      const [localValue, setLocalValue] = useState(value || '');
+      
+      // Update local value when prop changes (e.g., when loading data)
+      useEffect(() => {
+        setLocalValue(value || '');
+      }, [value]);
+
+      if (isEditing) {
+        return (
+          <div className="flex items-start gap-4 p-3 rounded-lg hover:bg-gray-50 transition-colors">
+            <div className="p-2 bg-blue-50 rounded-lg">
+              <Icon className="size-5 text-blue-600" />
+            </div>
+            <div className="flex-1">
+              <p className="text-sm font-medium text-gray-500 mb-1">{label}</p>
+              <input
+                type={type}
+                value={localValue}
+                onChange={(e) => {
+                  const newValue = e.target.value;
+                  setLocalValue(newValue);
+                  handleInputChange(field, newValue);
+                }}
+                className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#1a4d2e] focus:border-transparent"
+                placeholder={`Enter ${label.toLowerCase()}`}
+              />
+            </div>
+          </div>
+        );
+      }
       return (
         <div className="flex items-start gap-4 p-3 rounded-lg hover:bg-gray-50 transition-colors">
           <div className="p-2 bg-blue-50 rounded-lg">
@@ -414,40 +469,12 @@ export default function UserProfile() {
           </div>
           <div className="flex-1">
             <p className="text-sm font-medium text-gray-500 mb-1">{label}</p>
-            <input
-              type={type}
-              value={value || ''}
-              onChange={(e) => handleInputChange(field, e.target.value)}
-              className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#1a4d2e] focus:border-transparent"
-              placeholder={`Enter ${label.toLowerCase()}`}
-            />
+            <p className="font-semibold text-gray-900">{value || "Not set"}</p>
           </div>
         </div>
       );
-    }
-    return (
-      <div className="flex items-start gap-4 p-3 rounded-lg hover:bg-gray-50 transition-colors">
-        <div className="p-2 bg-blue-50 rounded-lg">
-          <Icon className="size-5 text-blue-600" />
-        </div>
-        <div className="flex-1">
-          <p className="text-sm font-medium text-gray-500 mb-1">{label}</p>
-          <p className="font-semibold text-gray-900">{value || "Not set"}</p>
-        </div>
-      </div>
-    );
-  };
-
-  const displayData = isEditing ? tempUserData : userData;
-  const displayPicture = isEditing ? tempProfilePicture : profilePicture;
-
-  // Filter contacts based on search term
-  const filteredContacts = (displayData.contacts || []).filter((contact: any) =>
-    contact.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    contact.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    contact.phone.includes(searchTerm) ||
-    contact.role.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+    };
+  }, [isEditing, handleInputChange]);
 
   if (isLoading) {
     return (
@@ -548,7 +575,6 @@ export default function UserProfile() {
         </div>
       </div>
 
-      {/* Rest of the component remains the same... */}
       {/* Profile Overview Card */}
       <Card className={`border-l-4 ${isNewUser ? 'border-green-500' : 'border-[#1a4d2e]'} shadow-lg`}>
         <CardHeader className="pb-6">
@@ -693,8 +719,11 @@ export default function UserProfile() {
                 <div className="flex-1">
                   <p className="text-sm font-medium text-gray-500 mb-1">Address</p>
                   <textarea
-                    value={displayData.address || ''}
-                    onChange={(e) => handleInputChange('address', e.target.value)}
+                    value={localAddress}
+                    onChange={(e) => {
+                      setLocalAddress(e.target.value);
+                      handleInputChange('address', e.target.value);
+                    }}
                     className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#1a4d2e] focus:border-transparent min-h-[60px]"
                     placeholder="Enter your address"
                   />
