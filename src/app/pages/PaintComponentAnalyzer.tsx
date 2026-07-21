@@ -1095,36 +1095,52 @@ Required JSON format:
             />
 
             {!isDataLoaded ? (
-              <div
-                onClick={() => csvInputRef.current?.click()}
-                onDragOver={(e) => {
-                  e.preventDefault();
-                  setIsDraggingFile(true);
-                }}
-                onDragLeave={() => setIsDraggingFile(false)}
-                onDrop={handleFileDrop}
-                className={`
-                  relative min-h-[80px] cursor-pointer overflow-hidden rounded-xl border-2 border-dashed p-4
-                  transition-all duration-300
-                  ${isDraggingFile
-                    ? "border-blue-600 bg-blue-50 shadow-md"
-                    : "border-blue-300/60 bg-white hover:border-blue-600 hover:bg-blue-50/60"
-                  }
-                `}
-              >
-                <div className="flex items-center justify-center gap-4">
-                  <FileSpreadsheet className="size-6 text-blue-500" />
-                  <div>
-                    <p className="text-sm font-medium text-gray-700">Drop CSV or Excel file</p>
-                    <p className="text-xs text-gray-400">or click to browse</p>
+              <div>
+                <div
+                  onClick={() => csvInputRef.current?.click()}
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    setIsDraggingFile(true);
+                  }}
+                  onDragLeave={() => setIsDraggingFile(false)}
+                  onDrop={handleFileDrop}
+                  className={`
+                    relative min-h-[80px] cursor-pointer overflow-hidden rounded-xl border-2 border-dashed p-4
+                    transition-all duration-300
+                    ${isDraggingFile
+                      ? "border-blue-600 bg-blue-50 shadow-md"
+                      : "border-blue-300/60 bg-white hover:border-blue-600 hover:bg-blue-50/60"
+                    }
+                  `}
+                >
+                  <div className="flex items-center justify-center gap-4">
+                    <FileSpreadsheet className="size-6 text-blue-500" />
+                    <div>
+                      <p className="text-sm font-medium text-gray-700">Drop CSV or Excel file</p>
+                      <p className="text-xs text-gray-400">or click to browse</p>
+                    </div>
+                    <div className="flex gap-1">
+                      {['CSV', 'XLSX'].map((format) => (
+                        <Badge key={format} variant="secondary" className="text-xs bg-blue-50 text-blue-700 border border-blue-200">
+                          {format}
+                        </Badge>
+                      ))}
+                    </div>
                   </div>
-                  <div className="flex gap-1">
-                    {['CSV', 'XLSX'].map((format) => (
-                      <Badge key={format} variant="secondary" className="text-xs bg-blue-50 text-blue-700 border border-blue-200">
-                        {format}
-                      </Badge>
-                    ))}
+                </div>
+                
+                {/* HEADER REMINDER - ADDED HERE */}
+                <div className="mt-3 p-3 bg-amber-50 rounded-lg border border-amber-200">
+                  <p className="text-xs font-medium text-amber-800">📋 Required Headers:</p>
+                  <div className="flex flex-wrap gap-1.5 mt-1.5">
+                    <Badge variant="outline" className="text-xs bg-white border-amber-300 text-amber-700">Product</Badge>
+                    <Badge variant="outline" className="text-xs bg-white border-amber-300 text-amber-700">Brand</Badge>
+                    <Badge variant="outline" className="text-xs bg-white border-amber-300 text-amber-700">Category</Badge>
+                    <Badge variant="outline" className="text-xs bg-white border-amber-300 text-amber-700">Stocks</Badge>
+                    <Badge variant="outline" className="text-xs bg-white border-amber-300 text-amber-700">Est. Price (PHP)</Badge>
+                    <Badge variant="outline" className="text-xs bg-white border-amber-300 text-amber-700">Unit Purchase Price</Badge>
                   </div>
+                  <p className="text-[11px] text-amber-600 mt-1.5">⚠️ Headers are case-sensitive (match exactly)</p>
                 </div>
               </div>
             ) : (
@@ -1450,13 +1466,18 @@ Required JSON format:
 
                       <Button
                         onClick={() => analyzeWithGemini(uploadedImage)}
-                        disabled={isAnalyzing || !isAnalyzerEnabled}
+                        disabled={isAnalyzing || !isAnalyzerEnabled || !!colorAnalysis}
                         className="h-12 w-full rounded-xl bg-[#1a4d2e] text-white shadow-lg shadow-green-900/15 transition-all duration-200 hover:bg-[#1a4d2e] hover:shadow-xl hover:-translate-y-0.5 disabled:opacity-50"
                       >
                         {isAnalyzing ? (
                           <>
                             <Loader2 className="mr-2 size-4 animate-spin" />
                             Analyzing Paint Formula...
+                          </>
+                        ) : colorAnalysis ? (
+                          <>
+                            <CheckCircle2 className="mr-2 size-4" />
+                            Analysis Complete
                           </>
                         ) : (
                           <>
