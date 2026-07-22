@@ -6,7 +6,12 @@ import {
   useEffect,
   ReactNode,
 } from "react";
-import { getUserData, saveUserData, registerUser } from "../lib/supabase";
+import { 
+  getUserData, 
+  saveUserData, 
+  registerUser, 
+  loginUser  // Import the loginUser function
+} from "../lib/supabase";
 
 interface AuthContextType {
   isAuthenticated: boolean;
@@ -15,7 +20,7 @@ interface AuthContextType {
   userId: string | null;
   login: (email: string, password: string) => Promise<boolean>;
   logout: () => void;
-  register: (email: string, password: string) => Promise<{ success: boolean; error?: string; message?: string }>;
+  register: (email: string, password: string, fullName: string) => Promise<{ success: boolean; error?: string; message?: string }>;
   syncUserData: (data: any) => Promise<boolean>;
   loadUserData: () => Promise<any>;
 }
@@ -72,11 +77,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       console.log("🔑 Logging in user:", email);
       
-      // Check if user exists in database
-      const userData = await getUserData(email);
+      // Use the loginUser function that properly verifies the password
+      const result = await loginUser(email, password);
       
-      if (!userData) {
-        console.error("User not found");
+      if (!result.success) {
+        console.error("Login failed:", result.error);
         return false;
       }
 
@@ -84,6 +89,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       localStorage.setItem("isAuthenticated", "true");
       localStorage.setItem("userEmail", email);
       localStorage.setItem("userId", email);
+      localStorage.setItem("authToken", result.token || "");
       
       // Update state
       setIsAuthenticated(true);
@@ -101,10 +107,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const register = async (email: string, password: string) => {
+  const register = async (email: string, password: string, fullName: string) => {
     try {
       console.log("📝 Registering user:", email);
-      const result = await registerUser(email, password);
+      const result = await registerUser(email, password, fullName);
       return result;
     } catch (error: any) {
       console.error("Registration error:", error);
@@ -119,6 +125,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.removeItem("isAuthenticated");
     localStorage.removeItem("userEmail");
     localStorage.removeItem("userId");
+    localStorage.removeItem("authToken");
     
     // Clear user-specific data
     if (userEmail) {

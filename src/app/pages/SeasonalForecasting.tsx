@@ -90,6 +90,54 @@ const SEASON_FOR_MONTH = (m: number) =>
 // Required headers for sales data
 const REQUIRED_HEADERS = ['Date', 'Category', 'Total Sales (PHP)', 'Units Sold', 'Season'];
 
+// ============================================================
+// NOTIFICATION HELPER
+// ============================================================
+const showNotification = (message: string, type: 'success' | 'error' | 'info' = 'success') => {
+  const colors = {
+    success: 'bg-green-600 border-green-400/30',
+    error: 'bg-red-600 border-red-400/30',
+    info: 'bg-blue-600 border-blue-400/30'
+  };
+
+  const icons = {
+    success: 'M5 13l4 4L19 7',
+    error: 'M6 18L18 6M6 6l12 12',
+    info: 'M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z'
+  };
+
+  // Remove existing notifications
+  const existing = document.querySelectorAll('.custom-notification');
+  existing.forEach(el => el.remove());
+
+  const notification = document.createElement("div");
+  notification.className = `
+    custom-notification
+    fixed bottom-6 right-6 z-50 
+    ${colors[type]} text-white 
+    px-6 py-4 rounded-lg shadow-2xl 
+    animate-slide-up
+    max-w-md
+    border
+    transition-all duration-300
+  `;
+  notification.innerHTML = `
+    <div class="flex items-center gap-3">
+      <svg class="size-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="${icons[type]}"/>
+      </svg>
+      <span class="font-medium">${message}</span>
+    </div>
+  `;
+  document.body.appendChild(notification);
+  
+  setTimeout(() => {
+    notification.style.opacity = '0';
+    notification.style.transform = 'translateY(20px)';
+    setTimeout(() => notification.remove(), 300);
+  }, 3000);
+};
+
 export default function SeasonalForecasting() {
   const { userEmail } = useAuth();
   const [isLoading, setIsLoading] = useState(true);
@@ -165,7 +213,6 @@ export default function SeasonalForecasting() {
           }
           
           setSyncStatus("success");
-          setSyncMessage("✅ Data loaded from cloud");
         } else {
           setSyncStatus("idle");
           setSyncMessage("No saved data found");
@@ -174,6 +221,7 @@ export default function SeasonalForecasting() {
         console.error("Error loading user data:", error);
         setSyncStatus("error");
         setSyncMessage("❌ Failed to load data from cloud");
+        showNotification("❌ Failed to load data from cloud", "error");
       } finally {
         setIsLoading(false);
       }
@@ -206,11 +254,13 @@ export default function SeasonalForecasting() {
         } else {
           setSyncStatus("error");
           setSyncMessage("❌ Sync failed");
+          showNotification("❌ Sync failed", "error");
         }
       } catch (error) {
         console.error("Error saving user data:", error);
         setSyncStatus("error");
         setSyncMessage("❌ Sync failed");
+        showNotification("❌ Sync failed", "error");
       }
     };
 
@@ -296,6 +346,7 @@ export default function SeasonalForecasting() {
       const validation = validateHeaders(headers);
       if (!validation.valid) {
         setUploadError(`Missing required headers: ${validation.missing.join(', ')}. Required: ${REQUIRED_HEADERS.join(', ')}`);
+        showNotification(`Missing required headers: ${validation.missing.join(', ')}`, "error");
         return;
       }
       
@@ -362,27 +413,25 @@ export default function SeasonalForecasting() {
     } catch (error) {
       console.error("Error processing uploaded data:", error);
       setUploadError("Failed to process data. Please check the file format.");
+      showNotification("Failed to process data. Please check the file format.", "error");
     }
   };
 
   const handleSaveData = () => {
     if (!uploadedData || uploadedData.length === 0) {
       setUploadError("No data to save. Please upload a file first.");
+      showNotification("No data to save. Please upload a file first.", "error");
       return;
     }
 
     try {
       setIsDataSaved(true);
       setUploadError("");
-      
-      const successMsg = document.createElement("div");
-      successMsg.className = "fixed top-4 right-4 z-50 bg-green-600 text-white px-6 py-4 rounded-lg shadow-lg animate-slide-in";
-      successMsg.innerHTML = "✅ Data saved successfully! Forecasting is now enabled.";
-      document.body.appendChild(successMsg);
-      setTimeout(() => successMsg.remove(), 3000);
+      showNotification("✅ Data saved successfully! Forecasting is now enabled.", "success");
     } catch (err) {
       console.error("Error saving data:", err);
       setUploadError("Failed to save data.");
+      showNotification("Failed to save data.", "error");
     }
   };
 
@@ -405,6 +454,7 @@ export default function SeasonalForecasting() {
     
     // Clear from Supabase
     clearSupabaseData();
+    showNotification("🗑️ Data cleared successfully", "info");
   };
 
   const clearSupabaseData = async () => {
@@ -419,15 +469,18 @@ export default function SeasonalForecasting() {
       if (success) {
         setSyncStatus("success");
         setSyncMessage("✅ Data cleared from cloud");
+        showNotification("✅ Data cleared from cloud", "success");
         console.log("✅ Data cleared from Supabase");
       } else {
         setSyncStatus("error");
         setSyncMessage("❌ Failed to clear data");
+        showNotification("❌ Failed to clear data", "error");
       }
     } catch (error) {
       console.error("Error clearing user data:", error);
       setSyncStatus("error");
       setSyncMessage("❌ Failed to clear data");
+      showNotification("❌ Failed to clear data", "error");
     }
   };
 
@@ -442,6 +495,7 @@ export default function SeasonalForecasting() {
     
     if (!isValidFile) {
       setUploadError("Please upload a valid CSV or Excel (.xlsx, .xls) file.");
+      showNotification("Please upload a valid CSV or Excel (.xlsx, .xls) file.", "error");
       return;
     }
 
@@ -463,6 +517,7 @@ export default function SeasonalForecasting() {
 
           if (data.length === 0) {
             setUploadError("CSV file appears empty or invalid.");
+            showNotification("CSV file appears empty or invalid.", "error");
             return;
           }
 
@@ -471,6 +526,7 @@ export default function SeasonalForecasting() {
           const validation = validateHeaders(headers);
           if (!validation.valid) {
             setUploadError(`Missing required headers: ${validation.missing.join(', ')}. Required: ${REQUIRED_HEADERS.join(', ')}`);
+            showNotification(`Missing required headers: ${validation.missing.join(', ')}`, "error");
             return;
           }
 
@@ -478,11 +534,16 @@ export default function SeasonalForecasting() {
           setUploadedDataName(file.name);
           processUploadedData(data);
           setUploadError("");
+          showNotification(`📂 File "${file.name}" loaded successfully! ${data.length} rows found.`, "success");
         } catch (err: any) {
           setUploadError(`Failed to process CSV: ${err.message}`);
+          showNotification(`Failed to process CSV: ${err.message}`, "error");
         }
       };
-      reader.onerror = () => setUploadError("Failed to read CSV file.");
+      reader.onerror = () => {
+        setUploadError("Failed to read CSV file.");
+        showNotification("Failed to read CSV file.", "error");
+      };
       reader.readAsText(file);
       return;
     }
@@ -496,6 +557,7 @@ export default function SeasonalForecasting() {
 
         if (jsonData.length === 0) {
           setUploadError("Excel file appears empty.");
+          showNotification("Excel file appears empty.", "error");
           return;
         }
 
@@ -504,6 +566,7 @@ export default function SeasonalForecasting() {
         const validation = validateHeaders(headers);
         if (!validation.valid) {
           setUploadError(`Missing required headers: ${validation.missing.join(', ')}. Required: ${REQUIRED_HEADERS.join(', ')}`);
+          showNotification(`Missing required headers: ${validation.missing.join(', ')}`, "error");
           return;
         }
 
@@ -511,11 +574,16 @@ export default function SeasonalForecasting() {
         setUploadedDataName(file.name);
         processUploadedData(jsonData);
         setUploadError("");
+        showNotification(`📂 File "${file.name}" loaded successfully! ${jsonData.length} rows found.`, "success");
       } catch (err: any) {
         setUploadError(`Failed to process Excel file: ${err.message}`);
+        showNotification(`Failed to process Excel file: ${err.message}`, "error");
       }
     };
-    reader.onerror = () => setUploadError("Failed to read Excel file.");
+    reader.onerror = () => {
+      setUploadError("Failed to read Excel file.");
+      showNotification("Failed to read Excel file.", "error");
+    };
     reader.readAsArrayBuffer(file);
   };
 
@@ -628,6 +696,7 @@ export default function SeasonalForecasting() {
   const generateForecast = async () => {
     if (!salesData.length) {
       setUploadError("No sales data available. Please upload data first.");
+      showNotification("No sales data available. Please upload data first.", "error");
       return;
     }
 
@@ -799,10 +868,12 @@ Return ONLY valid JSON with this structure:
       saveToCache(result);
       setForecastData(result);
       setForecastStatus("success");
+      showNotification("✅ Forecast generated successfully!", "success");
 
     } catch (error) {
       console.error("AI Generation Error:", error);
       setForecastStatus("error");
+      showNotification("Failed to generate forecast. Please try again.", "error");
     }
   };
 
@@ -986,6 +1057,23 @@ Return ONLY valid JSON with this structure:
         ${isVisible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-5"}
       `}
     >
+      <style>{`
+        @keyframes slideUp {
+          from {
+            opacity: 0;
+            transform: translateY(20px) scale(0.95);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0) scale(1);
+          }
+        }
+        
+        .animate-slide-up {
+          animation: slideUp 0.3s ease-out forwards;
+        }
+      `}</style>
+
       {/* Header with Sync Status */}
       <div className="flex items-center justify-between">
         <div>
@@ -2062,23 +2150,6 @@ Return ONLY valid JSON with this structure:
           </div>
         </div>
       )}
-
-      <style>{`
-        @keyframes slideIn {
-          from {
-            transform: translateX(100%);
-            opacity: 0;
-          }
-          to {
-            transform: translateX(0);
-            opacity: 1;
-          }
-        }
-        
-        .animate-slide-in {
-          animation: slideIn 0.3s ease-out forwards;
-        }
-      `}</style>
     </div>
   );
 }

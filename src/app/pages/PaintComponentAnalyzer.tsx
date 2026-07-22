@@ -340,6 +340,55 @@ const loadInventory = (uploadedData: any[] | null) => {
 };
 
 // ============================================================
+// NOTIFICATION HELPER
+// ============================================================
+
+const showNotification = (message: string, type: 'success' | 'error' | 'info' = 'success') => {
+  const colors = {
+    success: 'bg-green-600 border-green-400/30',
+    error: 'bg-red-600 border-red-400/30',
+    info: 'bg-blue-600 border-blue-400/30'
+  };
+
+  const icons = {
+    success: 'M5 13l4 4L19 7',
+    error: 'M6 18L18 6M6 6l12 12',
+    info: 'M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z'
+  };
+
+  // Remove existing notifications
+  const existing = document.querySelectorAll('.custom-notification');
+  existing.forEach(el => el.remove());
+
+  const notification = document.createElement("div");
+  notification.className = `
+    custom-notification
+    fixed bottom-6 right-6 z-50 
+    ${colors[type]} text-white 
+    px-6 py-4 rounded-lg shadow-2xl 
+    animate-slide-up
+    max-w-md
+    border
+    transition-all duration-300
+  `;
+  notification.innerHTML = `
+    <div class="flex items-center gap-3">
+      <svg class="size-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="${icons[type]}"/>
+      </svg>
+      <span class="font-medium">${message}</span>
+    </div>
+  `;
+  document.body.appendChild(notification);
+  
+  setTimeout(() => {
+    notification.style.opacity = '0';
+    notification.style.transform = 'translateY(20px)';
+    setTimeout(() => notification.remove(), 300);
+  }, 3000);
+};
+
+// ============================================================
 // MAIN COMPONENT
 // ============================================================
 
@@ -414,7 +463,7 @@ export default function PaintComponentAnalyzer() {
           }
           
           setSyncStatus("success");
-          setSyncMessage("✅ Data loaded from cloud");
+
         } else {
           setSyncStatus("idle");
           setSyncMessage("No saved data found");
@@ -423,6 +472,7 @@ export default function PaintComponentAnalyzer() {
         console.error("Error loading user data:", error);
         setSyncStatus("error");
         setSyncMessage("❌ Failed to load data from cloud");
+        showNotification("❌ Failed to load data from cloud", "error");
       } finally {
         setIsLoading(false);
       }
@@ -459,11 +509,13 @@ export default function PaintComponentAnalyzer() {
         } else {
           setSyncStatus("error");
           setSyncMessage("❌ Sync failed");
+          showNotification("❌ Sync failed", "error");
         }
       } catch (error) {
         console.error("Error saving user data:", error);
         setSyncStatus("error");
         setSyncMessage("❌ Sync failed");
+        showNotification("❌ Sync failed", "error");
       }
     };
 
@@ -514,15 +566,18 @@ export default function PaintComponentAnalyzer() {
       if (success) {
         setSyncStatus("success");
         setSyncMessage("✅ Data cleared from cloud");
+        showNotification("✅ Data cleared from cloud", "success");
         console.log("✅ Data cleared from Supabase");
       } else {
         setSyncStatus("error");
         setSyncMessage("❌ Failed to clear data");
+        showNotification("❌ Failed to clear data", "error");
       }
     } catch (error) {
       console.error("Error clearing user data:", error);
       setSyncStatus("error");
       setSyncMessage("❌ Failed to clear data");
+      showNotification("❌ Failed to clear data", "error");
     }
   };
 
@@ -533,21 +588,18 @@ export default function PaintComponentAnalyzer() {
   const handleSaveData = () => {
     if (!uploadedData || uploadedData.length === 0) {
       setUploadError("No data to save. Please upload a file first.");
+      showNotification("No data to save. Please upload a file first.", "error");
       return;
     }
 
     try {
       setIsDataSaved(true);
       setUploadError("");
-      
-      const successMsg = document.createElement("div");
-      successMsg.className = "fixed top-4 right-4 z-50 bg-green-600 text-white px-6 py-4 rounded-lg shadow-lg animate-slide-in";
-      successMsg.innerHTML = "✅ Inventory data saved successfully! Paint analyzer is now enabled.";
-      document.body.appendChild(successMsg);
-      setTimeout(() => successMsg.remove(), 3000);
+      showNotification("✅ Inventory data saved successfully! Paint analyzer is now enabled.", "success");
     } catch (err) {
       console.error("Error saving data:", err);
       setUploadError("Failed to save data.");
+      showNotification("Failed to save data.", "error");
     }
   };
 
@@ -575,6 +627,7 @@ export default function PaintComponentAnalyzer() {
     
     if (!isValidFile) {
       setUploadError("Please upload a valid CSV or Excel (.xlsx, .xls) file.");
+      showNotification("Please upload a valid CSV or Excel (.xlsx, .xls) file.", "error");
       return;
     }
 
@@ -596,6 +649,7 @@ export default function PaintComponentAnalyzer() {
 
           if (data.length === 0) {
             setUploadError("CSV file appears empty or invalid.");
+            showNotification("CSV file appears empty or invalid.", "error");
             return;
           }
 
@@ -603,11 +657,16 @@ export default function PaintComponentAnalyzer() {
           setUploadedDataName(file.name);
           setColorAnalysis(null);
           setAnalyzeError("");
+          showNotification(`📂 File "${file.name}" loaded successfully! ${data.length} rows found.`, "success");
         } catch (err: any) {
           setUploadError(`Failed to process CSV: ${err.message}`);
+          showNotification(`Failed to process CSV: ${err.message}`, "error");
         }
       };
-      reader.onerror = () => setUploadError("Failed to read CSV file.");
+      reader.onerror = () => {
+        setUploadError("Failed to read CSV file.");
+        showNotification("Failed to read CSV file.", "error");
+      };
       reader.readAsText(file);
       return;
     }
@@ -621,6 +680,7 @@ export default function PaintComponentAnalyzer() {
 
         if (jsonData.length === 0) {
           setUploadError("Excel file appears empty.");
+          showNotification("Excel file appears empty.", "error");
           return;
         }
 
@@ -630,6 +690,7 @@ export default function PaintComponentAnalyzer() {
 
         if (!hasRequiredHeaders) {
           setUploadError("Excel file doesn't have required headers.");
+          showNotification("Excel file doesn't have required headers.", "error");
           return;
         }
 
@@ -637,11 +698,16 @@ export default function PaintComponentAnalyzer() {
         setUploadedDataName(file.name);
         setColorAnalysis(null);
         setAnalyzeError("");
+        showNotification(`📂 File "${file.name}" loaded successfully! ${jsonData.length} rows found.`, "success");
       } catch (err: any) {
         setUploadError(`Failed to process Excel file: ${err.message}`);
+        showNotification(`Failed to process Excel file: ${err.message}`, "error");
       }
     };
-    reader.onerror = () => setUploadError("Failed to read Excel file.");
+    reader.onerror = () => {
+      setUploadError("Failed to read Excel file.");
+      showNotification("Failed to read Excel file.", "error");
+    };
     reader.readAsArrayBuffer(file);
   };
 
@@ -674,16 +740,19 @@ export default function PaintComponentAnalyzer() {
   const analyzeWithGemini = async (imageBase64: string | null) => {
     if (!imageBase64) {
       setAnalyzeError("Please upload a paint color image first.");
+      showNotification("Please upload a paint color image first.", "error");
       return;
     }
 
     if (!import.meta.env.VITE_GEMINI_API_KEY) {
       setAnalyzeError("Missing VITE_GEMINI_API_KEY in your .env file.");
+      showNotification("Missing VITE_GEMINI_API_KEY in your .env file.", "error");
       return;
     }
 
     if (!isDataSaved || !uploadedData || uploadedData.length === 0) {
       setAnalyzeError("Please save the inventory data first to enable paint analysis.");
+      showNotification("Please save the inventory data first to enable paint analysis.", "error");
       return;
     }
 
@@ -916,6 +985,7 @@ Required JSON format:
       setColorAnalysis(normalized);
       setLastFetched(new Date());
       setShowAnalysisComplete(true);
+      showNotification("✅ Analysis complete! Paint formula generated successfully.", "success");
 
       setTimeout(() => setShowAnalysisComplete(false), 1800);
     } catch (err: any) {
@@ -924,8 +994,10 @@ Required JSON format:
 
       if (message.includes("429") || message.includes("RESOURCE_EXHAUSTED") || message.includes("quota")) {
         setAnalyzeError("Gemini quota/rate limit reached. Wait about 1 minute, then try again.");
+        showNotification("Gemini quota/rate limit reached. Wait about 1 minute, then try again.", "error");
       } else {
         setAnalyzeError(err instanceof Error ? err.message : "Gemini analysis failed.");
+        showNotification(err instanceof Error ? err.message : "Gemini analysis failed.", "error");
       }
     } finally {
       setIsAnalyzing(false);
@@ -941,6 +1013,7 @@ Required JSON format:
   const processImageFile = (file: File) => {
     if (!file.type.startsWith("image/")) {
       setAnalyzeError("Please upload a valid image file only.");
+      showNotification("Please upload a valid image file only.", "error");
       return;
     }
 
@@ -952,6 +1025,7 @@ Required JSON format:
       setUploadedFileSize(formatFileSize(file.size));
       setColorAnalysis(null);
       setAnalyzeError("");
+      showNotification(`📸 Image "${file.name}" uploaded successfully!`, "success");
     };
     reader.readAsDataURL(file);
   };
@@ -977,6 +1051,7 @@ Required JSON format:
     setColorAnalysis(null);
     setAnalyzeError("");
     if (fileInputRef.current) fileInputRef.current.value = "";
+    showNotification("🗑️ Image removed", "info");
   };
 
   const scaledComponents = useMemo(() => {
@@ -1020,6 +1095,30 @@ Required JSON format:
         ${isVisible ? "opacity-100 translate-y-0 scale-100" : "opacity-0 translate-y-6 scale-[0.98]"}
       `}
     >
+      <style>{`
+        @keyframes scan {
+          0% { transform: translateY(0); opacity: 0; }
+          12% { opacity: 1; }
+          50% { opacity: 1; }
+          100% { transform: translateY(360px); opacity: 0; }
+        }
+        
+        @keyframes slideUp {
+          from {
+            opacity: 0;
+            transform: translateY(20px) scale(0.95);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0) scale(1);
+          }
+        }
+        
+        .animate-slide-up {
+          animation: slideUp 0.3s ease-out forwards;
+        }
+      `}</style>
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -1504,30 +1603,6 @@ Required JSON format:
           </CardContent>
         </Card>
       </section>
-
-      <style>{`
-        @keyframes scan {
-          0% { transform: translateY(0); opacity: 0; }
-          12% { opacity: 1; }
-          50% { opacity: 1; }
-          100% { transform: translateY(360px); opacity: 0; }
-        }
-        
-        @keyframes slideIn {
-          from {
-            transform: translateX(100%);
-            opacity: 0;
-          }
-          to {
-            transform: translateX(0);
-            opacity: 1;
-          }
-        }
-        
-        .animate-slide-in {
-          animation: slideIn 0.3s ease-out forwards;
-        }
-      `}</style>
 
       {/* Results from Gemini AI */}
       {colorAnalysis && (
