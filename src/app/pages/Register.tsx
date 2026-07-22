@@ -309,7 +309,7 @@ export default function Register() {
               <span className="text-sm">Real-time inventory tracking</span>
             </div>
           </div>
-          <p className="text-white/40 text-sm mt-8 items-center text-center">
+          <p className="text-white/40 text-sm mt-8 text-center">
             A Capstone Project by David, Trisha & Lawrence<br> with the track of Business Analytics.</br>
           </p>
         </div>
