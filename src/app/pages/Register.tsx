@@ -310,7 +310,7 @@ export default function Register() {
             </div>
           </div>
           <p className="text-white/40 text-sm mt-8">
-            © 2026 Garcia Paint Center. All rights reserved.
+            A Capstone Project by David, Trisha & Lawrence with the track of Business Analytics.
           </p>
         </div>
 
@@ -563,10 +563,6 @@ export default function Register() {
               </div>
             </form>
           </div>
-
-          <p className="text-center text-white/50 text-xs mt-4 lg:hidden">
-            A Capstone Project by David, Trisha & Lawrence with the track of Business Analytics.
-          </p>
         </div>
       </div>
     </div>
