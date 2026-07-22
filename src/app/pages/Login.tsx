@@ -41,7 +41,7 @@ export default function Login() {
   };
 
   return (
-    <div className="h-screen overflow-hidden relative flex items-center justify-center p-4">
+    <div className="h-screen overflow-hidden relative flex items-center justify-center p-5">
       <div
         className="absolute inset-0 bg-cover bg-center"
         style={{ backgroundImage: `url(${garciaPaintCenterBg})` }}
@@ -55,13 +55,13 @@ export default function Login() {
           <img
             src={paintelligentLogo}
             alt="Paintelligent Logo"
-            className="relative h-64 w-64 object-contain drop-shadow-2xl"
+            className="relative h-64 w-64 object-contain drop-shadow-2xl mb-1"
           />
           <p className="text-sm text-white/70 absolute bottom-3">by Garcia Paint Center</p>
         </div>
 
-        <div className="bg-white/20 backdrop-blur-2xl border border-white/20 rounded-2xl shadow-2xl px-8 py-8">
-          <h1 className="text-center text-white/90 text-3xl font-semibold mb-6">USER LOGIN</h1>
+        <div className="bg-white/20 backdrop-blur-2xl border border-white/20 rounded-2xl shadow-2xl px-8 py-6 pt-7">
+          <h1 className="text-center text-white/90 text-3xl font-semibold mb-4">USER LOGIN</h1>
 
           <form onSubmit={handleSubmit} className="space-y-5">
             {error && (
@@ -116,7 +116,7 @@ export default function Login() {
             <button
               type="submit"
               disabled={isLoading}
-              className="w-full mt-2 text-white py-3 rounded-lg font-semibold transition-all shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              className="w-full mt-8 text-white py-3 rounded-lg font-semibold transition-all shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
               style={{ backgroundColor: "#4a9d6f" }}
               onMouseEnter={(e) => {
                 if (!isLoading) {

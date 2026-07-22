@@ -274,20 +274,20 @@ export default function Register() {
       </div>
 
       {/* Content - Two Column Layout */}
-      <div className="w-full max-w-5xl relative z-10 flex gap-8 items-center">
+      <div className="w-full max-w-5xl relative z-10 flex gap-12 items-center">
         {/* Left Column - Info/Branding */}
-        <div className="hidden lg:flex flex-1 flex-col items-center text-center">
+        <div className="hidden lg:flex flex-col items-center text-center">
           <div className="relative">
-            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 h-96 w-96 rounded-full bg-[#4a9d6f]/20 blur-3xl" />
+            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 h-120 w-120 rounded-full bg-[#4a9d6f]/20 blur-3xl" />
             <img
               src={paintelligentLogo}
               alt="Paintelligent Logo"
-              className="relative h-48 w-48 object-contain drop-shadow-2xl"
+              className="relative h-60 w-60 object-contain drop-shadow-2xl"
             />
           </div>
-          <h2 className="text-white text-3xl font-bold mt-6">Welcome to Paintelligent</h2>
+          <h2 className="text-white text-3xl font-bold">Welcome to Paintelligent</h2>
           <p className="text-white/70 text-lg mt-2 max-w-sm">
-            Create your account and start managing your paint inventory with AI-powered insights.
+            Create your account and start visualizing your data with AI-powered insights.
           </p>
           <div className="mt-8 space-y-3 text-left w-full max-w-sm">
             <div className="flex items-center gap-3 text-white/80">
@@ -548,7 +548,7 @@ export default function Register() {
                   </>
                 ) : (
                   <>
-                    <UserPlus className="size-5" />
+                    <UserPlus className="size-5 " />
                     CREATE ACCOUNT
                   </>
                 )}
