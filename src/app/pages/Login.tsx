@@ -149,7 +149,7 @@ export default function Login() {
         </div>
 
         <p className="text-center text-white/50 text-xs mt-4">
-          © 2026 Garcia Paint Center. All rights reserved.
+          A Capstone Project.
         </p>
       </div>
     </div>
