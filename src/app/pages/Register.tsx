@@ -310,7 +310,7 @@ export default function Register() {
             </div>
           </div>
           <p className="text-white/40 text-sm mt-8">
-            A Capstone Project by David, Trisha & Lawrence with the track of Business Analytics.
+            A Capstone Project by David, Trisha & Lawrence<b> with the track of Business Analytics.</b>
           </p>
         </div>
 
