@@ -34,6 +34,8 @@ interface AuthContextType {
   requestPasswordReset: (email: string) => Promise<{ success: boolean; error?: string; message?: string }>;
   verifyPIN: (email: string, pin: string) => Promise<{ success: boolean; error?: string }>;
   resetPasswordWithPIN: (email: string, pin: string, newPassword: string) => Promise<{ success: boolean; error?: string }>;
+  // ✅ NEW: Direct password update (no PIN verification)
+  updatePasswordDirectly: (email: string, newPassword: string) => Promise<{ success: boolean; error?: string }>;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -160,7 +162,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   // ============================================================
-  // PIN-BASED PASSWORD RESET FUNCTIONS - FIXED
+  // PIN-BASED PASSWORD RESET FUNCTIONS - UPDATED WITH BETTER FLOW
   // ============================================================
 
   const requestPasswordReset = async (email: string) => {
@@ -168,7 +170,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const normalizedEmail = email.toLowerCase().trim();
       console.log("🔐 Requesting password reset for:", normalizedEmail);
       
-      // Direct check using Supabase - SIMPLIFIED
+      // Direct check using Supabase
       const { data: user, error } = await supabase
         .from('user_data')
         .select('email')
@@ -229,29 +231,70 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const verifyPIN = async (email: string, pin: string) => {
     try {
       const normalizedEmail = email.toLowerCase().trim();
+      console.log('🔍 verifyPIN called for:', normalizedEmail);
+      
+      // Call verifyResetToken - this marks PIN as used if valid
       const result = await verifyResetToken(normalizedEmail, pin);
+      console.log('🔍 verifyPIN result:', result);
       return result;
     } catch (error: any) {
+      console.error('❌ verifyPIN error:', error);
       return { success: false, error: error.message };
     }
   };
 
+  // ✅ NEW: Direct password update without PIN verification
+  const updatePasswordDirectly = async (email: string, newPassword: string) => {
+    try {
+      const normalizedEmail = email.toLowerCase().trim();
+      console.log('🔐 Updating password directly for:', normalizedEmail);
+      
+      const result = await updateUserPassword(normalizedEmail, newPassword);
+      if (!result.success) {
+        console.log('❌ Password update failed:', result.error);
+        return { success: false, error: result.error };
+      }
+      
+      console.log('✅ Password updated successfully!');
+      return { success: true, message: 'Password updated successfully!' };
+    } catch (error: any) {
+      console.error('❌ Update password error:', error);
+      return { success: false, error: error.message };
+    }
+  };
+
+  // ⚠️ DEPRECATED: Use verifyPIN + updatePasswordDirectly instead
+  // Kept for backward compatibility
   const resetPasswordWithPIN = async (email: string, pin: string, newPassword: string) => {
     try {
       const normalizedEmail = email.toLowerCase().trim();
       
-      // Verify PIN first
+      console.log('🔐 Starting password reset with PIN...');
+      console.log('📧 Email:', normalizedEmail);
+      console.log('🔑 PIN:', pin);
+      
+      // STEP 1: Verify the PIN (this marks it as used)
       const verifyResult = await verifyResetToken(normalizedEmail, pin);
       if (!verifyResult.success) {
+        console.log('❌ PIN verification failed:', verifyResult.error);
         return { success: false, error: verifyResult.error };
       }
       
-      // Update password
+      console.log('✅ PIN verified successfully!');
+      
+      // STEP 2: Update the password
+      console.log('📝 Updating password...');
       const updateResult = await updateUserPassword(normalizedEmail, newPassword);
       if (!updateResult.success) {
-        return { success: false, error: updateResult.error };
+        console.log('❌ Password update failed:', updateResult.error);
+        // PIN is already marked as used, but password update failed
+        return { 
+          success: false, 
+          error: 'Password update failed. Please request a new PIN.' 
+        };
       }
       
+      console.log('✅ Password updated successfully!');
       return { success: true, message: 'Password updated successfully!' };
     } catch (error: any) {
       console.error('❌ Reset password error:', error);
@@ -275,6 +318,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     requestPasswordReset,
     verifyPIN,
     resetPasswordWithPIN,
+    updatePasswordDirectly, // ✅ NEW: Direct password update
   };
 
   return (

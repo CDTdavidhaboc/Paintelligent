@@ -35,7 +35,7 @@ function AppRoutes() {
         element={!isAuthenticated ? <Register /> : <Navigate to="/" replace />} 
       />
       
-      {/* Reset Password Route - Public but requires valid session token */}
+      {/* Reset Password Route - Public */}
       <Route 
         path="/reset-password" 
         element={<ResetPassword />} 
@@ -61,13 +61,14 @@ function AppRoutes() {
   );
 }
 
+// ✅ FIXED: AuthProvider wraps BrowserRouter
 function App() {
   return (
-    <BrowserRouter>
-      <AuthProvider>
+    <AuthProvider>
+      <BrowserRouter>
         <AppRoutes />
-      </AuthProvider>
-    </BrowserRouter>
+      </BrowserRouter>
+    </AuthProvider>
   );
 }
 

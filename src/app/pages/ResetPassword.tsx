@@ -13,6 +13,7 @@ import {
   Loader2, 
   CheckCircle,
   ArrowLeft,
+  ArrowRight,
   Key
 } from "lucide-react";
 import paintelligentLogo from "@/assets/logo.png";
@@ -25,8 +26,8 @@ export default function ResetPassword() {
   // Get auth functions
   const { 
     requestPasswordReset, 
-    verifyPIN, 
-    resetPasswordWithPIN 
+    verifyPIN,
+    updatePasswordDirectly // ✅ New function
   } = useAuth();
 
   // Form data
@@ -47,7 +48,11 @@ export default function ResetPassword() {
   const [isLoading, setIsLoading] = useState(false);
   const [resendCooldown, setResendCooldown] = useState(0);
   
+  // ✅ Refs to prevent double submission
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
+  const isSubmittingRef = useRef(false);
+  const isVerifyingRef = useRef(false);
+  const isSendingRef = useRef(false);
 
   // Check if email was passed from login page
   useEffect(() => {
@@ -76,14 +81,12 @@ export default function ResetPassword() {
 
   // Handle PIN input change
   const handlePinChange = (index: number, value: string) => {
-    // Only allow numbers
     if (value && !/^\d$/.test(value)) return;
     
     const newPin = [...pin];
     newPin[index] = value;
     setPin(newPin);
 
-    // Auto-advance to next input
     if (value && index < 5) {
       inputRefs.current[index + 1]?.focus();
     }
@@ -115,12 +118,20 @@ export default function ResetPassword() {
   // Step 1: Send PIN to email
   const handleSendPIN = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    if (isSendingRef.current || isLoading) {
+      console.log('⏳ Already sending PIN, please wait...');
+      return;
+    }
+    
     setError("");
     setIsLoading(true);
+    isSendingRef.current = true;
 
     if (!email) {
       setError("Please enter your email address.");
       setIsLoading(false);
+      isSendingRef.current = false;
       return;
     }
 
@@ -143,31 +154,44 @@ export default function ResetPassword() {
       setError("An error occurred. Please try again.");
     } finally {
       setIsLoading(false);
+      isSendingRef.current = false;
     }
   };
 
-  // Step 2: Verify PIN
+  // Step 2: Verify PIN - This marks the PIN as used and transitions to password form
   const handleVerifyPIN = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    if (isVerifyingRef.current || isLoading) {
+      console.log('⏳ Already verifying PIN, please wait...');
+      return;
+    }
+    
     setError("");
     setIsLoading(true);
+    isVerifyingRef.current = true;
 
     const pinString = pin.join('');
     if (!pinString || pinString.length !== 6) {
       setError("Please enter a valid 6-digit PIN.");
       setIsLoading(false);
+      isVerifyingRef.current = false;
       return;
     }
 
     try {
+      console.log('🔍 Verifying PIN:', pinString);
+      // ✅ This marks the PIN as used and returns success/failure
       const result = await verifyPIN(email, pinString);
+      console.log('🔍 Verification result:', result);
       
       if (result.success) {
+        // ✅ PIN verified - move to password reset form
         setShowEmailForm(false);
         setShowPinForm(false);
         setShowPasswordForm(true);
         setError("");
-        console.log("✅ PIN verified successfully");
+        console.log("✅ PIN verified successfully! Now enter new password.");
       } else {
         setError(result.error || "Invalid PIN. Please try again.");
         setPin(["", "", "", "", "", ""]);
@@ -180,36 +204,49 @@ export default function ResetPassword() {
       setError("An error occurred. Please try again.");
     } finally {
       setIsLoading(false);
+      isVerifyingRef.current = false;
     }
   };
 
-  // Step 3: Reset Password
+  // Step 3: Reset Password - Directly update password (NO PIN verification needed here)
   const handleResetPassword = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    if (isSubmittingRef.current || isLoading) {
+      console.log('⏳ Already resetting password, please wait...');
+      return;
+    }
+    
     setError("");
     setIsLoading(true);
+    isSubmittingRef.current = true;
 
     if (!newPassword || !confirmPassword) {
       setError("Please fill in all fields.");
       setIsLoading(false);
+      isSubmittingRef.current = false;
       return;
     }
 
     if (newPassword.length < 6) {
       setError("Password must be at least 6 characters long.");
       setIsLoading(false);
+      isSubmittingRef.current = false;
       return;
     }
 
     if (newPassword !== confirmPassword) {
       setError("Passwords do not match.");
       setIsLoading(false);
+      isSubmittingRef.current = false;
       return;
     }
 
     try {
-      const pinString = pin.join('');
-      const result = await resetPasswordWithPIN(email, pinString, newPassword);
+      console.log('🔐 Updating password for:', email);
+      
+      // ✅ Directly update password - NO PIN verification needed
+      const result = await updatePasswordDirectly(email, newPassword);
       
       if (result.success) {
         setSuccess(true);
@@ -226,6 +263,7 @@ export default function ResetPassword() {
       setError("An error occurred. Please try again.");
     } finally {
       setIsLoading(false);
+      isSubmittingRef.current = false;
     }
   };
 
@@ -233,8 +271,14 @@ export default function ResetPassword() {
   const handleResendPIN = async () => {
     if (resendCooldown > 0) return;
     
+    if (isSendingRef.current || isLoading) {
+      console.log('⏳ Already processing, please wait...');
+      return;
+    }
+    
     setError("");
     setIsLoading(true);
+    isSendingRef.current = true;
 
     try {
       const result = await requestPasswordReset(email);
@@ -254,6 +298,7 @@ export default function ResetPassword() {
       setError("An error occurred. Please try again.");
     } finally {
       setIsLoading(false);
+      isSendingRef.current = false;
     }
   };
 
@@ -293,7 +338,6 @@ export default function ResetPassword() {
           </div>
 
           <div className="bg-white/10 backdrop-blur-xl border border-white/20 rounded-2xl shadow-2xl px-6 sm:px-8 py-6 sm:py-8">
-            {/* Back Button */}
             <button
               onClick={goBack}
               className="text-white/60 hover:text-white/90 transition-colors mb-4 flex items-center gap-2 text-sm"
@@ -466,7 +510,7 @@ export default function ResetPassword() {
             )}
 
             {/* ============================================================
-                NEW PASSWORD FORM
+                NEW PASSWORD FORM - Direct update (NO PIN verification)
                 ============================================================ */}
             {showPasswordForm && !success && (
               <>
@@ -564,11 +608,7 @@ export default function ResetPassword() {
             )}
 
             {/* Footer */}
-            <div className="mt-6 text-center">
-              <Link to="/login" className="text-white/40 hover:text-white/60 text-sm transition-colors">
-                Back to Login
-              </Link>
-            </div>
+
           </div>
         </div>
       </div>

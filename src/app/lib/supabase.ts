@@ -369,39 +369,57 @@ export const loginUser = async (email: string, password: string) => {
 // Generate a 6-digit PIN (re-exported from emailService)
 export { generatePIN } from './emailService';
 
-// Save reset token to database
+// Save reset token to database - WITH DEBUGGING
 export const saveResetToken = async (email: string, token: string) => {
   try {
     const normalizedEmail = email.toLowerCase().trim();
+    const callId = Math.random().toString(36).substring(7);
+    
+    console.log(`🔵 [${callId}] saveResetToken CALLED`);
+    console.log(`🔵 [${callId}] Email:`, normalizedEmail);
+    console.log(`🔵 [${callId}] Token:`, token);
     
     // Delete any existing unused tokens for this email
-    await supabase
+    const { error: deleteError } = await supabase
       .from('password_reset_tokens')
       .delete()
       .eq('email', normalizedEmail)
       .eq('used', false);
 
-    // Create new token
-    const expiresAt = new Date();
-    expiresAt.setMinutes(expiresAt.getMinutes() + 10);
+    if (deleteError) {
+      console.error(`❌ [${callId}] Delete error:`, deleteError);
+    }
 
+    // Calculate expiration - 30 minutes from now
+    const expiresAt = new Date();
+    expiresAt.setMinutes(expiresAt.getMinutes() + 30);
+    const expiresAtISO = expiresAt.toISOString();
+    
+    console.log(`⏰ [${callId}] Expires at:`, expiresAtISO);
+
+    // Insert with ALL fields explicitly set
     const { data, error } = await supabase
       .from('password_reset_tokens')
       .insert({
         email: normalizedEmail,
         token: token,
-        expires_at: expiresAt.toISOString(),
+        expires_at: expiresAtISO,
         used: false,
         created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
       })
       .select('id, email, token, expires_at, used, created_at');
 
     if (error) {
-      console.error('❌ Error saving reset token:', error);
+      console.error(`❌ [${callId}] Error saving reset token:`, error);
       return { success: false, error: error.message };
     }
 
-    console.log('✅ Reset token saved for:', normalizedEmail);
+    console.log(`✅ [${callId}] Reset token saved!`);
+    console.log(`✅ [${callId}] ID:`, data?.[0]?.id);
+    console.log(`✅ [${callId}] Used:`, data?.[0]?.used);
+    console.log(`✅ [${callId}] Expires at:`, data?.[0]?.expires_at);
+    
     return { success: true, data: data?.[0] || null };
   } catch (error: any) {
     console.error('❌ Error saving reset token:', error);
@@ -409,45 +427,82 @@ export const saveResetToken = async (email: string, token: string) => {
   }
 };
 
-// Verify reset token (PIN)
+// Verify reset token (PIN) - WITH DEBUGGING AND SAFEGUARD
 export const verifyResetToken = async (email: string, token: string) => {
   try {
     const normalizedEmail = email.toLowerCase().trim();
+    const callId = Math.random().toString(36).substring(7);
+    const now = new Date();
+    const nowISO = now.toISOString();
     
-    const { data, error } = await supabase
+    console.log(`🔴 [${callId}] verifyResetToken CALLED`);
+    console.log(`🔴 [${callId}] Email:`, normalizedEmail);
+    console.log(`🔴 [${callId}] Token:`, token);
+    console.log(`🔴 [${callId}] Current time:`, nowISO);
+    
+    // Log the call stack to see who's calling this
+    console.log(`🔴 [${callId}] Call stack:`);
+    console.trace();
+
+    // First, check if the PIN exists (even if used or expired)
+    const { data: checkData, error: checkError } = await supabase
       .from('password_reset_tokens')
       .select('*')
       .eq('email', normalizedEmail)
       .eq('token', token)
-      .eq('used', false)
-      .gt('expires_at', new Date().toISOString())
       .maybeSingle();
 
-    if (error) {
-      console.error('❌ Error verifying token:', error);
-      return { success: false, error: error.message };
+    if (checkError) {
+      console.error(`❌ [${callId}] Check error:`, checkError);
+      return { success: false, error: checkError.message };
     }
 
-    if (!data) {
+    if (!checkData) {
+      console.log(`❌ [${callId}] No PIN found for this email and token`);
       return { success: false, error: 'Invalid or expired PIN' };
     }
 
-    // Mark token as used
+    console.log(`📝 [${callId}] Found PIN:`, {
+      id: checkData.id,
+      used: checkData.used,
+      expires_at: checkData.expires_at
+    });
+
+    // Check if already used
+    if (checkData.used) {
+      console.log(`❌ [${callId}] PIN already used!`);
+      return { success: false, error: 'PIN has already been used' };
+    }
+
+    // Check if expired
+    const expiresAt = new Date(checkData.expires_at);
+    if (now > expiresAt) {
+      console.log(`❌ [${callId}] PIN expired!`);
+      console.log(`   Expires at:`, expiresAt.toISOString());
+      console.log(`   Current time:`, nowISO);
+      return { success: false, error: 'PIN has expired. Please request a new one.' };
+    }
+
+    console.log(`✅ [${callId}] PIN is valid!`);
+    console.log(`   Time remaining:`, (expiresAt.getTime() - now.getTime()) / 1000, 'seconds');
+
+    // Mark token as used - with safeguard to prevent race conditions
     const { error: updateError } = await supabase
       .from('password_reset_tokens')
       .update({ 
         used: true,
-        updated_at: new Date().toISOString()
+        updated_at: nowISO
       })
-      .eq('id', data.id);
+      .eq('id', checkData.id)
+      .eq('used', false);  // ✅ Only update if still unused
 
     if (updateError) {
-      console.error('❌ Error marking token as used:', updateError);
+      console.error(`❌ [${callId}] Error marking token as used:`, updateError);
       return { success: false, error: 'Failed to verify PIN' };
     }
 
-    console.log('✅ PIN verified successfully for:', normalizedEmail);
-    return { success: true, data };
+    console.log(`✅ [${callId}] PIN marked as used`);
+    return { success: true, data: checkData };
   } catch (error: any) {
     console.error('❌ Error verifying token:', error);
     return { success: false, error: error.message };
