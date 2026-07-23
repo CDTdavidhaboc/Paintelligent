@@ -7,6 +7,7 @@ import Layout from "./components/Layout";
 import PaintComponentAnalyzer from "./pages/PaintComponentAnalyzer";
 import SeasonalForecasting from "./pages/SeasonalForecasting";
 import UserProfile from "./pages/UserProfile";
+import ResetPassword from "./pages/ResetPassword";
 
 function AppRoutes() {
   const { isAuthenticated, loading } = useAuth();
@@ -32,6 +33,12 @@ function AppRoutes() {
       <Route 
         path="/register" 
         element={!isAuthenticated ? <Register /> : <Navigate to="/" replace />} 
+      />
+      
+      {/* Reset Password Route - Public but requires valid session token */}
+      <Route 
+        path="/reset-password" 
+        element={<ResetPassword />} 
       />
       
       {/* Protected Routes */}

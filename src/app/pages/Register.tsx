@@ -475,11 +475,6 @@ export default function Register() {
                         </span>
                       )}
                     </div>
-                    {passwordStrength < 4 && (
-                      <p className="text-[10px] text-white/50 mt-1">
-                        Use a mix of uppercase, lowercase, numbers, and special characters
-                      </p>
-                    )}
                   </div>
                 )}
               </div>
