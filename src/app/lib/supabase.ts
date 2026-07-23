@@ -372,11 +372,13 @@ export { generatePIN } from './emailService';
 // Save reset token to database
 export const saveResetToken = async (email: string, token: string) => {
   try {
+    const normalizedEmail = email.toLowerCase().trim();
+    
     // Delete any existing unused tokens for this email
     await supabase
       .from('password_reset_tokens')
       .delete()
-      .eq('email', email)
+      .eq('email', normalizedEmail)
       .eq('used', false);
 
     // Create new token
@@ -386,19 +388,21 @@ export const saveResetToken = async (email: string, token: string) => {
     const { data, error } = await supabase
       .from('password_reset_tokens')
       .insert({
-        email: email,
+        email: normalizedEmail,
         token: token,
         expires_at: expiresAt.toISOString(),
         used: false,
+        created_at: new Date().toISOString(),
       })
-      .select();
+      .select('id, email, token, expires_at, used, created_at');
 
     if (error) {
       console.error('❌ Error saving reset token:', error);
       return { success: false, error: error.message };
     }
 
-    return { success: true, data: data[0] };
+    console.log('✅ Reset token saved for:', normalizedEmail);
+    return { success: true, data: data?.[0] || null };
   } catch (error: any) {
     console.error('❌ Error saving reset token:', error);
     return { success: false, error: error.message };
@@ -408,10 +412,12 @@ export const saveResetToken = async (email: string, token: string) => {
 // Verify reset token (PIN)
 export const verifyResetToken = async (email: string, token: string) => {
   try {
+    const normalizedEmail = email.toLowerCase().trim();
+    
     const { data, error } = await supabase
       .from('password_reset_tokens')
       .select('*')
-      .eq('email', email)
+      .eq('email', normalizedEmail)
       .eq('token', token)
       .eq('used', false)
       .gt('expires_at', new Date().toISOString())
@@ -427,11 +433,20 @@ export const verifyResetToken = async (email: string, token: string) => {
     }
 
     // Mark token as used
-    await supabase
+    const { error: updateError } = await supabase
       .from('password_reset_tokens')
-      .update({ used: true })
+      .update({ 
+        used: true,
+        updated_at: new Date().toISOString()
+      })
       .eq('id', data.id);
 
+    if (updateError) {
+      console.error('❌ Error marking token as used:', updateError);
+      return { success: false, error: 'Failed to verify PIN' };
+    }
+
+    console.log('✅ PIN verified successfully for:', normalizedEmail);
     return { success: true, data };
   } catch (error: any) {
     console.error('❌ Error verifying token:', error);
@@ -442,6 +457,8 @@ export const verifyResetToken = async (email: string, token: string) => {
 // Update password in BOTH Supabase Auth AND user_data
 export const updateUserPassword = async (email: string, newPassword: string) => {
   try {
+    const normalizedEmail = email.toLowerCase().trim();
+    
     // STEP 1: Update password in Supabase Auth
     console.log('🔐 Updating password in Supabase Auth...');
     const { error: authError } = await supabase.auth.updateUser({
@@ -463,7 +480,7 @@ export const updateUserPassword = async (email: string, newPassword: string) => 
         password: newPassword,
         updated_at: new Date().toISOString()
       })
-      .eq('email', email);
+      .eq('email', normalizedEmail);
 
     if (dbError) {
       console.error('❌ Error updating user_data password:', dbError);
@@ -474,6 +491,13 @@ export const updateUserPassword = async (email: string, newPassword: string) => 
         warning: 'Database sync issue, but login will work with new password.'
       };
     }
+
+    // STEP 3: Clean up used tokens
+    await supabase
+      .from('password_reset_tokens')
+      .delete()
+      .eq('email', normalizedEmail)
+      .eq('used', true);
 
     console.log('✅ Password updated successfully in both Auth and user_data');
     return { success: true, message: 'Password updated successfully!' };

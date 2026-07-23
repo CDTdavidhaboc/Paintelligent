@@ -160,104 +160,51 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   // ============================================================
-  // PIN-BASED PASSWORD RESET FUNCTIONS
+  // PIN-BASED PASSWORD RESET FUNCTIONS - FIXED
   // ============================================================
 
   const requestPasswordReset = async (email: string) => {
     try {
-      console.log("🔐 Requesting password reset for:", email);
+      const normalizedEmail = email.toLowerCase().trim();
+      console.log("🔐 Requesting password reset for:", normalizedEmail);
       
-      let userExists = false;
+      // Direct check using Supabase - SIMPLIFIED
+      const { data: user, error } = await supabase
+        .from('user_data')
+        .select('email')
+        .eq('email', normalizedEmail)
+        .maybeSingle();
 
-      // ============================================================
-      // METHOD 1: Try using Admin Client (bypasses RLS)
-      // ============================================================
-      if (supabaseAdmin) {
-        console.log("📝 Using Admin Client to check user...");
-        try {
-          const { data: user, error } = await supabaseAdmin
-            .from('user_data')
-            .select('email')
-            .eq('email', email)
-            .maybeSingle();
-
-          if (!error && user) {
-            userExists = true;
-            console.log("✅ User found via Admin Client:", user.email);
-          }
-        } catch (adminErr) {
-          console.error("❌ Admin client exception:", adminErr);
-        }
+      if (error) {
+        console.error("❌ Error checking user:", error);
+        return { 
+          success: false, 
+          error: 'Error checking user. Please try again.' 
+        };
       }
 
-      // ============================================================
-      // METHOD 2: Try using Regular Client (with RLS)
-      // ============================================================
-      if (!userExists) {
-        console.log("📝 Trying regular client query...");
-        try {
-          const { data: user, error } = await supabase
-            .from('user_data')
-            .select('email')
-            .eq('email', email)
-            .maybeSingle();
-
-          if (!error && user) {
-            userExists = true;
-            console.log("✅ User found via regular client:", user.email);
-          }
-        } catch (regErr) {
-          console.error("❌ Regular client exception:", regErr);
-        }
-      }
-
-      // ============================================================
-      // METHOD 3: Try using Count Query (bypasses RLS for count)
-      // ============================================================
-      if (!userExists) {
-        console.log("📝 Trying count query...");
-        try {
-          const { count, error } = await supabase
-            .from('user_data')
-            .select('*', { count: 'exact', head: true })
-            .eq('email', email);
-
-          if (!error && count && count > 0) {
-            userExists = true;
-            console.log("✅ User found via count query, count:", count);
-          }
-        } catch (countErr) {
-          console.error("❌ Count query exception:", countErr);
-        }
-      }
-
-      // ============================================================
-      // FINAL CHECK: If user doesn't exist, return error
-      // ============================================================
-      if (!userExists) {
-        console.log("❌ No user found with email:", email);
+      if (!user) {
+        console.log("❌ No user found with email:", normalizedEmail);
         return { 
           success: false, 
           error: 'No account found with this email address.' 
         };
       }
 
-      console.log("✅ User verified, proceeding with PIN generation...");
+      console.log("✅ User found:", user.email);
 
       // Generate a 6-digit PIN
       const pin = generatePIN();
       console.log('📝 Generated PIN:', pin);
       
       // Save PIN to database
-      const saveResult = await saveResetToken(email, pin);
+      const saveResult = await saveResetToken(normalizedEmail, pin);
       if (!saveResult.success) {
         return { success: false, error: saveResult.error };
       }
       
-      // ============================================================
-      // SEND EMAIL WITH PIN using the email service
-      // ============================================================
-      const emailResult = await sendPasswordResetEmailWithPIN(email, pin);
+      // Send email with PIN
+      const emailResult = await sendPasswordResetEmailWithPIN(normalizedEmail, pin);
       
       if (!emailResult.success) {
         console.error('❌ Failed to send email:', emailResult.error);
@@ -281,7 +228,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const verifyPIN = async (email: string, pin: string) => {
     try {
-      const result = await verifyResetToken(email, pin);
+      const normalizedEmail = email.toLowerCase().trim();
+      const result = await verifyResetToken(normalizedEmail, pin);
       return result;
     } catch (error: any) {
       return { success: false, error: error.message };
@@ -290,14 +238,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const resetPasswordWithPIN = async (email: string, pin: string, newPassword: string) => {
     try {
+      const normalizedEmail = email.toLowerCase().trim();
+      
       // Verify PIN first
-      const verifyResult = await verifyResetToken(email, pin);
+      const verifyResult = await verifyResetToken(normalizedEmail, pin);
       if (!verifyResult.success) {
         return { success: false, error: verifyResult.error };
       }
       
       // Update password
-      const updateResult = await updateUserPassword(email, newPassword);
+      const updateResult = await updateUserPassword(normalizedEmail, newPassword);
       if (!updateResult.success) {
         return { success: false, error: updateResult.error };
       }
@@ -310,7 +260,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   // ============================================================
-  // CONTEXT VALUE - Make sure all functions are included
+  // CONTEXT VALUE
   // ============================================================
   const value = {
     isAuthenticated,
@@ -323,7 +273,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     syncUserData,
     loadUserData,
     requestPasswordReset,
-    verifyPIN,  // ✅ Make sure this is included
+    verifyPIN,
     resetPasswordWithPIN,
   };
 

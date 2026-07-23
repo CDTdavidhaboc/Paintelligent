@@ -253,9 +253,9 @@ export const sendPasswordResetEmail = async (email: string, pin: string) => {
     // Initialize EmailJS
     emailjs.init(publicKey);
 
-    // Send email using EmailJS
+    // ⚠️ IMPORTANT: The email MUST be passed as to_email parameter
     const templateParams = {
-      to_email: email,
+      to_email: email,  // ✅ THIS IS THE KEY - dynamic email
       to_name: email.split('@')[0],
       pin: pin,
       expiry_minutes: '10',
@@ -263,6 +263,8 @@ export const sendPasswordResetEmail = async (email: string, pin: string) => {
       company_name: 'Paintelligent',
       project_name: 'Garcia Paint Center',
     };
+
+    console.log('📧 Sending to:', templateParams.to_email); // Verify this logs the correct email
 
     const response = await emailjs.send(
       serviceId,
