@@ -35,13 +35,15 @@ const isDevelopment = import.meta.env.MODE === 'development';
 // USER AUTHENTICATION
 // ============================================================
 
-// Register new user - Uses Admin API to bypass rate limits
+// Register new user - FIXED
 export const registerUser = async (email: string, password: string, fullName: string) => {
   console.log('📝 Registering user:', email);
   console.log(`🔧 Mode: ${isDevelopment ? 'DEVELOPMENT' : 'PRODUCTION'}`);
   
   try {
-    // Check if user already exists in user_data
+    // ============================================================
+    // STEP 1: Check if user already exists in user_data
+    // ============================================================
     const { data: existingUser, error: checkError } = await supabase
       .from('user_data')
       .select('email')
@@ -64,41 +66,66 @@ export const registerUser = async (email: string, password: string, fullName: st
     let authError = null;
 
     // ============================================================
-    // DEVELOPMENT MODE: Use Admin API (NO RATE LIMIT, NO EMAIL)
+    // STEP 2: Check if user exists in Auth
     // ============================================================
-    if (isDevelopment && supabaseAdmin) {
-      console.log('🔐 DEVELOPMENT: Using Admin API (no rate limit, no email)...');
-      
-      try {
-        const { data, error } = await supabaseAdmin.auth.admin.createUser({
-          email: email,
-          password: password,
-          email_confirm: true,
-          user_metadata: {
-            full_name: fullName,
-          },
-        });
+    let authUserExists = false;
+    let existingAuthUserId = null;
 
-        if (error) {
-          console.error('❌ Admin API error:', error);
-          console.log('⚠️ Admin API failed, falling back to regular signup...');
-        } else {
-          authData = { user: data.user };
-          console.log('✅ Admin API user created (no email sent):', data.user.id);
+    if (supabaseAdmin) {
+      try {
+        // Try to find user by email in Auth
+        const { data: userList, error: listError } = await supabaseAdmin.auth.admin.listUsers();
+        
+        if (!listError && userList?.users) {
+          const foundUser = userList.users.find((u: any) => u.email === email);
+          if (foundUser) {
+            authUserExists = true;
+            existingAuthUserId = foundUser.id;
+            console.log('⚠️ User already exists in Auth:', foundUser.id);
+          }
         }
-      } catch (adminErr) {
-        console.error('❌ Admin API exception:', adminErr);
-        console.log('⚠️ Falling back to regular signup...');
+      } catch (err) {
+        console.log('⚠️ Could not check Auth users:', err);
       }
     }
 
     // ============================================================
-    // FALLBACK / PRODUCTION: Use Regular Signup
+    // STEP 3: Create Auth user (if not exists)
     // ============================================================
-    if (!authData) {
-      console.log('🔐 Using regular signup...');
+    if (authUserExists && existingAuthUserId) {
+      // User exists in Auth - use existing user
+      authData = { user: { id: existingAuthUserId, email: email } };
+      console.log('✅ Using existing Auth user:', existingAuthUserId);
+    } else {
+      // Create new Auth user
+      console.log('🔐 Creating new Auth user...');
       
-      try {
+      if (isDevelopment && supabaseAdmin) {
+        try {
+          const { data, error } = await supabaseAdmin.auth.admin.createUser({
+            email: email,
+            password: password,
+            email_confirm: true,
+            user_metadata: {
+              full_name: fullName,
+            },
+          });
+
+          if (error) {
+            console.error('❌ Admin API error:', error);
+            // Fall through to regular signup
+          } else {
+            authData = { user: data.user };
+            console.log('✅ Admin API user created:', data.user.id);
+          }
+        } catch (adminErr) {
+          console.error('❌ Admin API exception:', adminErr);
+        }
+      }
+
+      // Fallback to regular signup
+      if (!authData) {
+        console.log('🔐 Using regular signup...');
         const result = await supabase.auth.signUp({
           email: email,
           password: password,
@@ -110,41 +137,44 @@ export const registerUser = async (email: string, password: string, fullName: st
         });
 
         if (result.error) {
+          console.error('❌ Signup error:', result.error);
+          
           if (result.error.message.includes('rate limit')) {
-            console.log(`⚠️ Rate limit hit!`);
-            authError = { 
-              message: 'Rate limit exceeded. Please wait a few minutes and try again.' 
+            return {
+              success: false,
+              error: 'Too many registration attempts. Please wait a few minutes and try again.'
             };
+          } else if (result.error.message.includes('already registered')) {
+            // Try to get the existing user
+            if (supabaseAdmin) {
+              try {
+                const { data: userList } = await supabaseAdmin.auth.admin.listUsers();
+                const foundUser = userList?.users?.find((u: any) => u.email === email);
+                if (foundUser) {
+                  authData = { user: foundUser };
+                  console.log('✅ Found existing Auth user:', foundUser.id);
+                }
+              } catch (err) {
+                console.error('❌ Could not find existing user:', err);
+              }
+            }
+            
+            if (!authData) {
+              return {
+                success: false,
+                error: 'This email is already registered. Please login instead.'
+              };
+            }
           } else {
-            authError = result.error;
+            return {
+              success: false,
+              error: result.error.message || 'Failed to create account. Please try again.'
+            };
           }
         } else {
           authData = result.data;
         }
-      } catch (err) {
-        console.error('❌ Auth registration error:', err);
-        authError = err as any;
       }
-    }
-
-    // Handle authentication errors
-    if (authError) {
-      console.error('❌ Auth registration error:', authError);
-      
-      let errorMessage = authError.message || 'Failed to create account. Please try again.';
-      
-      if (errorMessage.includes('rate limit')) {
-        errorMessage = 'Too many registration attempts. Please wait a few minutes and try again.';
-      } else if (errorMessage.includes('already registered')) {
-        errorMessage = 'This email is already registered. Please login instead.';
-      } else if (errorMessage.includes('password')) {
-        errorMessage = 'Password must be at least 6 characters long.';
-      }
-      
-      return { 
-        success: false, 
-        error: errorMessage
-      };
     }
 
     if (!authData?.user) {
@@ -154,9 +184,11 @@ export const registerUser = async (email: string, password: string, fullName: st
       };
     }
 
-    console.log('✅ User created:', authData.user.id);
+    console.log('✅ User authenticated:', authData.user.id);
 
-    // Create user_data record
+    // ============================================================
+    // STEP 4: Create user_data record
+    // ============================================================
     console.log('📝 Creating user_data record...');
     
     const payload = {
@@ -188,36 +220,72 @@ export const registerUser = async (email: string, password: string, fullName: st
       updated_at: new Date().toISOString(),
     };
 
-    try {
-      const { data: newData, error: insertError } = await supabase
-        .from('user_data')
-        .insert(payload)
-        .select();
+    let newData = null;
+    let insertError = null;
 
-      if (insertError) {
-        console.error('❌ Error creating user_data:', insertError);
-        return { 
-          success: true, 
-          message: 'Account created but profile setup incomplete. Please contact support.',
-          data: null
-        };
+    // Try using Admin client first (bypasses RLS)
+    if (supabaseAdmin) {
+      try {
+        const { data, error } = await supabaseAdmin
+          .from('user_data')
+          .insert(payload)
+          .select();
+
+        if (error) {
+          console.error('❌ Admin client insert error:', error);
+          insertError = error;
+        } else {
+          newData = data;
+          console.log('✅ User_data created using Admin client');
+        }
+      } catch (err) {
+        console.error('❌ Admin client exception:', err);
+        insertError = err as any;
       }
+    }
 
-      console.log('✅ User_data created successfully');
+    // Fallback to regular client
+    if (!newData) {
+      console.log('📝 Falling back to regular client...');
       
-      return { 
-        success: true, 
-        data: newData?.[0] || null,
-        message: 'Registration successful! You can now login.'
-      };
-    } catch (insertErr) {
-      console.error('❌ Insert error:', insertErr);
+      try {
+        const { data, error } = await supabase
+          .from('user_data')
+          .insert(payload)
+          .select();
+
+        if (error) {
+          console.error('❌ Regular client insert error:', error);
+          insertError = error;
+        } else {
+          newData = data;
+          console.log('✅ User_data created using regular client');
+        }
+      } catch (err) {
+        console.error('❌ Regular client exception:', err);
+        insertError = err as any;
+      }
+    }
+
+    if (insertError || !newData) {
+      console.error('❌ Error creating user_data:', insertError);
+      
+      // If user_data creation failed but Auth user was created, still return success
+      // The user can try to login and the login will handle missing user_data
       return { 
         success: true, 
         message: 'Account created but profile setup incomplete. Please contact support.',
-        data: null
+        data: null,
+        warning: 'Please contact support to complete your profile.'
       };
     }
+
+    console.log('✅ Registration complete!');
+    return { 
+      success: true, 
+      data: newData[0] || null,
+      message: 'Registration successful! You can now login.'
+    };
     
   } catch (error: any) {
     console.error('❌ Error registering user:', error);
@@ -225,7 +293,7 @@ export const registerUser = async (email: string, password: string, fullName: st
   }
 };
 
-// Login user with Supabase Auth
+// Login user with Supabase Auth - FIXED: No auto-creation
 export const loginUser = async (email: string, password: string) => {
   console.log('🔑 Logging in user:', email);
   
@@ -294,7 +362,9 @@ export const loginUser = async (email: string, password: string) => {
 
     console.log('✅ Auth login successful:', authData.user.id);
 
-    // Get user data from user_data table
+    // ============================================================
+    // ✅ FIX: Check if user exists in user_data - NO AUTO-CREATION
+    // ============================================================
     const { data, error } = await supabase
       .from('user_data')
       .select('*')
@@ -306,44 +376,16 @@ export const loginUser = async (email: string, password: string) => {
       return { success: false, error: error.message };
     }
 
+    // ✅ If user_data record doesn't exist, FAIL the login
     if (!data) {
-      console.log('⚠️ User found in Auth but not in user_data. Creating record...');
-      const payload = {
-        email: email,
-        password: password,
-        full_name: authData.user.user_metadata?.full_name || email,
-        auth_user_id: authData.user.id,
-        inventory_data: null,
-        inventory_data_name: null,
-        color_analysis: null,
-        uploaded_image: null,
-        uploaded_file_name: null,
-        uploaded_file_size: null,
-        batch_size: 0.1,
-        sales_data: null,
-        sales_data_name: null,
-        forecast_data: null,
-        last_fetched: null,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      };
-
-      const { data: newData, error: insertError } = await supabase
-        .from('user_data')
-        .insert(payload)
-        .select()
-        .single();
-
-      if (insertError) {
-        console.error('❌ Error creating user_data record:', insertError);
-        return { success: false, error: 'User data not found and could not be created.' };
-      }
-
-      const { password: _, ...userWithoutPassword } = newData;
+      console.log('❌ User found in Auth but NOT in user_data. Access denied.');
+      
+      // ✅ Sign out from Auth to clean up the session
+      await supabase.auth.signOut();
+      
       return { 
-        success: true, 
-        user: userWithoutPassword,
-        token: authData.session?.access_token || ''
+        success: false, 
+        error: 'Account not found. Please register or contact support.' 
       };
     }
 
@@ -509,25 +551,69 @@ export const verifyResetToken = async (email: string, token: string) => {
   }
 };
 
+// ============================================================
+// UPDATE PASSWORD - UPDATES BOTH AUTH AND USER_DATA
+// ============================================================
+
 // Update password in BOTH Supabase Auth AND user_data
+// ✅ FIX: Uses Admin client to update Auth without session
 export const updateUserPassword = async (email: string, newPassword: string) => {
   try {
     const normalizedEmail = email.toLowerCase().trim();
     
-    // STEP 1: Update password in Supabase Auth
-    console.log('🔐 Updating password in Supabase Auth...');
-    const { error: authError } = await supabase.auth.updateUser({
-      password: newPassword,
-    });
+    console.log('📝 Updating password for:', normalizedEmail);
+    
+    let authUpdated = false;
+    let userUpdated = false;
+    let authErrorMsg = '';
 
-    if (authError) {
-      console.error('❌ Error updating auth password:', authError);
-      return { success: false, error: authError.message };
+    // ============================================================
+    // STEP 1: Update in Supabase Auth using Admin Client
+    // ============================================================
+    if (supabaseAdmin) {
+      try {
+        console.log('🔐 Updating Auth password using admin client...');
+        
+        // Get user by email
+        const { data: userList, error: listError } = await supabaseAdmin.auth.admin.listUsers();
+        
+        if (listError) {
+          console.error('❌ Error listing users:', listError);
+          authErrorMsg = listError.message;
+        } else {
+          const user = userList?.users?.find((u: any) => u.email === normalizedEmail);
+          
+          if (user) {
+            // Update password using admin client
+            const { error: authError } = await supabaseAdmin.auth.admin.updateUserById(
+              user.id,
+              { password: newPassword }
+            );
+            
+            if (authError) {
+              console.error('❌ Error updating auth password:', authError);
+              authErrorMsg = authError.message;
+            } else {
+              authUpdated = true;
+              console.log('✅ Auth password updated successfully');
+            }
+          } else {
+            console.log('⚠️ User not found in Auth');
+            authErrorMsg = 'User not found in Auth';
+          }
+        }
+      } catch (err) {
+        console.error('❌ Admin auth update error:', err);
+        authErrorMsg = err instanceof Error ? err.message : 'Unknown error';
+      }
+    } else {
+      console.log('⚠️ Admin client not available, skipping Auth update');
+      authErrorMsg = 'Admin client not available';
     }
 
-    console.log('✅ Auth password updated successfully');
-
-    // STEP 2: Also update password in user_data table
+    // ============================================================
+    // STEP 2: Update in user_data table
+    // ============================================================
     console.log('📝 Updating password in user_data...');
     const { error: dbError } = await supabase
       .from('user_data')
@@ -539,23 +625,45 @@ export const updateUserPassword = async (email: string, newPassword: string) => 
 
     if (dbError) {
       console.error('❌ Error updating user_data password:', dbError);
-      console.warn('⚠️ Auth password updated but user_data update failed');
-      return { 
-        success: true, 
-        message: 'Password updated successfully!',
-        warning: 'Database sync issue, but login will work with new password.'
-      };
+    } else {
+      userUpdated = true;
+      console.log('✅ user_data password updated successfully');
     }
 
-    // STEP 3: Clean up used tokens
+    // Clean up used tokens
     await supabase
       .from('password_reset_tokens')
       .delete()
       .eq('email', normalizedEmail)
       .eq('used', true);
 
-    console.log('✅ Password updated successfully in both Auth and user_data');
-    return { success: true, message: 'Password updated successfully!' };
+    // ============================================================
+    // STEP 3: Return result
+    // ============================================================
+    if (authUpdated && userUpdated) {
+      console.log('✅ Password updated successfully in both Auth and user_data');
+      return { success: true, message: 'Password updated successfully!' };
+    } else if (userUpdated && !authUpdated) {
+      console.log('⚠️ Password updated in user_data but Auth update failed:', authErrorMsg);
+      return { 
+        success: true, 
+        message: 'Password updated in database but Auth sync failed. Please contact support.',
+        warning: true,
+        error: authErrorMsg
+      };
+    } else if (authUpdated && !userUpdated) {
+      console.log('⚠️ Password updated in Auth but user_data update failed');
+      return { 
+        success: false, 
+        error: 'Password updated in Auth but database update failed. Please try again.' 
+      };
+    } else {
+      console.log('❌ Password update failed in both Auth and user_data');
+      return { 
+        success: false, 
+        error: 'Failed to update password. Please try again.' 
+      };
+    }
   } catch (error: any) {
     console.error('❌ Error updating password:', error);
     return { success: false, error: error.message };
