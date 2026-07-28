@@ -7,7 +7,7 @@ import {
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
-import { getUserData, saveUserProfile } from "../lib/supabase";
+import { getUserData, saveUserProfile, saveProfilePicture } from "../lib/supabase";
 
 // Default user data for new users
 const DEFAULT_USER_DATA = {
@@ -66,14 +66,15 @@ export default function UserProfile() {
         return;
       }
 
+      console.log("🔄 Loading user data for:", userEmail);
+
+      // FIRST: Try to load from Supabase (source of truth)
       try {
-        // FIRST: Try to load from Supabase (source of truth)
         const supabaseData = await getUserData(userEmail);
         
         if (supabaseData) {
           console.log("📥 Loaded user data from Supabase:", supabaseData);
           
-          // Build user data from Supabase
           const profileData = {
             name: supabaseData.full_name || supabaseData.name || "New User",
             phone: supabaseData.phone || "",
@@ -96,9 +97,27 @@ export default function UserProfile() {
           setLocalAddress(profileData.address || '');
           setIsNewUser(false);
           
+          // Load picture from Supabase
+          if (supabaseData.profile_picture) {
+            console.log("📸 Loaded picture from Supabase");
+            setProfilePicture(supabaseData.profile_picture);
+            setTempProfilePicture(supabaseData.profile_picture);
+          }
+          
           // Cache in localStorage for faster loading
           const userDataKey = getUserStorageKey('profileData');
           localStorage.setItem(userDataKey, JSON.stringify(profileData));
+          
+          // Save name separately
+          const userNameKey = getUserStorageKey('userName');
+          localStorage.setItem(userNameKey, profileData.name);
+          
+          // Save picture separately
+          if (supabaseData.profile_picture) {
+            const userPictureKey = getUserStorageKey('profilePicture');
+            localStorage.setItem(userPictureKey, supabaseData.profile_picture);
+            localStorage.setItem('userProfilePicture', supabaseData.profile_picture);
+          }
           
           setIsLoading(false);
           return;
@@ -110,26 +129,33 @@ export default function UserProfile() {
       // SECOND: Fallback to localStorage
       const userDataKey = getUserStorageKey('profileData');
       const userPictureKey = getUserStorageKey('profilePicture');
+      const userNameKey = getUserStorageKey('userName');
       
       let savedUserData = localStorage.getItem(userDataKey);
       let savedPicture = localStorage.getItem(userPictureKey);
+      let savedName = localStorage.getItem(userNameKey);
       
+      // Fallback to global keys if not found
       if (!savedUserData) {
         savedUserData = localStorage.getItem("userProfileData");
       }
       if (!savedPicture) {
         savedPicture = localStorage.getItem("userProfilePicture");
       }
+      if (!savedName) {
+        savedName = localStorage.getItem("userName");
+      }
       
-      const isNew = !savedUserData;
-      setIsNewUser(isNew);
-      
+      // Load picture from localStorage
       if (savedPicture) {
+        console.log("📸 Loaded picture from localStorage");
         setProfilePicture(savedPicture);
         setTempProfilePicture(savedPicture);
       }
 
+      // Load user data from localStorage
       if (savedUserData) {
+        console.log("📥 Loaded user data from localStorage");
         const parsedData = JSON.parse(savedUserData);
         
         if (!parsedData.email && userEmail) {
@@ -146,25 +172,40 @@ export default function UserProfile() {
           parsedData.contacts = DEFAULT_USER_DATA.contacts;
         }
         
+        // Use saved name if available
+        if (savedName) {
+          parsedData.name = savedName;
+        }
+        
         setUserData(parsedData);
         setTempUserData(parsedData);
         setLocalAddress(parsedData.address || '');
-      } else {
-        const emailName = userEmail?.split('@')[0] || "New User";
-        const formattedName = emailName
-          .split(/[._-]/)
-          .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-          .join(' ');
-        
-        const defaultData = {
-          ...DEFAULT_USER_DATA,
-          name: formattedName || "New User",
-          email: userEmail || "",
-        };
-        setUserData(defaultData);
-        setTempUserData(defaultData);
-        setLocalAddress(defaultData.address || '');
+        setIsNewUser(false);
+        setIsLoading(false);
+        return;
       }
+
+      // If nothing works, create default user
+      const emailName = userEmail?.split('@')[0] || "New User";
+      const formattedName = savedName || emailName
+        .split(/[._-]/)
+        .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+        .join(' ') || "New User";
+      
+      const defaultData = {
+        ...DEFAULT_USER_DATA,
+        name: formattedName,
+        email: userEmail || "",
+      };
+      
+      setUserData(defaultData);
+      setTempUserData(defaultData);
+      setLocalAddress(defaultData.address || '');
+      setIsNewUser(true);
+      
+      // Save to localStorage
+      localStorage.setItem(userDataKey, JSON.stringify(defaultData));
+      localStorage.setItem(userNameKey, formattedName);
       
       setIsLoading(false);
     };
@@ -209,6 +250,8 @@ export default function UserProfile() {
   // Save user data to localStorage AND Supabase
   const saveUserData = async (data: any) => {
     try {
+      console.log("💾 Saving user data:", data);
+      
       delete data.department;
       
       const existingPermissions = data.permissions || [];
@@ -216,17 +259,31 @@ export default function UserProfile() {
       
       const dataToSave = {
         ...data,
-        permissions: combinedPermissions
+        permissions: combinedPermissions,
       };
+      
+      console.log("💾 Data to save:", dataToSave);
       
       // Save to localStorage
       const userDataKey = getUserStorageKey('profileData');
       localStorage.setItem(userDataKey, JSON.stringify(dataToSave));
       localStorage.setItem('userProfileData', JSON.stringify(dataToSave));
       
-      // Save to Supabase
+      // Save name separately
+      const userNameKey = getUserStorageKey('userName');
+      localStorage.setItem(userNameKey, dataToSave.name);
+      localStorage.setItem('userName', dataToSave.name);
+      
+      // Save picture separately if it exists
+      if (profilePicture) {
+        const userPictureKey = getUserStorageKey('profilePicture');
+        localStorage.setItem(userPictureKey, profilePicture);
+        localStorage.setItem('userProfilePicture', profilePicture);
+      }
+      
+      // SAVE TO SUPABASE - Include ALL fields
       if (userEmail) {
-        const supabaseSuccess = await saveUserProfile(userEmail, {
+        console.log("📤 Saving to Supabase with data:", {
           name: dataToSave.name,
           phone: dataToSave.phone,
           role: dataToSave.role,
@@ -236,16 +293,41 @@ export default function UserProfile() {
           employeeId: dataToSave.employeeId,
           permissions: dataToSave.permissions,
           contacts: dataToSave.contacts,
+          profile_picture: profilePicture || null,
         });
         
-        if (!supabaseSuccess) {
-          console.warn("Failed to save to Supabase, but localStorage saved");
+        try {
+          const saveResult = await saveUserProfile(userEmail, {
+            name: dataToSave.name,
+            phone: dataToSave.phone,
+            role: dataToSave.role,
+            location: dataToSave.location,
+            address: dataToSave.address,
+            joinDate: dataToSave.joinDate,
+            employeeId: dataToSave.employeeId,
+            permissions: dataToSave.permissions,
+            contacts: dataToSave.contacts,
+            profile_picture: profilePicture || null,
+          });
+          
+          if (saveResult) {
+            console.log("✅ Successfully saved all profile data to Supabase");
+          } else {
+            console.warn("⚠️ Failed to save to Supabase");
+          }
+        } catch (error) {
+          console.warn("⚠️ Error saving to Supabase:", error);
         }
       }
       
       setUserData(dataToSave);
       setLocalAddress(dataToSave.address || '');
       setIsNewUser(false);
+      
+      // Dispatch event to update Layout
+      window.dispatchEvent(new CustomEvent('profileUpdated', { 
+        detail: { name: dataToSave.name } 
+      }));
       
       return true;
     } catch (error) {
@@ -269,9 +351,10 @@ export default function UserProfile() {
     setIsEditing(!isEditing);
   };
 
-  // Handle save with event dispatching
+  // Handle save
   const handleSave = async () => {
     try {
+      // First save the user data (name, phone, location, address, etc.)
       const saveSuccess = await saveUserData(tempUserData);
       
       if (!saveSuccess) {
@@ -279,28 +362,55 @@ export default function UserProfile() {
         return;
       }
       
+      // Then save picture if changed
       if (tempProfilePicture !== profilePicture) {
         const userPictureKey = getUserStorageKey('profilePicture');
         if (tempProfilePicture) {
+          // Save to localStorage
           localStorage.setItem(userPictureKey, tempProfilePicture);
           localStorage.setItem('userProfilePicture', tempProfilePicture);
           setProfilePicture(tempProfilePicture);
+          
+          // Also save picture to Supabase
+          if (userEmail) {
+            try {
+              await saveProfilePicture(userEmail, tempProfilePicture);
+              console.log("📸 Picture saved to Supabase");
+            } catch (error) {
+              console.warn("⚠️ Failed to save picture to Supabase:", error);
+            }
+          }
+          
+          console.log("📸 Picture saved to localStorage");
         } else {
+          // Remove picture
           localStorage.removeItem(userPictureKey);
           localStorage.removeItem('userProfilePicture');
           setProfilePicture(null);
+          
+          // Also remove picture from Supabase
+          if (userEmail) {
+            try {
+              await saveProfilePicture(userEmail, null);
+              console.log("📸 Picture removed from Supabase");
+            } catch (error) {
+              console.warn("⚠️ Failed to remove picture from Supabase:", error);
+            }
+          }
+          
+          console.log("📸 Picture removed from localStorage");
         }
       }
       
       setIsEditing(false);
       showNotificationMessage("Profile saved successfully! ✅");
       
-      // Dispatch events to notify Layout
-      console.log("📤 Dispatching profileUpdated event with data:", tempUserData.name);
-      window.dispatchEvent(new CustomEvent('profileUpdated', { 
-        detail: { name: tempUserData.name } 
-      }));
-      window.dispatchEvent(new Event('profileUpdated'));
+      // Dispatch event again for redundancy
+      setTimeout(() => {
+        window.dispatchEvent(new CustomEvent('profileUpdated', { 
+          detail: { name: tempUserData.name } 
+        }));
+      }, 100);
       
     } catch (error) {
       console.error("Save error:", error);
@@ -308,7 +418,7 @@ export default function UserProfile() {
     }
   };
 
-  // Handle input change - memoized to prevent recreation
+  // Handle input change
   const handleInputChange = useCallback((field: string, value: string) => {
     setTempUserData(prev => ({
       ...prev,
@@ -347,68 +457,116 @@ export default function UserProfile() {
     }));
   };
 
-  // UserProfile.tsx - Updated handleLogout
+  // Handle logout
   const handleLogout = () => {
     const confirmLogout = window.confirm("Are you sure you want to log out?");
-    if (confirmLogout) {
-      try {
-        // Call logout from context (which now clears everything)
-        logout();
+    if (!confirmLogout) return;
+    
+    console.log("🔴 Logging out...");
+    
+    try {
+      // Clear all user data from localStorage
+      if (userEmail) {
+        const keysToRemove = [
+          `user_${userEmail}_profileData`,
+          `user_${userEmail}_profilePicture`,
+          `user_${userEmail}_userName`,
+          'userProfileData',
+          'userProfilePicture',
+          'userName'
+        ];
         
-        // Force navigation to login
-        window.location.href = "/login";
-      } catch (error) {
-        console.error("Logout error:", error);
-        window.location.href = "/login";
+        keysToRemove.forEach(key => {
+          if (localStorage.getItem(key)) {
+            localStorage.removeItem(key);
+            console.log(`🗑️ Removed localStorage key: ${key}`);
+          }
+        });
       }
+      
+      // Call logout from context
+      logout();
+      console.log("✅ Logout successful");
+      
+      // Navigate to login
+      window.location.href = "/login";
+      
+    } catch (error) {
+      console.error("❌ Logout error:", error);
+      // Emergency fallback - force redirect
+      window.location.href = "/login";
     }
   };
 
-  // Handle profile picture change
+  // Handle profile picture
   const handleProfilePictureClick = () => {
-    if (isEditing) {
-      if (fileInputRef.current) {
-        fileInputRef.current.value = '';
-      }
-      fileInputRef.current?.click();
+    if (isEditing && fileInputRef.current) {
+      fileInputRef.current.click();
     }
   };
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
-    if (file && isEditing) {
-      if (!file.type.startsWith('image/')) {
-        showNotificationMessage("Please select an image file");
-        return;
-      }
-      
-      if (file.size > 5 * 1024 * 1024) {
-        showNotificationMessage("Image size should be less than 5MB");
-        return;
-      }
-      
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        const imageData = e.target?.result as string;
-        setTempProfilePicture(imageData);
-        showNotificationMessage("Picture uploaded successfully! 📸");
-      };
-      reader.onerror = () => {
-        showNotificationMessage("Error uploading picture");
-      };
-      reader.readAsDataURL(file);
+    if (!file || !isEditing) return;
+    
+    console.log("📸 File selected:", file.name, file.size, file.type);
+    
+    if (!file.type.startsWith('image/')) {
+      showNotificationMessage("Please select an image file");
+      return;
     }
+    
+    if (file.size > 5 * 1024 * 1024) {
+      showNotificationMessage("Image size should be less than 5MB");
+      return;
+    }
+    
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const imageData = e.target?.result as string;
+      console.log("📸 Image loaded, data length:", imageData.length);
+      
+      // Update states
+      setTempProfilePicture(imageData);
+      setProfilePicture(imageData);
+      
+      // Save to localStorage immediately
+      if (userEmail) {
+        const key = getUserStorageKey('profilePicture');
+        try {
+          localStorage.setItem(key, imageData);
+          localStorage.setItem('userProfilePicture', imageData);
+          console.log("📸 Picture saved to localStorage");
+          
+          showNotificationMessage("Picture uploaded! 📸");
+        } catch (err) {
+          console.error("❌ Save error:", err);
+          showNotificationMessage("Error saving picture");
+        }
+      }
+    };
+    reader.readAsDataURL(file);
   };
 
-  // Handle remove profile picture
   const handleRemovePicture = () => {
-    if (isEditing) {
-      setTempProfilePicture(null);
-      if (fileInputRef.current) {
-        fileInputRef.current.value = '';
-      }
-      showNotificationMessage("Picture removed");
+    if (!isEditing) return;
+    
+    console.log("📸 Removing picture");
+    
+    setTempProfilePicture(null);
+    setProfilePicture(null);
+    
+    if (userEmail) {
+      localStorage.removeItem(getUserStorageKey('profilePicture'));
+      localStorage.removeItem('userProfilePicture');
+      console.log("📸 Picture removed from localStorage");
     }
+    
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+    
+    showNotificationMessage("Picture removed");
   };
 
   const displayData = isEditing ? tempUserData : userData;
@@ -429,16 +587,9 @@ export default function UserProfile() {
     );
   }, [displayData.contacts, searchTerm]);
 
-  // Editable field component - defined outside with useMemo
+  // Editable field component
   const EditableField = useMemo(() => {
     return ({ label, value, field, type = "text", icon: Icon }: any) => {
-      const [localValue, setLocalValue] = useState(value || '');
-      
-      // Update local value when prop changes (e.g., when loading data)
-      useEffect(() => {
-        setLocalValue(value || '');
-      }, [value]);
-
       if (isEditing) {
         return (
           <div className="flex items-start gap-4 p-3 rounded-lg hover:bg-gray-50 transition-colors">
@@ -449,12 +600,8 @@ export default function UserProfile() {
               <p className="text-sm font-medium text-gray-500 mb-1">{label}</p>
               <input
                 type={type}
-                value={localValue}
-                onChange={(e) => {
-                  const newValue = e.target.value;
-                  setLocalValue(newValue);
-                  handleInputChange(field, newValue);
-                }}
+                value={value || ''}
+                onChange={(e) => handleInputChange(field, e.target.value)}
                 className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#1a4d2e] focus:border-transparent"
                 placeholder={`Enter ${label.toLowerCase()}`}
               />
@@ -575,11 +722,12 @@ export default function UserProfile() {
         </div>
       </div>
 
-      {/* Profile Overview Card */}
-      <Card className={`border-l-4 ${isNewUser ? 'border-green-500' : 'border-[#1a4d2e]'} shadow-lg`}>
-        <CardHeader className="pb-6">
-          <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-6">
+      {/* Profile Overview Card - MERGED with System Permissions */}
+      <Card className={`border-l-4 ${isNewUser ? 'border-emerald-500' : 'border-[#1a4d2e]'} shadow-xl hover:shadow-2xl transition-shadow duration-300`}>
+        <CardHeader className="pb-4 border-b border-gray-100">
+          <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-3">
             <div className="flex items-start gap-6">
+              {/* Profile Picture Section */}
               <div className="relative group">
                 <input
                   type="file"
@@ -589,9 +737,11 @@ export default function UserProfile() {
                   className="hidden"
                 />
                 <div
-                  className={`w-28 h-28 rounded-full overflow-hidden shadow-lg ring-4 ring-green-100 cursor-pointer transition hover:scale-105 bg-gray-100 flex items-center justify-center ${
-                    isEditing ? 'hover:ring-2 hover:ring-[#1a4d2e]' : ''
-                  }`}
+                  className={`w-32 h-32 rounded-2xl overflow-hidden shadow-lg ring-2 ring-offset-2 ring-offset-white ring-[#1a4d2e]/20 
+                    cursor-pointer transition-all duration-300 hover:scale-105 hover:rotate-3 
+                    bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center
+                    ${isEditing ? 'hover:ring-[#1a4d2e] hover:ring-4' : ''}
+                    group-hover:shadow-2xl`}
                   onClick={handleProfilePictureClick}
                 >
                   {displayPicture ? (
@@ -601,50 +751,67 @@ export default function UserProfile() {
                       className="w-full h-full object-cover"
                     />
                   ) : (
-                    <UserCircle className="w-20 h-20 text-gray-400" />
+                    <UserCircle className="w-24 h-24 text-gray-400 group-hover:text-[#1a4d2e] transition-colors" />
                   )}
                 </div>
                 
-                {isEditing && displayPicture && (
-                  <button
-                    onClick={handleRemovePicture}
-                    className="absolute bottom-0 left-0 bg-red-500 hover:bg-red-600 text-white p-2 rounded-full shadow-lg transition-all transform hover:scale-110"
-                    title="Remove profile picture"
-                  >
-                    <X className="size-4" />
-                  </button>
-                )}
-                
                 {isEditing && (
-                  <button
-                    onClick={handleProfilePictureClick}
-                    className="absolute bottom-0 right-0 bg-[#1a4d2e] hover:bg-[#2d6b45] text-white p-2 rounded-full shadow-lg transition-all transform group-hover:scale-110"
-                    title="Change profile picture"
-                  >
-                    <Camera className="size-4" />
-                  </button>
+                  <div className="absolute -bottom-2 -right-2 flex gap-1.5">
+                    {displayPicture && (
+                      <button
+                        onClick={handleRemovePicture}
+                        className="bg-red-500 hover:bg-red-600 text-white p-2 rounded-xl shadow-lg 
+                          transition-all duration-200 hover:scale-110 hover:shadow-red-200/50"
+                        title="Remove profile picture"
+                      >
+                        <X className="size-3.5" />
+                      </button>
+                    )}
+                    <button
+                      onClick={handleProfilePictureClick}
+                      className="bg-[#1a4d2e] hover:bg-[#2d6b45] text-white p-2 rounded-xl shadow-lg 
+                        transition-all duration-200 hover:scale-110 hover:shadow-[#1a4d2e]/30"
+                      title="Change profile picture"
+                    >
+                      <Camera className="size-3.5" />
+                    </button>
+                  </div>
                 )}
               </div>
-              <div className="flex-1">
+
+              {/* User Info Section */}
+              <div className="flex-1 min-w-0 pt-1">
                 {isEditing ? (
-                  <input
-                    type="text"
-                    value={displayData.name}
-                    onChange={(e) => handleInputChange('name', e.target.value)}
-                    className="text-3xl font-bold text-gray-900 bg-transparent border-b-2 border-[#1a4d2e] focus:outline-none w-full max-w-md"
-                    placeholder="Enter your name"
-                  />
+                  <div className="relative">
+                    <input
+                      type="text"
+                      value={displayData.name}
+                      onChange={(e) => handleInputChange('name', e.target.value)}
+                      className="text-3xl font-bold text-gray-900 bg-transparent border-b-2 
+                        border-[#1a4d2e] focus:border-[#2d6b45] focus:outline-none 
+                        w-full max-w-md pb-1 transition-colors duration-200
+                        placeholder:text-gray-400"
+                      placeholder="Enter your name"
+                    />
+                    <div className="absolute bottom-0 left-0 w-full h-0.5 bg-[#1a4d2e] scale-x-0 
+                      focus-within:scale-x-100 transition-transform duration-300 origin-left" />
+                  </div>
                 ) : (
-                  <CardTitle className="text-3xl text-gray-900">{displayData.name}</CardTitle>
+                  <CardTitle className="text-3xl font-bold text-gray-900 truncate">
+                    {displayData.name}
+                  </CardTitle>
                 )}
+                
                 <div className="flex flex-wrap items-center gap-3 mt-2">
                   {isEditing ? (
-                    <div className="flex items-center gap-2">
-                      <Shield className="size-4 text-gray-500" />
+                    <div className="flex items-center gap-2 bg-gray-50 px-3 py-1.5 rounded-lg 
+                      border border-gray-200 hover:border-[#1a4d2e] transition-colors duration-200">
+                      <Shield className="size-4 text-[#1a4d2e]" />
                       <select
                         value={displayData.role}
                         onChange={(e) => handleInputChange('role', e.target.value)}
-                        className="p-1 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#1a4d2e]"
+                        className="bg-transparent border-none focus:outline-none text-sm font-medium 
+                          text-gray-700 cursor-pointer py-0.5"
                       >
                         <option value="User">User</option>
                         <option value="System Administrator">System Administrator</option>
@@ -653,46 +820,104 @@ export default function UserProfile() {
                       </select>
                     </div>
                   ) : (
-                    <Badge className="bg-[#1a4d2e] hover:bg-[#2d6b45] px-3 py-1">
-                      <Shield className="size-3 mr-1.5" />
+                    <Badge className="bg-gradient-to-r from-[#1a4d2e] to-[#2d6b45] 
+                      hover:from-[#2d6b45] hover:to-[#3d8b5a] px-4 py-1.5 rounded-lg 
+                      text-sm font-medium shadow-lg shadow-[#1a4d2e]/20 
+                      transition-all duration-300 hover:shadow-xl hover:scale-105">
+                      <Shield className="size-3 mr-1.5 inline-block" />
                       {displayData.role}
                     </Badge>
                   )}
                 </div>
-                <div className="mt-3 space-y-1">
-                  <div className="flex items-center gap-2 text-gray-600">
-                    <Mail className="size-4" />
-                    <span className="text-sm">{displayData.email || userEmail}</span>
+                
+                <div className="mt-2">
+                  <div className="flex items-center gap-2 text-gray-600 
+                    bg-gray-50/50 px-3 py-1.5 rounded-lg border border-gray-100/50
+                    hover:bg-gray-50 transition-colors duration-200">
+                    <Mail className="size-4 text-[#1a4d2e]/70" />
+                    <span className="text-sm font-medium truncate">
+                      {displayData.email || userEmail}
+                    </span>
                   </div>
                 </div>
               </div>
             </div>
-            <div className="flex flex-col items-end gap-3">
-              <div className="flex items-center gap-2 text-green-600 bg-green-50 px-4 py-2 rounded-full border border-green-200">
-                <div className="size-2.5 bg-green-500 rounded-full animate-pulse shadow-sm"></div>
-                <span className="text-sm font-semibold">Active Now</span>
+
+            {/* Metadata Section */}
+            <div className="flex flex-col items-start lg:items-end gap-3 flex-shrink-0">
+              {isNewUser && (
+                <div className="flex items-center gap-2 bg-emerald-50 px-4 py-2 rounded-xl 
+                  border border-emerald-200 shadow-sm">
+                  <div className="relative">
+                    <div className="w-2.5 h-2.5 bg-emerald-500 rounded-full animate-pulse" />
+                    <div className="absolute inset-0 w-2.5 h-2.5 bg-emerald-500 rounded-full 
+                      animate-ping opacity-75" />
+                  </div>
+                  <span className="text-sm font-semibold text-emerald-700">New User</span>
+                </div>
+              )}
+              
+              <div className="flex items-center gap-2 text-gray-500 text-sm 
+                bg-white/50 backdrop-blur-sm px-4 py-2 rounded-xl border border-gray-200/50
+                shadow-sm hover:shadow-md transition-all duration-200">
+                <Clock className="size-4 text-[#1a4d2e]/60" />
+                <span className="font-medium">
+                  Last login: <span className="text-gray-700">{lastLoginDate}</span>
+                </span>
               </div>
-              <div className="flex items-center gap-2 text-gray-500 text-sm">
-                <Clock className="size-4" />
-                <span>Last login: {lastLoginDate}</span>
-              </div>
+              
+              {!isEditing && (
+                <div className="flex items-center gap-2 text-gray-400 text-xs 
+                  bg-gray-50/50 px-3 py-1.5 rounded-lg border border-gray-100">
+                  <Calendar className="size-3" />
+                  <span>Member since 2024</span>
+                </div>
+              )}
             </div>
           </div>
         </CardHeader>
+        
+        {/* System Permissions - MERGED INSIDE PROFILE CARD */}
+        <CardContent className="pt-4">
+          <div className="flex items-center gap-2 mb-3">
+            <Shield className="size-4 text-[#1a4d2e]" />
+            <h3 className="text-sm font-semibold text-gray-700">System Permissions & Access</h3>
+            <Badge className="bg-[#1a4d2e] text-xs ml-2">
+              {displayData.permissions?.length || 0} Permissions
+            </Badge>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            {displayData.permissions && displayData.permissions.length > 0 ? (
+              displayData.permissions.map((permission: string, index: number) => (
+                <div
+                  key={index}
+                  className="flex items-center gap-2 px-3 py-2 border border-green-100 bg-green-50 rounded-lg hover:border-green-200 transition-colors"
+                >
+                  <CheckCircle className="size-4 text-green-600 flex-shrink-0" />
+                  <span className="text-sm font-medium text-gray-700">{permission}</span>
+                </div>
+              ))
+            ) : (
+              <div className="col-span-2 text-center text-gray-400 text-sm py-2">
+                No permissions assigned yet
+              </div>
+            )}
+          </div>
+        </CardContent>
       </Card>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Contact Information */}
         <Card className="shadow-md hover:shadow-lg transition-shadow">
           <CardHeader className="bg-gradient-to-r from-gray-50 to-white border-b">
-            <CardTitle className="flex items-center gap-2 text-xl">
-              <div className="p-2 bg-[#1a4d2e] rounded-lg">
-                <Mail className="size-5 text-white" />
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <div className="p-1.5 bg-[#1a4d2e] rounded-lg">
+                <Mail className="size-4 text-white" />
               </div>
               Contact Information
             </CardTitle>
           </CardHeader>
-          <CardContent className="space-y-5 pt-6">
+          <CardContent className="space-y-4 pt-4">
             <EditableField
               label="Email Address"
               value={displayData.email || userEmail}
@@ -713,8 +938,8 @@ export default function UserProfile() {
             />
             {isEditing ? (
               <div className="flex items-start gap-4 p-3 rounded-lg hover:bg-gray-50 transition-colors">
-                <div className="p-2 bg-purple-50 rounded-lg">
-                  <MapPin className="size-5 text-purple-600" />
+                <div className="p-1.5 bg-green-50 rounded-lg">
+                  <MapPin className="size-4 text-green-600" />
                 </div>
                 <div className="flex-1">
                   <p className="text-sm font-medium text-gray-500 mb-1">Address</p>
@@ -724,7 +949,7 @@ export default function UserProfile() {
                       setLocalAddress(e.target.value);
                       handleInputChange('address', e.target.value);
                     }}
-                    className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#1a4d2e] focus:border-transparent min-h-[60px]"
+                    className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#1a4d2e] focus:border-transparent min-h-[60px] text-sm"
                     placeholder="Enter your address"
                   />
                 </div>
@@ -732,12 +957,12 @@ export default function UserProfile() {
             ) : (
               displayData.address && (
                 <div className="flex items-start gap-4 p-3 rounded-lg hover:bg-gray-50 transition-colors">
-                  <div className="p-2 bg-purple-50 rounded-lg">
-                    <MapPin className="size-5 text-purple-600" />
+                  <div className="p-1.5 bg-purple-50 rounded-lg">
+                    <MapPin className="size-4 text-purple-600" />
                   </div>
                   <div className="flex-1">
                     <p className="text-sm font-medium text-gray-500 mb-1">Address</p>
-                    <p className="font-semibold text-gray-900">{displayData.address}</p>
+                    <p className="text-sm font-semibold text-gray-900">{displayData.address}</p>
                   </div>
                 </div>
               )
@@ -747,7 +972,7 @@ export default function UserProfile() {
 
         {/* Contacts */}
         <Card className="shadow-md hover:shadow-lg transition-shadow">
-          <CardHeader className="bg-gradient-to-r from-gray-50 to-white border-b py-4">
+          <CardHeader className="bg-gradient-to-r from-gray-50 to-white border-b py-3">
             <CardTitle className="flex items-center gap-2 text-lg">
               <div className="p-1.5 bg-[#1a4d2e] rounded-lg">
                 <Users className="size-4 text-white" />
@@ -756,11 +981,11 @@ export default function UserProfile() {
             </CardTitle>
           </CardHeader>
           <CardContent className="pt-4">
-            <div className="relative mb-4">
+            <div className="relative mb-3">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 size-4 text-gray-400" />
               <input
                 type="text"
-                placeholder="Search contacts by name, email, phone, or role..."
+                placeholder="Search contacts..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="w-full pl-9 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1a4d2e] focus:border-transparent text-sm"
@@ -787,7 +1012,7 @@ export default function UserProfile() {
               </div>
             )}
             
-            <div className="space-y-2 max-h-[400px] overflow-y-auto pr-1">
+            <div className="space-y-2 max-h-[300px] overflow-y-auto pr-1">
               {filteredContacts.length > 0 ? (
                 filteredContacts.map((contact: any) => (
                   <div key={contact.id} className="p-2.5 border border-gray-200 rounded-lg hover:border-[#1a4d2e] transition-colors">
@@ -874,44 +1099,6 @@ export default function UserProfile() {
           </CardContent>
         </Card>
       </div>
-
-      {/* System Permissions */}
-      <Card className="shadow-md">
-        <CardHeader className="bg-gradient-to-r from-purple-50 to-indigo-50 border-b">
-          <CardTitle className="flex items-center gap-2 text-xl">
-            <div className="p-2 bg-purple-600 rounded-lg">
-              <Shield className="size-5 text-white" />
-            </div>
-            System Permissions & Access
-          </CardTitle>
-          <CardDescription className="mt-2">
-            {isNewUser 
-              ? "You'll get more permissions as you use the system" 
-              : "Your current access levels and permissions within the Paintelligent system"}
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="pt-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {displayData.permissions && displayData.permissions.length > 0 ? (
-              displayData.permissions.map((permission: string, index: number) => (
-                <div
-                  key={index}
-                  className="flex items-center gap-3 p-4 border-2 border-green-100 bg-green-50 rounded-lg hover:border-green-200 transition-colors"
-                >
-                  <div className="p-2 bg-green-600 rounded-lg">
-                    <CheckCircle className="size-4 text-white" />
-                  </div>
-                  <span className="font-semibold text-gray-800">{permission}</span>
-                </div>
-              ))
-            ) : (
-              <div className="col-span-2 text-center text-gray-500 py-4">
-                No permissions assigned yet
-              </div>
-            )}
-          </div>
-        </CardContent>
-      </Card>
 
       <style>{`
         @keyframes slideIn {

@@ -954,15 +954,15 @@ export const clearSalesForecastData = async (email: string) => {
 };
 
 // ============================================================
-// USER PROFILE
+// USER PROFILE - COMPLETE WITH ALL FIELDS
 // ============================================================
 
 export const saveUserProfile = async (email: string, profileData: any) => {
   console.log('📤 Saving user profile for:', email);
+  console.log('📤 Profile data:', profileData);
   
   try {
     const payload = {
-      email: email,
       full_name: profileData.name || null,
       phone: profileData.phone || null,
       role: profileData.role || null,
@@ -972,8 +972,11 @@ export const saveUserProfile = async (email: string, profileData: any) => {
       employee_id: profileData.employeeId || null,
       permissions: profileData.permissions || [],
       contacts: profileData.contacts || [],
+      profile_picture: profileData.profile_picture || null,
       updated_at: new Date().toISOString(),
     };
+
+    console.log('📤 Payload to save:', payload);
 
     const { error } = await supabase
       .from('user_data')
@@ -985,7 +988,7 @@ export const saveUserProfile = async (email: string, profileData: any) => {
       throw error;
     }
 
-    console.log('✅ User profile saved successfully!');
+    console.log('✅ User profile saved successfully to Supabase!');
     return true;
   } catch (error: any) {
     console.error('❌ Error saving user profile:', error);
@@ -999,7 +1002,7 @@ export const getUserProfile = async (email: string) => {
   try {
     const { data, error } = await supabase
       .from('user_data')
-      .select('full_name, phone, role, location, address, join_date, employee_id, permissions, contacts')
+      .select('full_name, phone, role, location, address, join_date, employee_id, permissions, contacts, profile_picture')
       .eq('email', email)
       .maybeSingle();
 
@@ -1008,7 +1011,12 @@ export const getUserProfile = async (email: string) => {
       throw error;
     }
 
-    if (!data) return null;
+    if (!data) {
+      console.log('ℹ️ No profile data found for:', email);
+      return null;
+    }
+
+    console.log('📥 Profile data from Supabase:', data);
 
     return {
       name: data.full_name || 'New User',
@@ -1024,6 +1032,7 @@ export const getUserProfile = async (email: string) => {
       employeeId: data.employee_id || `EMP-${Date.now().toString().slice(-6)}`,
       permissions: data.permissions || ['Seasonal Forecast', 'Paint Analyzer'],
       contacts: data.contacts || [],
+      profile_picture: data.profile_picture || null,
     };
   } catch (error: any) {
     console.error('❌ Error getting user profile:', error);
@@ -1032,15 +1041,15 @@ export const getUserProfile = async (email: string) => {
 };
 
 // ============================================================
-// PROFILE PICTURE
+// PROFILE PICTURE - SEPARATE FUNCTIONS
 // ============================================================
 
 export const saveProfilePicture = async (email: string, pictureData: string | null) => {
   console.log('📸 Saving profile picture for:', email);
+  console.log('📸 Picture data length:', pictureData?.length || 0);
   
   try {
     const payload = {
-      email: email,
       profile_picture: pictureData || null,
       updated_at: new Date().toISOString(),
     };
@@ -1055,7 +1064,7 @@ export const saveProfilePicture = async (email: string, pictureData: string | nu
       throw error;
     }
 
-    console.log('✅ Profile picture saved successfully!');
+    console.log('✅ Profile picture saved successfully to Supabase!');
     return true;
   } catch (error: any) {
     console.error('❌ Error saving profile picture:', error);
@@ -1078,6 +1087,7 @@ export const getProfilePicture = async (email: string) => {
       throw error;
     }
 
+    console.log('📥 Profile picture:', data?.profile_picture ? 'Found' : 'Not found');
     return data?.profile_picture || null;
   } catch (error: any) {
     console.error('❌ Error getting profile picture:', error);

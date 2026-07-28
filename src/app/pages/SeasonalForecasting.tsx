@@ -97,7 +97,7 @@ const showNotification = (message: string, type: 'success' | 'error' | 'info' = 
   const colors = {
     success: 'bg-green-600 border-green-400/30',
     error: 'bg-red-600 border-red-400/30',
-    info: 'bg-blue-600 border-blue-400/30'
+    info: 'bg-green-600 border-green-400/30'
   };
 
   const icons = {
@@ -1051,12 +1051,12 @@ Return ONLY valid JSON with this structure:
 
   return (
     <div
-      className={`
-        min-h-screen bg-white p-6 pb-10 space-y-6 
-        transition-all duration-700 ease-out
-        ${isVisible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-5"}
-      `}
-    >
+  className={`
+    min-h-screen bg-green-100 pl-7 pr-7 pt-4 pb-8 space-y-3 
+    transition-all duration-700 ease-out
+    ${isVisible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-5"}
+  `}
+>
       <style>{`
         @keyframes slideUp {
           from {
@@ -1075,7 +1075,7 @@ Return ONLY valid JSON with this structure:
       `}</style>
 
       {/* Header with Sync Status */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center pl-3 justify-between">
         <div>
           {lastGenerated && (
             <p className="text-xs text-gray-500 mt-1">
@@ -1087,14 +1087,14 @@ Return ONLY valid JSON with this structure:
           <div className="flex items-center gap-2 text-xs">
             {syncStatus === "syncing" && (
               <>
-                <Loader2 className="size-3 animate-spin text-yellow-500" />
-                <span className="text-yellow-600">Syncing...</span>
+                <Loader2 className="size-3 animate-spin text-green-500" />
+                <span className="text-green-600">Syncing...</span>
               </>
             )}
             {syncStatus === "success" && (
               <>
                 <Cloud className="size-3 text-green-500" />
-                <span className="text-green-600">Cloud Synced</span>
+                <span className="text-green-600 ">Cloud Synced</span>
               </>
             )}
             {syncStatus === "error" && (
@@ -1117,15 +1117,15 @@ Return ONLY valid JSON with this structure:
           DATA UPLOAD SECTION
           ============================================================ */}
       <section>
-        <Card className="overflow-hidden border border-blue-100 shadow-sm">
-          <CardHeader className="py-3 px-4 bg-gradient-to-r from-blue-50 via-white to-blue-50">
+        <Card className="overflow-hidden border border-green-100 shadow-sm">
+          <CardHeader className="py-3 px-4 bg-gradient-to-r from-green-50 via-white to-green-50">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <Database className="size-4 text-blue-600" />
+                <Database className="size-4 text-green-600" />
                 <CardTitle className="text-sm font-semibold text-gray-900">Sales Data</CardTitle>
               </div>
-              <Badge className={isDataLoaded ? "bg-green-600 text-white shadow-sm text-xs" : "bg-red-600 text-white shadow-sm text-xs"}>
-                {isDataSaved ? "✅ SAVED" : isDataLoaded ? "📂 LOADED" : "✗ NO DATA"}
+              <Badge className={isDataLoaded ? "bg-green-800 text-white shadow-sm text-xs" : "bg-green-400 text-white shadow-sm text-xs"}>
+                {isDataSaved ? "✅ SAVED" : isDataLoaded ? "📂 LOADED" : "✗ EMPTY DATA"}
               </Badge>
             </div>
           </CardHeader>
@@ -1153,20 +1153,20 @@ Return ONLY valid JSON with this structure:
                     relative min-h-[80px] cursor-pointer overflow-hidden rounded-xl border-2 border-dashed p-4
                     transition-all duration-300
                     ${isDraggingFile
-                      ? "border-blue-600 bg-blue-50 shadow-md"
-                      : "border-blue-300/60 bg-white hover:border-blue-600 hover:bg-blue-50/60"
+                      ? "border-green-600 bg-green-50 shadow-md"
+                      : "border-green-300/60 bg-white hover:border-green-600 hover:bg-green-50/60"
                     }
                   `}
                 >
                   <div className="flex items-center justify-center gap-4">
-                    <FileSpreadsheet className="size-6 text-blue-500" />
+                    <FileSpreadsheet className="size-6 text-green-500" />
                     <div>
                       <p className="text-sm font-medium text-gray-700">Drop CSV or Excel file</p>
                       <p className="text-xs text-gray-400">or click to browse</p>
                     </div>
                     <div className="flex gap-1">
                       {['CSV', 'XLSX'].map((format) => (
-                        <Badge key={format} variant="secondary" className="text-xs bg-blue-50 text-blue-700 border border-blue-200">
+                        <Badge key={format} variant="secondary" className="text-xs bg-green-50 text-green-700 border border-green-200">
                           {format}
                         </Badge>
                       ))}
@@ -1175,16 +1175,16 @@ Return ONLY valid JSON with this structure:
                 </div>
                 
                 {/* HEADER REMINDER - Required headers for sales data */}
-                <div className="mt-3 p-3 bg-amber-50 rounded-lg border border-amber-200">
-                  <p className="text-xs font-medium text-amber-800">📋 Required Headers (exact match):</p>
+                <div className="mt-3 p-3 bg-green-50 rounded-lg border border-green-200">
+                  <p className="text-xs font-medium text-green-800">📋 Required Headers (exact match):</p>
                   <div className="flex flex-wrap gap-1.5 mt-1.5">
-                    <Badge variant="outline" className="text-xs bg-white border-amber-300 text-amber-700 font-mono">Date</Badge>
-                    <Badge variant="outline" className="text-xs bg-white border-amber-300 text-amber-700 font-mono">Category</Badge>
-                    <Badge variant="outline" className="text-xs bg-white border-amber-300 text-amber-700 font-mono">Total Sales (PHP)</Badge>
-                    <Badge variant="outline" className="text-xs bg-white border-amber-300 text-amber-700 font-mono">Units Sold</Badge>
-                    <Badge variant="outline" className="text-xs bg-white border-amber-300 text-amber-700 font-mono">Season</Badge>
+                    <Badge variant="outline" className="text-xs bg-white border-green-300 text-green-700 font-mono">Date</Badge>
+                    <Badge variant="outline" className="text-xs bg-white border-green-300 text-green-700 font-mono">Category</Badge>
+                    <Badge variant="outline" className="text-xs bg-white border-green-300 text-green-700 font-mono">Total Sales (PHP)</Badge>
+                    <Badge variant="outline" className="text-xs bg-white border-green-300 text-green-700 font-mono">Units Sold</Badge>
+                    <Badge variant="outline" className="text-xs bg-white border-green-300 text-green-700 font-mono">Season</Badge>
                   </div>
-                  <p className="text-[11px] text-amber-600 mt-1.5">⚠️ Headers are case-sensitive and must match exactly</p>
+                  <p className="text-[11px] text-green-600 mt-1.5">⚠️ Headers are case-sensitive and must match exactly</p>
                 </div>
               </div>
             ) : (
@@ -1193,11 +1193,11 @@ Return ONLY valid JSON with this structure:
                 <div className={`flex items-center justify-between p-2 rounded-lg border transition-all duration-300 ${
                   isDataSaved 
                     ? "bg-gray-50 border-gray-200 opacity-70" 
-                    : "bg-blue-50 border-blue-200"
+                    : "bg-green-50 border-green-200"
                 }`}>
                   <div className="flex items-center gap-3">
                     <div className={`flex size-8 items-center justify-center rounded-lg text-white ${
-                      isDataSaved ? "bg-gray-400" : "bg-blue-600"
+                      isDataSaved ? "bg-gray-400" : "bg-green-600"
                     }`}>
                       {uploadedDataName.endsWith('.csv') ? (
                         <File className="size-4" />
@@ -1229,7 +1229,7 @@ Return ONLY valid JSON with this structure:
                       <Button
                         onClick={() => csvInputRef.current?.click()}
                         variant="outline"
-                        className="border-blue-300 text-blue-600 hover:bg-blue-50 text-xs h-7 px-2"
+                        className="border-green-300 text-green-600 hover:bg-green-50 text-xs h-7 px-2"
                       >
                         <RefreshCw className="size-3 mr-1" />
                         Replace
@@ -1237,7 +1237,7 @@ Return ONLY valid JSON with this structure:
                       <Button
                         onClick={handleRemoveData}
                         variant="outline"
-                        className="border-red-300 text-red-600 hover:bg-red-50 text-xs h-7 px-2"
+                        className="border-green-300 text-green-600 hover:bg-red-50 text-xs h-7 px-2"
                       >
                         <X className="size-3 mr-1" />
                         Remove
@@ -1248,7 +1248,7 @@ Return ONLY valid JSON with this structure:
                       <Button
                         onClick={() => csvInputRef.current?.click()}
                         variant="outline"
-                        className="border-blue-300 text-blue-600 hover:bg-blue-50 text-xs h-7 px-2"
+                        className="border-green-300 text-green-600 hover:bg-green-50 text-xs h-7 px-2"
                       >
                         <RefreshCw className="size-3 mr-1" />
                         Replace
@@ -1256,15 +1256,12 @@ Return ONLY valid JSON with this structure:
                       <Button
                         onClick={handleClearSavedData}
                         variant="outline"
-                        className="border-red-300 text-red-600 hover:bg-red-50 text-xs h-7 px-2"
+                        className="border-green-300 text-green-600 hover:bg-green-50 text-xs h-7 px-2"
                       >
                         <X className="size-3 mr-1" />
                         Clear
                       </Button>
-                      <div className="ml-auto flex items-center gap-1 text-xs text-green-600">
-                        <div className="size-2 bg-green-500 rounded-full animate-pulse" />
-                        <span>Active</span>
-                      </div>
+                      
                     </>
                   )}
                 </div>
@@ -1330,19 +1327,19 @@ Return ONLY valid JSON with this structure:
               </CardContent>
             </Card>
 
-            <Card className="shadow-md border-l-4 border-blue-500">
+            <Card className="shadow-md border-l-4 border-green-500">
               <CardContent className="py-6">
                 <div className="flex justify-between items-center">
                   <div>
                     <p className="text-sm text-gray-500">Rainy Season</p>
-                    <h2 className="text-2xl font-bold text-blue-700">
+                    <h2 className="text-2xl font-bold text-green-700">
                       ₱{rainySales.toLocaleString()}
                     </h2>
                     <p className="text-xs text-gray-500 mt-1">
                       {salesData.filter((r) => r.season === "Rainy").length} Months
                     </p>
                   </div>
-                  <TrendingDown className="w-9 h-9 text-blue-500" />
+                  <TrendingDown className="w-9 h-9 text-green-500" />
                 </div>
               </CardContent>
             </Card>
@@ -1581,14 +1578,14 @@ Return ONLY valid JSON with this structure:
           LOCKED STATE (when data loaded but not saved)
           ============================================================ */}
       {isDataLoaded && !isDataSaved && salesData.length > 0 && (
-        <Card className="border-2 border-yellow-200 bg-yellow-50">
+        <Card className="border-2 border-green-200 bg-green-50">
           <CardContent className="py-8">
             <div className="flex flex-col items-center text-center">
-              <Save className="size-12 text-yellow-500 mb-4" />
-              <h3 className="text-xl font-semibold text-yellow-700">
+              <Save className="size-12 text-green-500 mb-4" />
+              <h3 className="text-xl font-semibold text-green-700">
                 Save Data to Enable Forecasting
               </h3>
-              <p className="text-yellow-600 mt-2 max-w-md">
+              <p className="text-green-600 mt-2 max-w-md">
                 Click the <strong>"Save & Enable"</strong> button above to unlock AI forecasting.
               </p>
             </div>
@@ -1608,9 +1605,9 @@ Return ONLY valid JSON with this structure:
               Please upload a CSV or Excel file with your sales data to generate forecasts and insights.
             </p>
             <div className="mt-6 flex flex-wrap justify-center gap-2">
-              <Badge className="bg-[#1a4d2e] text-white">Sales Forecast</Badge>
-              <Badge className="bg-green-600 text-white">Inventory Insights</Badge>
-              <Badge className="bg-blue-600 text-white">AI Analytics</Badge>
+              <Badge className="bg-[#0ea161] text-white">Sales Forecast</Badge>
+              <Badge className="bg-[#10963f] text-white">Inventory Insights</Badge>
+              <Badge className="bg-[#0c6c28] text-white">AI Analytics</Badge>
             </div>
           </CardContent>
         </Card>
@@ -1674,9 +1671,9 @@ Return ONLY valid JSON with this structure:
           {/* ── Seasonal Analysis ── */}
           {seasonalTrends && (
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <Card className="shadow-md border-l-4 border-blue-500">
+              <Card className="shadow-md border-l-4 border-green-500">
                 <CardHeader>
-                  <CardTitle className="flex items-center gap-2 text-blue-700">
+                  <CardTitle className="flex items-center gap-2 text-green-700">
                     <TrendingDown className="w-5 h-5" />
                     Rainy Season Analysis
                   </CardTitle>
@@ -1697,7 +1694,7 @@ Return ONLY valid JSON with this structure:
                   </div>
                   <div className="flex justify-between items-center">
                     <span>Sales Trend</span>
-                    <Badge className="bg-blue-100 text-blue-700">
+                    <Badge className="bg-green-100 text-green-700">
                       {seasonalTrends.rainy?.trend || "N/A"}
                     </Badge>
                   </div>
@@ -1771,7 +1768,7 @@ Return ONLY valid JSON with this structure:
                               className={
                                 season === "dry"
                                   ? "bg-green-700 text-white"
-                                  : "bg-blue-600 text-white"
+                                  : "bg-green-600 text-white"
                               }
                             >
                               {(highDemand[season] || []).length} Categories
@@ -1796,7 +1793,7 @@ Return ONLY valid JSON with this structure:
                                       className={
                                         season === "dry"
                                           ? "bg-green-700"
-                                          : "bg-blue-600"
+                                          : "bg-green-600"
                                       }
                                     >
                                       #{index + 1}
@@ -2057,8 +2054,8 @@ Return ONLY valid JSON with this structure:
           {marketing.length > 0 && (
             <section className="space-y-4">
               <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-yellow-100 to-amber-200 flex items-center justify-center shadow-sm">
-                  <Lightbulb className="size-5 text-yellow-700" />
+                <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-green-100 to-emerald-200 flex items-center justify-center shadow-sm">
+                  <Lightbulb className="size-5 text-green-700" />
                 </div>
                 <div>
                   <h2 className="text-xl font-bold text-gray-900 tracking-tight">Marketing Strategies</h2>
@@ -2070,7 +2067,7 @@ Return ONLY valid JSON with this structure:
                   const drySeason = (strategy.season || "").toLowerCase().includes("dry");
                   return (
                     <Card key={index} className="border-0 shadow-lg hover:shadow-xl transition-all duration-300 overflow-hidden">
-                      <div className={`${drySeason ? "bg-gradient-to-r from-green-600 to-emerald-600" : "bg-gradient-to-r from-blue-600 to-cyan-600"} px-4 py-3`}>
+                      <div className={`${drySeason ? "bg-gradient-to-r from-green-600 to-emerald-600" : "bg-gradient-to-r from-green-600 to-cyan-600"} px-4 py-3`}>
                         <div className="flex items-center gap-2.5">
                           <div className="w-7 h-7 rounded-lg bg-white/20 flex items-center justify-center backdrop-blur-sm">
                             <Lightbulb className={`size-4 text-white`} />
@@ -2093,8 +2090,8 @@ Return ONLY valid JSON with this structure:
                         <div className="grid gap-2.5">
                           {(strategy.strategies || []).map((item: string, i: number) => (
                             <div key={i} className="flex gap-3 rounded-xl border border-gray-100 bg-white p-3 hover:shadow-md transition-all hover:border-gray-200">
-                              <div className={`flex h-7 w-7 items-center justify-center rounded-full flex-shrink-0 ${drySeason ? "bg-green-100" : "bg-blue-100"}`}>
-                                <CheckCircle2 className={`size-4 ${drySeason ? "text-green-600" : "text-blue-600"}`} />
+                              <div className={`flex h-7 w-7 items-center justify-center rounded-full flex-shrink-0 ${drySeason ? "bg-green-100" : "bg-green-100"}`}>
+                                <CheckCircle2 className={`size-4 ${drySeason ? "text-green-600" : "text-green-600"}`} />
                               </div>
                               <div className="flex-1">
                                 <p className="text-sm font-medium text-gray-700">Strategy {i + 1}</p>

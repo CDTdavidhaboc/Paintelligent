@@ -1090,7 +1090,7 @@ Required JSON format:
   return (
     <div
       className={`
-        min-h-screen bg-white p-7 pt-3 space-y-6
+        min-h-screen bg-green-100 p-7 pt-3 space-y-3
         transition-all duration-700 ease-out transform
         ${isVisible ? "opacity-100 translate-y-0 scale-100" : "opacity-0 translate-y-6 scale-[0.98]"}
       `}
@@ -1161,15 +1161,15 @@ Required JSON format:
 
       {/* Minimal Inventory Source */}
       <section>
-        <Card className="overflow-hidden border border-blue-100 shadow-sm">
-          <CardHeader className="py-3 px-4 bg-gradient-to-r from-blue-50 via-white to-blue-50">
+        <Card className="overflow-hidden border border-green-100 shadow-sm ">
+          <CardHeader className="py-3 px-4 bg-gradient-to-r from-green-50 via-white to-green-50">
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Database className="size-4 text-blue-600" />
+              <div className="flex items-center gap-3">
+                <Database className="size-4 text-green-600" />
                 <CardTitle className="text-sm font-semibold text-gray-900">Inventory</CardTitle>
               </div>
-              <Badge className={isDataLoaded ? "bg-green-600 text-white shadow-sm text-xs" : "bg-red-600 text-white shadow-sm text-xs"}>
-                {isDataSaved ? "✅ SAVED" : isDataLoaded ? "📂 LOADED" : "✗ NO DATA"}
+              <Badge className={isDataLoaded ? "bg-green-600 text-white shadow-sm text-xs" : "bg-green-500 text-white shadow-sm text-xs"}>
+                {isDataSaved ? "✅ SAVED" : isDataLoaded ? "📂 LOADED" : "✗ EMPTY DATA"}
               </Badge>
             </div>
           </CardHeader>
@@ -1197,20 +1197,20 @@ Required JSON format:
                     relative min-h-[80px] cursor-pointer overflow-hidden rounded-xl border-2 border-dashed p-4
                     transition-all duration-300
                     ${isDraggingFile
-                      ? "border-blue-600 bg-blue-50 shadow-md"
-                      : "border-blue-300/60 bg-white hover:border-blue-600 hover:bg-blue-50/60"
+                      ? "border-green-600 bg-green-50 shadow-md"
+                      : "border-green-300/60 bg-white hover:border-green-600 hover:bg-green-50/60"
                     }
                   `}
                 >
                   <div className="flex items-center justify-center gap-4">
-                    <FileSpreadsheet className="size-6 text-blue-500" />
+                    <FileSpreadsheet className="size-6 text-green-500" />
                     <div>
                       <p className="text-sm font-medium text-gray-700">Drop CSV or Excel file</p>
                       <p className="text-xs text-gray-400">or click to browse</p>
                     </div>
                     <div className="flex gap-1">
                       {['CSV', 'XLSX'].map((format) => (
-                        <Badge key={format} variant="secondary" className="text-xs bg-blue-50 text-blue-700 border border-blue-200">
+                        <Badge key={format} variant="secondary" className="text-xs bg-green-50 text-green-700 border border-green-200">
                           {format}
                         </Badge>
                       ))}
@@ -1219,17 +1219,17 @@ Required JSON format:
                 </div>
                 
                 {/* HEADER REMINDER - ADDED HERE */}
-                <div className="mt-3 p-3 bg-amber-50 rounded-lg border border-amber-200">
-                  <p className="text-xs font-medium text-amber-800">📋 Required Headers:</p>
+                <div className="mt-3 p-3 bg-green-50 rounded-lg border border-green-200">
+                  <p className="text-xs font-medium text-green-800">📋 Required Headers:</p>
                   <div className="flex flex-wrap gap-1.5 mt-1.5">
-                    <Badge variant="outline" className="text-xs bg-white border-amber-300 text-amber-700">Product</Badge>
-                    <Badge variant="outline" className="text-xs bg-white border-amber-300 text-amber-700">Brand</Badge>
-                    <Badge variant="outline" className="text-xs bg-white border-amber-300 text-amber-700">Category</Badge>
-                    <Badge variant="outline" className="text-xs bg-white border-amber-300 text-amber-700">Stocks</Badge>
-                    <Badge variant="outline" className="text-xs bg-white border-amber-300 text-amber-700">Est. Price (PHP)</Badge>
-                    <Badge variant="outline" className="text-xs bg-white border-amber-300 text-amber-700">Unit Purchase Price</Badge>
+                    <Badge variant="outline" className="text-xs bg-white border-green-300 text-green-700">Product</Badge>
+                    <Badge variant="outline" className="text-xs bg-white border-green-300 text-green-700">Brand</Badge>
+                    <Badge variant="outline" className="text-xs bg-white border-green-300 text-green-700">Category</Badge>
+                    <Badge variant="outline" className="text-xs bg-white border-green-300 text-green-700">Stocks</Badge>
+                    <Badge variant="outline" className="text-xs bg-white border-green-300 text-green-700">Est. Price (PHP)</Badge>
+                    <Badge variant="outline" className="text-xs bg-white border-green-300 text-green-700">Unit Purchase Price</Badge>
                   </div>
-                  <p className="text-[11px] text-amber-600 mt-1.5">⚠️ Headers are case-sensitive (match exactly)</p>
+                  <p className="text-[11px] text-green-600 mt-1.5">⚠️ Headers are case-sensitive (match exactly)</p>
                 </div>
               </div>
             ) : (

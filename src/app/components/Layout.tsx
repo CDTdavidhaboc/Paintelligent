@@ -1,7 +1,7 @@
 // src/app/components/Layout.tsx
 import { Outlet, NavLink } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { getUserData } from "../lib/supabase";
 import { 
   Menu, 
@@ -27,8 +27,8 @@ export default function Layout() {
     description: "Sunny weather"
   });
 
-  // Load user name from Supabase first, then localStorage
-  const loadUserName = async () => {
+  // Load user name from multiple sources
+  const loadUserName = useCallback(async () => {
     console.log("🔄 Loading user name for:", userEmail);
     
     if (!userEmail) {
@@ -37,22 +37,17 @@ export default function Layout() {
       return;
     }
 
-    try {
-      const userData = await getUserData(userEmail);
-      if (userData) {
-        const name = userData.full_name || userData.name;
-        if (name) {
-          console.log("✅ Loaded name from Supabase:", name);
-          setUserName(name);
-          const userDataKey = `user_${userEmail}_profileData`;
-          localStorage.setItem(userDataKey, JSON.stringify({ name: name }));
-          return;
-        }
-      }
-    } catch (error) {
-      console.error("Error loading from Supabase:", error);
+    // First, check if we have a saved name in localStorage
+    const userNameKey = `user_${userEmail}_userName`;
+    const savedName = localStorage.getItem(userNameKey);
+    
+    if (savedName) {
+      console.log("✅ Found saved name in localStorage:", savedName);
+      setUserName(savedName);
+      return;
     }
 
+    // Fallback to profile data
     const userDataKey = `user_${userEmail}_profileData`;
     let savedData = localStorage.getItem(userDataKey);
 
@@ -64,8 +59,10 @@ export default function Layout() {
       try {
         const parsedData = JSON.parse(savedData);
         if (parsedData.name) {
-          console.log("✅ Loaded name from storage:", parsedData.name);
+          console.log("✅ Loaded name from profile data:", parsedData.name);
           setUserName(parsedData.name);
+          // Save it separately for quick access
+          localStorage.setItem(userNameKey, parsedData.name);
           return;
         }
       } catch (error) {
@@ -73,24 +70,37 @@ export default function Layout() {
       }
     }
 
+    // Try Supabase
+    try {
+      const userData = await getUserData(userEmail);
+      if (userData) {
+        const name = userData.full_name || userData.name;
+        if (name) {
+          console.log("✅ Loaded name from Supabase:", name);
+          setUserName(name);
+          localStorage.setItem(userNameKey, name);
+          return;
+        }
+      }
+    } catch (error) {
+      console.error("Error loading from Supabase:", error);
+    }
+
+    // Last resort: use email
     if (userEmail) {
       const emailName = userEmail.split('@')[0];
       const displayName = emailName.charAt(0).toUpperCase() + emailName.slice(1);
       console.log("ℹ️ Using email fallback:", displayName);
       setUserName(displayName);
     }
-  };
+  }, [userEmail]);
 
   // Determine season based on month (Philippines - wet/dry seasons)
   const getSeason = () => {
     const now = new Date();
     const month = now.getMonth() + 1; // 1-12
     
-    // Philippine seasons based on months
-    // Dry Season: November to April
-    // Wet Season: May to October
     if (month >= 11 || month <= 4) {
-      // Check if it's peak dry season (Feb-Apr)
       if (month >= 2 && month <= 4) {
         return {
           name: "Dry Season",
@@ -104,7 +114,6 @@ export default function Layout() {
         description: "Cool and dry weather"
       };
     } else {
-      // Check if it's peak wet season (Jul-Sep)
       if (month >= 7 && month <= 9) {
         return {
           name: "Rainy Season",
@@ -126,12 +135,43 @@ export default function Layout() {
 
   useEffect(() => {
     loadUserName();
-  }, [userEmail]);
+  }, [userEmail, loadUserName]);
 
+  // Handle profile updates with immediate state update
+  useEffect(() => {
+    const handleProfileUpdate = (event: Event) => {
+      console.log("📥 Profile update event received");
+      
+      const customEvent = event as CustomEvent;
+      if (customEvent.detail?.name) {
+        console.log("✅ Immediately updating name to:", customEvent.detail.name);
+        setUserName(customEvent.detail.name);
+        
+        // Also save it to localStorage immediately
+        if (userEmail) {
+          const userNameKey = `user_${userEmail}_userName`;
+          localStorage.setItem(userNameKey, customEvent.detail.name);
+        }
+      } else {
+        // Reload from storage
+        console.log("ℹ️ No name in event, reloading from storage");
+        loadUserName();
+      }
+    };
+
+    // Listen for the event
+    window.addEventListener('profileUpdated', handleProfileUpdate);
+    
+    return () => {
+      window.removeEventListener('profileUpdated', handleProfileUpdate);
+    };
+  }, [userEmail, loadUserName]);
+
+  // Also listen for storage changes from other tabs
   useEffect(() => {
     const handleStorageChange = (e: StorageEvent) => {
-      if (e.key === 'userEmail' || e.key === 'isAuthenticated') {
-        console.log("📥 Storage event - reloading user name");
+      if (e.key === `user_${userEmail}_userName` || e.key === 'userName') {
+        console.log("📥 Storage changed, reloading name");
         loadUserName();
       }
     };
@@ -140,33 +180,7 @@ export default function Layout() {
     return () => {
       window.removeEventListener('storage', handleStorageChange);
     };
-  }, [userEmail]);
-
-  useEffect(() => {
-    const handleProfileUpdate = () => {
-      console.log("📥 Profile update event - reloading user name");
-      loadUserName();
-    };
-
-    window.addEventListener('profileUpdated', handleProfileUpdate);
-    return () => {
-      window.removeEventListener('profileUpdated', handleProfileUpdate);
-    };
-  }, [userEmail]);
-
-  useEffect(() => {
-    const handleVisibilityChange = () => {
-      if (!document.hidden) {
-        console.log("👀 Page became visible - reloading user name");
-        loadUserName();
-      }
-    };
-
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    return () => {
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-    };
-  }, [userEmail]);
+  }, [userEmail, loadUserName]);
 
   const now = new Date();
   const month = now.toLocaleString('default', { month: 'long' });
@@ -199,7 +213,7 @@ export default function Layout() {
                 <img src={logo} alt="Paintelligent" className="h-8 w-auto" />
                 <div className="hidden sm:block">
                   <p className="text-sm font-medium text-white flex items-center gap-1">
-                    Hello, {userName}! 😊
+                    Hello and welcome, {userName}!
                   </p>
                   <p className="text-xs text-green-300 flex items-center gap-2">
                     <CalendarDays className="size-3" />
