@@ -1174,7 +1174,7 @@ Required JSON format:
             </div>
           </CardHeader>
 
-          <CardContent className="pt-3 pb-3">
+          <CardContent className="">
             <input
               ref={csvInputRef}
               type="file"
@@ -1238,11 +1238,11 @@ Required JSON format:
                 <div className={`flex items-center justify-between p-2 rounded-lg border transition-all duration-300 ${
                   isDataSaved 
                     ? "bg-gray-50 border-gray-200 opacity-70" 
-                    : "bg-blue-50 border-blue-200"
+                    : "bg-green-50 border-green-200"
                 }`}>
                   <div className="flex items-center gap-3">
                     <div className={`flex size-8 items-center justify-center rounded-lg text-white ${
-                      isDataSaved ? "bg-gray-400" : "bg-blue-600"
+                      isDataSaved ? "bg-gray-400" : "bg-green-600"
                     }`}>
                       {uploadedDataName.endsWith('.csv') ? (
                         <File className="size-4" />
@@ -1274,7 +1274,7 @@ Required JSON format:
                       <Button
                         onClick={() => csvInputRef.current?.click()}
                         variant="outline"
-                        className="border-blue-300 text-blue-600 hover:bg-blue-50 text-xs h-7 px-2"
+                        className="border-green-300 text-green-600 hover:bg-green-50 text-xs h-7 px-2"
                       >
                         <RefreshCw className="size-3 mr-1" />
                         Replace
@@ -1282,7 +1282,7 @@ Required JSON format:
                       <Button
                         onClick={handleRemoveData}
                         variant="outline"
-                        className="border-red-300 text-red-600 hover:bg-red-50 text-xs h-7 px-2"
+                        className="border-green-300 text-green-600 hover:bg-green-50 text-xs h-7 px-2"
                       >
                         <X className="size-3 mr-1" />
                         Remove
@@ -1293,7 +1293,7 @@ Required JSON format:
                       <Button
                         onClick={() => csvInputRef.current?.click()}
                         variant="outline"
-                        className="border-blue-300 text-blue-600 hover:bg-blue-50 text-xs h-7 px-2"
+                        className="border-green-300 text-green-600 hover:bg-green-50 text-xs h-7 px-2"
                       >
                         <RefreshCw className="size-3 mr-1" />
                         Replace
@@ -1301,7 +1301,7 @@ Required JSON format:
                       <Button
                         onClick={handleClearSavedData}
                         variant="outline"
-                        className="border-red-300 text-red-600 hover:bg-red-50 text-xs h-7 px-2"
+                        className="border-green-300 text-green-600 hover:bg-green-50 text-xs h-7 px-2"
                       >
                         <X className="size-3 mr-1" />
                         Clear
@@ -1334,13 +1334,10 @@ Required JSON format:
             <div className="relative flex items-start justify-between gap-4">
               <div>
                 <CardTitle className="flex items-center gap-2 text-gray-900">
-                  <span className="relative flex size-3">
-                    <span className={`absolute inline-flex h-full w-full animate-ping rounded-full ${isAnalyzerEnabled ? 'bg-[#1a4d2e]' : 'bg-gray-400'} opacity-75`} />
-                    <span className={`relative inline-flex size-3 rounded-full ${isAnalyzerEnabled ? 'bg-[#1a4d2e]' : 'bg-gray-400'}`} />
-                  </span>
+                  
                   AI Vision Scanner - Residential Paints Only
                 </CardTitle>
-                <CardDescription>
+                <CardDescription className="pb-2">
                   {isAnalyzerEnabled 
                     ? "Upload a residential paint sample. Gemini will detect the color and formulate a mixture using your inventory."
                     : isDataLoaded 
@@ -1356,7 +1353,7 @@ Required JSON format:
             </div>
           </CardHeader>
 
-          <CardContent className="space-y-4 pt-6">
+          <CardContent className="space-y-4">
             {!isAnalyzerEnabled ? (
               <div className="relative min-h-[300px] rounded-2xl border-2 border-dashed border-gray-300 bg-gray-50 p-6">
                 <div className="absolute inset-0 opacity-20 [background-image:radial-gradient(circle_at_1px_1px,#9ca3af_1px,transparent_0)] [background-size:24px_24px]" />
@@ -1412,7 +1409,7 @@ Required JSON format:
                     `}
                   >
                     <div className="absolute inset-0 opacity-40 [background-image:radial-gradient(circle_at_1px_1px,#1a4d2e_1px,transparent_0)] [background-size:24px_24px]" />
-                    <div className="absolute left-0 top-0 h-1 w-full bg-gradient-to-r from-transparent via-[#1a4d2e] to-transparent opacity-60" />
+                    
                     <div className="absolute bottom-4 left-4 h-10 w-10 border-b-2 border-l-2 border-[#1a4d2e]/60" />
                     <div className="absolute bottom-4 right-4 h-10 w-10 border-b-2 border-r-2 border-[#1a4d2e]/60" />
                     <div className="absolute left-4 top-4 h-10 w-10 border-l-2 border-t-2 border-[#1a4d2e]/60" />
