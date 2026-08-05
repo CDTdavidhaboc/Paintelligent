@@ -24,7 +24,6 @@ import {
 import { Badge } from "../components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs";
 import { Button } from "../components/ui/button";
-import { Label } from "../components/ui/label";
 
 import {
   LineChart,
@@ -57,6 +56,9 @@ import {
   Cloud,
   CloudOff,
   AlertTriangle,
+  CloudRain,
+  Paintbrush,
+  Sun,
 } from "lucide-react";
 
 import Papa from "papaparse";
@@ -84,8 +86,34 @@ const MONTH_NAMES = [
   "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"
 ];
 
-const SEASON_FOR_MONTH = (m: number) =>
-  m >= 10 || m <= 4 ? "Dry" : "Rainy";
+// Philippine Seasons: Dry = Nov-Apr, Rainy = May-Oct
+const SEASON_FOR_MONTH = (monthIndex: number): string => {
+  if (monthIndex >= 10 || monthIndex <= 3) {
+    return "Dry";
+  } else {
+    return "Rainy";
+  }
+};
+
+// Map month name to index
+const getMonthIndexFromName = (monthName: string): number => {
+  const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 
+                     'July', 'August', 'September', 'October', 'November', 'December'];
+  const shortNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 
+                     'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  
+  const trimmed = monthName.trim();
+  
+  // Try full name
+  const fullIndex = monthNames.findIndex(m => m.toLowerCase() === trimmed.toLowerCase());
+  if (fullIndex !== -1) return fullIndex;
+  
+  // Try short name
+  const shortIndex = shortNames.findIndex(m => m.toLowerCase() === trimmed.toLowerCase());
+  if (shortIndex !== -1) return shortIndex;
+  
+  return -1;
+};
 
 // Required headers for sales data
 const REQUIRED_HEADERS = ['Date', 'Category', 'Total Sales (PHP)', 'Units Sold', 'Season'];
@@ -95,9 +123,9 @@ const REQUIRED_HEADERS = ['Date', 'Category', 'Total Sales (PHP)', 'Units Sold',
 // ============================================================
 const showNotification = (message: string, type: 'success' | 'error' | 'info' = 'success') => {
   const colors = {
-    success: 'bg-green-600 border-green-400/30',
+    success: 'bg-green-800 border-green-400/30',
     error: 'bg-red-600 border-red-400/30',
-    info: 'bg-green-600 border-green-400/30'
+    info: 'bg-emerald-700 border-emerald-400/30'
   };
 
   const icons = {
@@ -106,7 +134,6 @@ const showNotification = (message: string, type: 'success' | 'error' | 'info' = 
     info: 'M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z'
   };
 
-  // Remove existing notifications
   const existing = document.querySelectorAll('.custom-notification');
   existing.forEach(el => el.remove());
 
@@ -179,6 +206,96 @@ export default function SeasonalForecasting() {
   const CACHE_DATA_COUNT_KEY = 'sales_forecast_data_count';
 
   // ============================================================
+  // COMPUTED SEASONAL DATA (AUTO-CALCULATED FROM DATA)
+  // ============================================================
+  const computedSeasonalData = useMemo(() => {
+    if (!salesData.length) return null;
+
+    const dryData = salesData.filter(r => r.season === "Dry");
+    const rainyData = salesData.filter(r => r.season === "Rainy");
+    const dryTotal = dryData.reduce((sum, r) => sum + r.sales, 0);
+    const rainyTotal = rainyData.reduce((sum, r) => sum + r.sales, 0);
+    const dryAvg = dryData.length ? dryTotal / dryData.length : 0;
+    const rainyAvg = rainyData.length ? rainyTotal / rainyData.length : 0;
+
+    return {
+      dry: {
+        totalSales: dryTotal,
+        averageMonthlySales: Math.round(dryAvg),
+        trend: dryAvg > rainyAvg ? 'increasing' : 'decreasing',
+        monthCount: dryData.length
+      },
+      rainy: {
+        totalSales: rainyTotal,
+        averageMonthlySales: Math.round(rainyAvg),
+        trend: rainyAvg > dryAvg ? 'increasing' : 'decreasing',
+        monthCount: rainyData.length
+      }
+    };
+  }, [salesData]);
+
+  // ============================================================
+  // COMPUTED HIGH DEMAND DATA (AUTO-CALCULATED FROM DATA)
+  // ============================================================
+  const computedHighDemand = useMemo(() => {
+    if (!originalData.length || !salesData.length) return null;
+
+    const allCategories = [...new Set(originalData.map(r => r.category).filter(Boolean))];
+    if (!allCategories.length) return null;
+
+    const categoryDetails = allCategories.map(cat => {
+      const catData = originalData.filter(r => r.category === cat);
+      const dryCat = catData.filter(r => r.season === "Dry");
+      const rainyCat = catData.filter(r => r.season === "Rainy");
+      const dryTotal = dryCat.reduce((sum, r) => sum + r.sales, 0);
+      const rainyTotal = rainyCat.reduce((sum, r) => sum + r.sales, 0);
+      const dryAvg = dryCat.length ? dryTotal / dryCat.length : 0;
+      const rainyAvg = rainyCat.length ? rainyTotal / rainyCat.length : 0;
+      const months = catData.length;
+      const totalSales = dryTotal + rainyTotal;
+      
+      return {
+        category: cat,
+        dryTotal,
+        rainyTotal,
+        dryAvg,
+        rainyAvg,
+        months,
+        totalSales,
+        bestSeason: dryAvg > rainyAvg ? 'Dry' : 'Rainy'
+      };
+    });
+
+    // Get top 4 products for Dry season (by dryTotal)
+    const dryProducts = [...categoryDetails]
+      .sort((a, b) => b.dryTotal - a.dryTotal)
+      .slice(0, 4)
+      .map(c => ({
+        name: c.category,
+        units: Math.round(c.dryTotal / (c.months || 1)) || 0,
+        revenue: Math.round(c.dryTotal) || 0
+      }));
+
+    // Get top 4 products for Rainy season (by rainyTotal)
+    const rainyProducts = [...categoryDetails]
+      .sort((a, b) => b.rainyTotal - a.rainyTotal)
+      .slice(0, 4)
+      .map(c => ({
+        name: c.category,
+        units: Math.round(c.rainyTotal / (c.months || 1)) || 0,
+        revenue: Math.round(c.rainyTotal) || 0
+      }));
+
+    const result = {
+      dry: dryProducts,
+      rainy: rainyProducts
+    };
+
+    console.log("High Demand Data:", result);
+    return result;
+  }, [originalData, salesData]);
+
+  // ============================================================
   // SUPABASE: Load saved data on mount
   // ============================================================
   useEffect(() => {
@@ -192,22 +309,18 @@ export default function SeasonalForecasting() {
         const data = await getSalesForecastData(userEmail);
         
         if (data) {
-          // Restore sales data (NOW using sales_data, not inventory_data)
           if (data.sales_data) {
             setUploadedData(data.sales_data);
             setUploadedDataName(data.sales_data_name || "");
             setIsDataSaved(true);
-            // Process the uploaded data
             processUploadedData(data.sales_data);
           }
           
-          // Restore forecast data
           if (data.forecast_data) {
             setForecastData(data.forecast_data);
             setForecastStatus("success");
           }
           
-          // Restore last generated
           if (data.last_fetched) {
             setLastGenerated(new Date(data.last_fetched).toLocaleString());
           }
@@ -264,7 +377,6 @@ export default function SeasonalForecasting() {
       }
     };
 
-    // Debounce saves to avoid too many writes
     const timeoutId = setTimeout(() => {
       if (userEmail && (uploadedData || forecastData)) {
         saveToCloud();
@@ -319,11 +431,11 @@ export default function SeasonalForecasting() {
         if (item.unitsSold) {
           acc[key].unitsSold = (acc[key].unitsSold || 0) + item.unitsSold;
         }
-        if (!acc[key].category && item.category) {
-          acc[key].category = item.category;
-        }
       } else {
-        acc[key] = { ...item };
+        acc[key] = { 
+          ...item,
+          season: item.season
+        };
       }
       return acc;
     }, {} as Record<string, SalesRecord>);
@@ -336,13 +448,13 @@ export default function SeasonalForecasting() {
 
   const processUploadedData = (data: any[]) => {
     try {
-      console.log("Processing uploaded data, first row:", data[0]);
-      
-      // Get headers from the first row
-      const headers = Object.keys(data[0] || {});
-      console.log("Found headers:", headers);
+      console.log("========== DATA PROCESSING START ==========");
+      console.log("Total rows:", data.length);
+      console.log("First row raw data:", data[0]);
+      console.log("All headers:", Object.keys(data[0] || {}));
       
       // Validate headers
+      const headers = Object.keys(data[0] || {});
       const validation = validateHeaders(headers);
       if (!validation.valid) {
         setUploadError(`Missing required headers: ${validation.missing.join(', ')}. Required: ${REQUIRED_HEADERS.join(', ')}`);
@@ -351,20 +463,101 @@ export default function SeasonalForecasting() {
       }
       
       const formattedData: SalesRecord[] = data.map((row: any, index: number) => {
-        // Parse date
-        let date = null;
+        // ============================================================
+        // EXTRACT MONTH AND YEAR - PRIORITIZE DATE PARSING
+        // ============================================================
         let month = "";
         let year = new Date().getFullYear();
+        let monthIndex = -1;
         
-        if (row.Date) {
-          date = new Date(row.Date);
-          if (!isNaN(date.getTime())) {
-            month = date.toLocaleString("en-US", { month: "long" });
-            year = date.getFullYear();
+        // Get the date value
+        const dateValue = row.Date || row["Date"] || "";
+        
+        if (dateValue) {
+          const dateStr = String(dateValue).trim();
+          
+          // Try multiple date parsing strategies
+          let parsedDate: Date | null = null;
+          
+          // Strategy 1: Direct Date constructor
+          let d = new Date(dateStr);
+          if (!isNaN(d.getTime())) {
+            parsedDate = d;
           }
-        } else {
-          // Fallback: use current date if Date is missing
+          
+          // Strategy 2: MM/DD/YYYY or DD/MM/YYYY
+          if (!parsedDate) {
+            const parts = dateStr.split(/[\/\-.]/);
+            if (parts.length === 3) {
+              // Try MM/DD/YYYY
+              let m = parseInt(parts[0]) - 1;
+              let y = parseInt(parts[2]);
+              let day = parseInt(parts[1]);
+              if (m >= 0 && m <= 11 && y > 0 && day > 0 && day <= 31) {
+                d = new Date(y, m, day);
+                if (!isNaN(d.getTime())) {
+                  parsedDate = d;
+                }
+              }
+              // Try DD/MM/YYYY
+              if (!parsedDate) {
+                let m = parseInt(parts[1]) - 1;
+                let y = parseInt(parts[2]);
+                let day = parseInt(parts[0]);
+                if (m >= 0 && m <= 11 && y > 0 && day > 0 && day <= 31) {
+                  d = new Date(y, m, day);
+                  if (!isNaN(d.getTime())) {
+                    parsedDate = d;
+                  }
+                }
+              }
+            }
+          }
+          
+          // Strategy 3: Try to extract month name
+          if (!parsedDate) {
+            const monthMatch = dateStr.match(/(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec|January|February|March|April|May|June|July|August|September|October|November|December)/i);
+            if (monthMatch) {
+              const monthIdx = getMonthIndexFromName(monthMatch[0]);
+              if (monthIdx !== -1) {
+                monthIndex = monthIdx;
+                month = new Date(2000, monthIdx, 1).toLocaleString("en-US", { month: "long" });
+                
+                const yearMatch = dateStr.match(/\b(20\d{2}|19\d{2})\b/);
+                if (yearMatch) {
+                  year = parseInt(yearMatch[0]);
+                }
+              }
+            }
+          }
+          
+          if (parsedDate) {
+            monthIndex = parsedDate.getMonth();
+            month = parsedDate.toLocaleString("en-US", { month: "long" });
+            year = parsedDate.getFullYear();
+          }
+        }
+        
+        // If no date, try Month column
+        if (monthIndex === -1) {
+          const monthValue = row.Month || row["Month"] || "";
+          if (monthValue) {
+            const monthIdx = getMonthIndexFromName(String(monthValue));
+            if (monthIdx !== -1) {
+              monthIndex = monthIdx;
+              month = new Date(2000, monthIdx, 1).toLocaleString("en-US", { month: "long" });
+              
+              if (row.Year) {
+                year = parseInt(row.Year) || year;
+              }
+            }
+          }
+        }
+        
+        // Last resort: use current month
+        if (monthIndex === -1) {
           const now = new Date();
+          monthIndex = now.getMonth();
           month = now.toLocaleString("en-US", { month: "long" });
           year = now.getFullYear();
         }
@@ -372,7 +565,11 @@ export default function SeasonalForecasting() {
         const category = row.Category || row["Category"] || "";
         const sales = Number(row["Total Sales (PHP)"] || row["Total Sales"] || row["sales"] || 0);
         const unitsSold = Number(row["Units Sold"] || row["unitsSold"] || 0);
-        const season = row.Season || row["Season"] || SEASON_FOR_MONTH(new Date(`${month} 1, ${year}`).getMonth());
+        
+        // ============================================================
+        // DETERMINE SEASON - ALWAYS FROM MONTH (IGNORE SEASON COLUMN)
+        // ============================================================
+        const season = SEASON_FOR_MONTH(monthIndex);
         
         return {
           id: String(index + 1),
@@ -385,30 +582,58 @@ export default function SeasonalForecasting() {
         };
       });
       
-      console.log("Formatted data:", formattedData.slice(0, 5));
+      // ============================================================
+      // ANALYSIS RESULTS
+      // ============================================================
+      const seasonDist = formattedData.reduce((acc, r) => {
+        acc[r.season] = (acc[r.season] || 0) + 1;
+        return acc;
+      }, {} as Record<string, number>);
+      
+      const monthDist = formattedData.reduce((acc, r) => {
+        const key = `${r.month} ${r.year}`;
+        acc[key] = (acc[key] || 0) + 1;
+        return acc;
+      }, {} as Record<string, number>);
+      
+      console.log("========== RESULTS ==========");
+      console.log("Total records:", formattedData.length);
+      console.log("Season distribution:", seasonDist);
+      console.log("Month distribution:", monthDist);
+      console.log("Unique months:", Object.keys(monthDist).sort());
+      console.log("==============================");
       
       setOriginalData(formattedData);
       
-      const uniqueCategories = [...new Set(formattedData.map(r => r.category).filter(Boolean))];
-      console.log("Unique categories found:", uniqueCategories);
-      setDebugInfo(`Categories found: ${uniqueCategories.join(', ') || 'None'}`);
       
+      // ============================================================
+      // AGGREGATE - PRESERVE SEASON CORRECTLY
+      // ============================================================
       const aggregated = aggregateSalesData(formattedData);
-      console.log("Aggregated data:", aggregated.slice(0, 5));
+      console.log("Aggregated data:", aggregated);
+      console.log("Aggregated season distribution:", 
+        aggregated.reduce((acc, r) => {
+          acc[r.season] = (acc[r.season] || 0) + 1;
+          return acc;
+        }, {} as Record<string, number>)
+      );
       
       setSalesData(aggregated);
 
-      // Clear old forecast when new data is loaded
       setForecastData(null);
       setForecastStatus("idle");
       setLastGenerated(null);
       
-      // Clear cache
       localStorage.removeItem(CACHE_KEY);
       localStorage.removeItem(CACHE_TIMESTAMP_KEY);
       localStorage.removeItem(CACHE_DATA_COUNT_KEY);
       
-      setUploadError(""); // Clear any previous errors
+      setUploadError("");
+      
+      const dryCount = seasonDist["Dry"] || 0;
+      const rainyCount = seasonDist["Rainy"] || 0;
+      
+      showNotification(`✅ ${dryCount} Dry, ${rainyCount} Rainy records loaded`, "success");
       
     } catch (error) {
       console.error("Error processing uploaded data:", error);
@@ -427,7 +652,7 @@ export default function SeasonalForecasting() {
     try {
       setIsDataSaved(true);
       setUploadError("");
-      showNotification("✅ Data saved successfully! Forecasting is now enabled.", "success");
+      showNotification("✅ Data saved successfully! Seasonal analysis is now available.", "success");
     } catch (err) {
       console.error("Error saving data:", err);
       setUploadError("Failed to save data.");
@@ -436,7 +661,6 @@ export default function SeasonalForecasting() {
   };
 
   const handleClearSavedData = () => {
-    // Clear local state
     setIsDataSaved(false);
     setUploadedData(null);
     setUploadedDataName("");
@@ -447,12 +671,10 @@ export default function SeasonalForecasting() {
     setLastGenerated(null);
     if (csvInputRef.current) csvInputRef.current.value = "";
     
-    // Clear cache
     localStorage.removeItem(CACHE_KEY);
     localStorage.removeItem(CACHE_TIMESTAMP_KEY);
     localStorage.removeItem(CACHE_DATA_COUNT_KEY);
     
-    // Clear from Supabase
     clearSupabaseData();
     showNotification("🗑️ Data cleared successfully", "info");
   };
@@ -470,7 +692,6 @@ export default function SeasonalForecasting() {
         setSyncStatus("success");
         setSyncMessage("✅ Data cleared from cloud");
         showNotification("✅ Data cleared from cloud", "success");
-        console.log("✅ Data cleared from Supabase");
       } else {
         setSyncStatus("error");
         setSyncMessage("❌ Failed to clear data");
@@ -521,7 +742,6 @@ export default function SeasonalForecasting() {
             return;
           }
 
-          // Validate headers
           const headers = Object.keys(data[0] || {});
           const validation = validateHeaders(headers);
           if (!validation.valid) {
@@ -534,7 +754,6 @@ export default function SeasonalForecasting() {
           setUploadedDataName(file.name);
           processUploadedData(data);
           setUploadError("");
-          showNotification(`📂 File "${file.name}" loaded successfully! ${data.length} rows found.`, "success");
         } catch (err: any) {
           setUploadError(`Failed to process CSV: ${err.message}`);
           showNotification(`Failed to process CSV: ${err.message}`, "error");
@@ -561,7 +780,6 @@ export default function SeasonalForecasting() {
           return;
         }
 
-        // Validate headers
         const headers = Object.keys(jsonData[0] || {});
         const validation = validateHeaders(headers);
         if (!validation.valid) {
@@ -574,7 +792,6 @@ export default function SeasonalForecasting() {
         setUploadedDataName(file.name);
         processUploadedData(jsonData);
         setUploadError("");
-        showNotification(`📂 File "${file.name}" loaded successfully! ${jsonData.length} rows found.`, "success");
       } catch (err: any) {
         setUploadError(`Failed to process Excel file: ${err.message}`);
         showNotification(`Failed to process Excel file: ${err.message}`, "error");
@@ -602,7 +819,6 @@ export default function SeasonalForecasting() {
   };
 
   const handleRemoveData = () => {
-    // Clear local state
     setUploadedData(null);
     setUploadedDataName("");
     setUploadError("");
@@ -614,12 +830,10 @@ export default function SeasonalForecasting() {
     setLastGenerated(null);
     if (csvInputRef.current) csvInputRef.current.value = "";
     
-    // Clear cache
     localStorage.removeItem(CACHE_KEY);
     localStorage.removeItem(CACHE_TIMESTAMP_KEY);
     localStorage.removeItem(CACHE_DATA_COUNT_KEY);
     
-    // Clear from Supabase
     clearSupabaseData();
   };
 
@@ -672,7 +886,7 @@ export default function SeasonalForecasting() {
       const nextIndex = (lastMonthIndex + i) % 12;
       const nextYear = lastMonthIndex + i >= 12 ? lastMonth.year + 1 : lastMonth.year;
       const monthName = MONTH_NAMES[nextIndex];
-      const season = SEASON_FOR_MONTH(nextIndex + 1);
+      const season = SEASON_FOR_MONTH(nextIndex);
       
       const basePrediction = avgLastThree * Math.pow(growthRate, i * 0.15);
       const variation = 1 + (Math.random() * 0.1 - 0.05);
@@ -721,7 +935,6 @@ export default function SeasonalForecasting() {
       const calculatedForecast = calculateForecast();
 
       const allCategories = [...new Set(originalData.map(r => r.category).filter(Boolean))];
-      console.log("All categories from original data:", allCategories);
       
       const categorySales = allCategories.map(cat => {
         const items = originalData.filter(r => r.category === cat);
@@ -752,7 +965,7 @@ export default function SeasonalForecasting() {
       });
 
       const prompt = `
-Analyze the sales data and provide a comprehensive business analysis.
+Analyze the sales data and provide a comprehensive business analysis focusing on product performance and marketing strategies.
 
 SALES DATA:
 - Total Sales: ₱${totalSales.toLocaleString()}
@@ -760,7 +973,7 @@ SALES DATA:
 - Records: ${salesData.length}
 - Categories: ${allCategories.length > 0 ? allCategories.join(', ') : 'None'}
 
-SEASONAL BREAKDOWN:
+SEASONAL BREAKDOWN (for context only):
 Dry Season: ₱${dryTotal.toLocaleString()} (${dryData.length} months, Avg: ₱${Math.round(dryAvg).toLocaleString()})
 Rainy Season: ₱${rainyTotal.toLocaleString()} (${rainyData.length} months, Avg: ₱${Math.round(rainyAvg).toLocaleString()})
 
@@ -769,34 +982,6 @@ ${categoryDetails.map(c => `${c.category}: ₱${c.total.toLocaleString()} (${c.u
 
 Return ONLY valid JSON with this structure:
 {
-  "seasonalTrends": {
-    "dry": {
-      "totalSales": ${dryTotal},
-      "averageMonthlySales": ${Math.round(dryAvg)},
-      "trend": "${dryAvg > rainyAvg ? 'increasing' : 'decreasing'}"
-    },
-    "rainy": {
-      "totalSales": ${rainyTotal},
-      "averageMonthlySales": ${Math.round(rainyAvg)},
-      "trend": "${rainyAvg > dryAvg ? 'increasing' : 'decreasing'}"
-    }
-  },
-  "highDemand": {
-    "dry": [
-      ${categoryDetails.filter(c => c.dryAvg > c.rainyAvg).slice(0, 4).map((c, i) => `{
-        "name": "${c.category}",
-        "units": ${Math.round(c.dryTotal / (c.months || 1)) || 50},
-        "revenue": ${Math.round(c.dryTotal * 0.3) || 10000}
-      }`).join(',')}
-    ],
-    "rainy": [
-      ${categoryDetails.filter(c => c.rainyAvg > c.dryAvg).slice(0, 4).map((c, i) => `{
-        "name": "${c.category}",
-        "units": ${Math.round(c.rainyTotal / (c.months || 1)) || 40},
-        "revenue": ${Math.round(c.rainyTotal * 0.25) || 8000}
-      }`).join(',')}
-    ]
-  },
   "bestSellingProducts": [
     ${categoryDetails.slice(0, 3).map((c, i) => `{
       "name": "${c.category}",
@@ -863,8 +1048,6 @@ Return ONLY valid JSON with this structure:
 
       const result = JSON.parse(cleaned);
 
-      console.log("AI Response:", result);
-
       saveToCache(result);
       setForecastData(result);
       setForecastStatus("success");
@@ -895,7 +1078,6 @@ Return ONLY valid JSON with this structure:
   // COMPUTED VALUES
   // ============================================================
 
-  // Historical Chart
   const historicalChartData = useMemo(
     () =>
       salesData.map((row, index) => ({
@@ -910,7 +1092,6 @@ Return ONLY valid JSON with this structure:
     [salesData]
   );
 
-  // Forecast Chart
   const forecastChartData = useMemo(() => {
     if (!forecastData?.forecast) return [];
     return forecastData.forecast.map((item: any, index: number) => ({
@@ -929,7 +1110,6 @@ Return ONLY valid JSON with this structure:
     [historicalChartData, forecastChartData]
   );
 
-  // Filter
   const filteredMonthlyData = useMemo(() => {
     let data = allMonthlyData;
     if (timeFilter !== "all") {
@@ -947,7 +1127,6 @@ Return ONLY valid JSON with this structure:
     }));
   }, [allMonthlyData, timeFilter, chartKey]);
 
-  // Weekly Chart
   const weeklyChartData = useMemo(() => {
     const row = salesData.find(
       (r) => `${r.month.substring(0, 3)} ${r.year}` === selectedMonth
@@ -962,7 +1141,6 @@ Return ONLY valid JSON with this structure:
     }));
   }, [salesData, selectedMonth]);
 
-  // Seasonal Areas
   const seasonalAreas = useMemo(() => {
     const areas: any[] = [];
     let areaIndex = 0;
@@ -981,15 +1159,14 @@ Return ONLY valid JSON with this structure:
           key: `area-${chartKey}-${areaIndex++}`,
           x1: current.month,
           x2: filteredMonthlyData[end].month,
-          fill: current.season === "Dry" ? "#86efac" : "#d1fae5",
-          stroke: current.season === "Dry" ? "#22c55e" : "#6ee7b7",
+          fill: current.season === "Dry" ? "#bbf7d0" : "#dbeafe",
+          stroke: current.season === "Dry" ? "#16a34a" : "#3b82f6",
         });
       }
     }
     return areas;
   }, [filteredMonthlyData, chartKey]);
 
-  // ── Computed summary stats ──
   const totalSales = useMemo(
     () => salesData.reduce((sum, row) => sum + row.sales, 0),
     [salesData]
@@ -1016,15 +1193,13 @@ Return ONLY valid JSON with this structure:
     [salesData]
   );
 
-  // ── AI Results ──
-  const seasonalTrends = forecastData?.seasonalTrends ?? null;
-  const highDemand = forecastData?.highDemand ?? null;
+  const seasonalTrends = computedSeasonalData;
+  const highDemand = computedHighDemand;
   const bestSelling = forecastData?.bestSellingProducts ?? [];
   const slowMoving = forecastData?.slowMovingProducts ?? [];
   const stockRecs = forecastData?.stockRecommendations ?? [];
   const marketing = forecastData?.marketingStrategies ?? [];
 
-  // ── Available Years ──
   const availableYears = useMemo(
     () => [...new Set(salesData.map((row) => row.year))].sort(),
     [salesData]
@@ -1040,10 +1215,10 @@ Return ONLY valid JSON with this structure:
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-center">
-          <Loader2 className="size-12 animate-spin text-[#1a4d2e] mx-auto" />
-          <p className="mt-4 text-gray-600">Loading your data...</p>
+      <div className="flex min-h-screen items-center justify-center bg-[#f3f7f4] p-6">
+        <div className="rounded-2xl border border-emerald-100 bg-white px-10 py-8 text-center shadow-[0_18px_50px_rgba(20,83,45,0.08)]">
+          <Loader2 className="mx-auto size-12 animate-spin text-[#1a4d2e]" />
+          <p className="mt-4 text-sm font-medium text-slate-600">Loading sales records...</p>
         </div>
       </div>
     );
@@ -1051,12 +1226,12 @@ Return ONLY valid JSON with this structure:
 
   return (
     <div
-  className={`
-    min-h-screen bg-green-100 pl-7 pr-7 pt-4 pb-8 space-y-3 
-    transition-all duration-700 ease-out
-    ${isVisible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-5"}
-  `}
->
+      className={`
+        forecast-page min-h-screen space-y-5 bg-[#f3f7f4] px-4 py-5 sm:px-6 lg:px-8 lg:py-7 
+        transition-all duration-700 ease-out
+        ${isVisible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-5"}
+      `}
+    >
       <style>{`
         @keyframes slideUp {
           from {
@@ -1072,65 +1247,95 @@ Return ONLY valid JSON with this structure:
         .animate-slide-up {
           animation: slideUp 0.3s ease-out forwards;
         }
+
+        .forecast-page [data-slot="card"] {
+          border-radius: 1rem;
+        }
+
+        .forecast-page select {
+          border-color: rgb(167 243 208);
+          background: rgb(255 255 255);
+          color: rgb(20 83 45);
+          outline: none;
+        }
+
+        .forecast-page select:focus {
+          box-shadow: 0 0 0 3px rgb(209 250 229);
+          border-color: rgb(5 150 105);
+        }
+
+        .forecast-page [data-slot="table-head"] {
+          color: rgb(22 101 52);
+          font-weight: 700;
+        }
+
+        .forecast-page [data-slot="table-row"]:hover {
+          background: rgb(240 253 244 / 0.7);
+        }
       `}</style>
 
-      {/* Header with Sync Status */}
-      <div className="flex items-center pl-3 justify-between">
-        <div>
-          {lastGenerated && (
-            <p className="text-xs text-gray-500 mt-1">
-              Generated via Gemini AI · {lastGenerated}
-            </p>
-          )}
-        </div>
+      {/* Page header */}
+      <header className="overflow-hidden rounded-2xl bg-[#174d32] px-5 py-5 text-white shadow-[0_18px_45px_rgba(23,77,50,0.18)] sm:px-7 sm:py-6">
+        <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-start gap-4">
+            <div className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-white/12 ring-1 ring-white/15">
+              <Paintbrush className="size-5 text-emerald-100" />
+            </div>
+            <div>
+              <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">Seasonal sales forecast</h1>
+              <p className="mt-1 text-sm text-emerald-100">Plan paint inventory with clear dry and rainy season demand.</p>
+              {debugInfo && <p className="mt-2 text-xs text-emerald-200/70">{debugInfo}</p>}
+            </div>
+          </div>
         {userEmail && (
-          <div className="flex items-center gap-2 text-xs">
+          <div className="flex w-fit items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-1.5 text-xs">
             {syncStatus === "syncing" && (
               <>
-                <Loader2 className="size-3 animate-spin text-green-500" />
-                <span className="text-green-600">Syncing...</span>
+                <Loader2 className="size-3 animate-spin text-emerald-100" />
+                <span className="text-emerald-50">Syncing...</span>
               </>
             )}
             {syncStatus === "success" && (
               <>
-                <Cloud className="size-3 text-green-500" />
-                <span className="text-green-600 ">Cloud Synced</span>
+                <Cloud className="size-3 text-emerald-100" />
+                <span className="text-emerald-50">Cloud synced</span>
               </>
             )}
             {syncStatus === "error" && (
               <>
-                <CloudOff className="size-3 text-red-500" />
-                <span className="text-red-600">Sync Error</span>
+                <CloudOff className="size-3 text-red-200" />
+                <span className="text-red-100">Sync error</span>
               </>
             )}
             {syncStatus === "idle" && userEmail && (
               <>
-                <Cloud className="size-3 text-gray-400" />
-                <span className="text-gray-400">Not Synced</span>
+                <Cloud className="size-3 text-emerald-100/70" />
+                <span className="text-emerald-100/80">Not synced</span>
               </>
             )}
           </div>
         )}
-      </div>
+        </div>
+      </header>
 
       {/* ============================================================
           DATA UPLOAD SECTION
           ============================================================ */}
       <section>
-        <Card className="overflow-hidden border border-green-100 shadow-sm">
-          <CardHeader className="py-3 px-4 bg-gradient-to-r from-green-50 via-white to-green-50">
+        <Card className="overflow-hidden rounded-2xl border border-emerald-100 bg-white shadow-[0_12px_32px_rgba(20,83,45,0.06)]">
+          <CardHeader className="border-b border-emerald-100 bg-gradient-to-r from-emerald-50/80 via-white to-white px-5 py-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Database className="size-4 text-green-600" />
                 <CardTitle className="text-sm font-semibold text-gray-900">Sales Data</CardTitle>
               </div>
-              <Badge className={isDataLoaded ? "bg-green-800 text-white shadow-sm text-xs" : "bg-green-400 text-white shadow-sm text-xs"}>
+              <Badge className={isDataLoaded ? "bg-green-800 text-white shadow-sm text-xs" : "bg-green-600 text-white shadow-sm text-xs"}>
                 {isDataSaved ? "✅ SAVED" : isDataLoaded ? "📂 LOADED" : "✗ EMPTY DATA"}
               </Badge>
             </div>
           </CardHeader>
 
-          <CardContent className="pt-3 pb-3">
+          <CardContent>
             <input
               ref={csvInputRef}
               type="file"
@@ -1174,9 +1379,8 @@ Return ONLY valid JSON with this structure:
                   </div>
                 </div>
                 
-                {/* HEADER REMINDER - Required headers for sales data */}
                 <div className="mt-3 p-3 bg-green-50 rounded-lg border border-green-200">
-                  <p className="text-xs font-medium text-green-800">📋 Required Headers (exact match):</p>
+                  <p className="text-xs font-medium text-green-800">Required Headers (exact match):</p>
                   <div className="flex flex-wrap gap-1.5 mt-1.5">
                     <Badge variant="outline" className="text-xs bg-white border-green-300 text-green-700 font-mono">Date</Badge>
                     <Badge variant="outline" className="text-xs bg-white border-green-300 text-green-700 font-mono">Category</Badge>
@@ -1184,12 +1388,11 @@ Return ONLY valid JSON with this structure:
                     <Badge variant="outline" className="text-xs bg-white border-green-300 text-green-700 font-mono">Units Sold</Badge>
                     <Badge variant="outline" className="text-xs bg-white border-green-300 text-green-700 font-mono">Season</Badge>
                   </div>
-                  <p className="text-[11px] text-green-600 mt-1.5">⚠️ Headers are case-sensitive and must match exactly</p>
+                  <p className="text-[11px] text-green-600 mt-1.5">Headers are case-sensitive and must match exactly</p>
                 </div>
               </div>
             ) : (
               <div className="space-y-2">
-                {/* File Info */}
                 <div className={`flex items-center justify-between p-2 rounded-lg border transition-all duration-300 ${
                   isDataSaved 
                     ? "bg-gray-50 border-gray-200 opacity-70" 
@@ -1210,7 +1413,6 @@ Return ONLY valid JSON with this structure:
                       <p className="text-xs text-gray-500">{uploadedData.length} rows</p>
                     </div>
                   </div>
-                  {/* Save button - only visible when not saved */}
                   {!isDataSaved && (
                     <Button
                       onClick={handleSaveData}
@@ -1222,7 +1424,6 @@ Return ONLY valid JSON with this structure:
                   )}
                 </div>
 
-                {/* Action Buttons */}
                 <div className="flex items-center gap-2">
                   {!isDataSaved ? (
                     <>
@@ -1261,19 +1462,9 @@ Return ONLY valid JSON with this structure:
                         <X className="size-3 mr-1" />
                         Clear
                       </Button>
-                      
                     </>
                   )}
                 </div>
-
-                {/* Debug Info */}
-                {debugInfo && (
-                  <div className="text-xs text-gray-500 bg-gray-50 p-2 rounded border border-gray-200">
-                    <strong>Data Info:</strong> {salesData.length} records • 
-                    <strong> Categories:</strong> {uniqueCategories.length > 0 ? uniqueCategories.join(', ') : 'None found'} • 
-                    <strong> Years:</strong> {availableYears.join(', ')}
-                  </div>
-                )}
               </div>
             )}
 
@@ -1288,12 +1479,12 @@ Return ONLY valid JSON with this structure:
       </section>
 
       {/* ============================================================
-          SUMMARY CARDS (Only shown when data is loaded)
+          SUMMARY CARDS
           ============================================================ */}
       {salesData.length > 0 && (
         <>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-            <Card className="shadow-md border-0 bg-gradient-to-r from-green-700 to-green-600 text-white">
+            <Card className="border-0 bg-[#174d32] text-white shadow-[0_14px_30px_rgba(23,77,50,0.18)]">
               <CardContent className="py-6">
                 <div className="flex items-center justify-between">
                   <div>
@@ -1310,11 +1501,14 @@ Return ONLY valid JSON with this structure:
               </CardContent>
             </Card>
 
-            <Card className="shadow-md border-l-4 border-green-500">
+            <Card className="border border-green-200 border-l-4 border-l-green-600 bg-green-50/60 shadow-sm">
               <CardContent className="py-6">
                 <div className="flex justify-between items-center">
                   <div>
-                    <p className="text-sm text-gray-500">Dry Season</p>
+                    <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-green-800">
+                      <Sun className="size-4" />
+                      Dry Season
+                    </div>
                     <h2 className="text-2xl font-bold text-green-700">
                       ₱{drySales.toLocaleString()}
                     </h2>
@@ -1322,24 +1516,31 @@ Return ONLY valid JSON with this structure:
                       {salesData.filter((r) => r.season === "Dry").length} Months
                     </p>
                   </div>
-                  <TrendingUp className="w-9 h-9 text-green-500" />
+                  <div className="rounded-xl bg-green-100 p-3">
+                    <TrendingUp className="size-7 text-green-700" />
+                  </div>
                 </div>
               </CardContent>
             </Card>
 
-            <Card className="shadow-md border-l-4 border-green-500">
+            <Card className="border border-blue-200 border-l-4 border-l-blue-600 bg-blue-50/60 shadow-sm">
               <CardContent className="py-6">
                 <div className="flex justify-between items-center">
                   <div>
-                    <p className="text-sm text-gray-500">Rainy Season</p>
-                    <h2 className="text-2xl font-bold text-green-700">
+                    <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-blue-800">
+                      <CloudRain className="size-4" />
+                      Rainy Season
+                    </div>
+                    <h2 className="text-2xl font-bold text-blue-700">
                       ₱{rainySales.toLocaleString()}
                     </h2>
                     <p className="text-xs text-gray-500 mt-1">
                       {salesData.filter((r) => r.season === "Rainy").length} Months
                     </p>
                   </div>
-                  <TrendingDown className="w-9 h-9 text-green-500" />
+                  <div className="rounded-xl bg-blue-100 p-3">
+                    <TrendingDown className="size-7 text-blue-700" />
+                  </div>
                 </div>
               </CardContent>
             </Card>
@@ -1348,8 +1549,8 @@ Return ONLY valid JSON with this structure:
           {/* ============================================================
               SALES TREND CHART
               ============================================================ */}
-          <Card className="shadow-lg border-0">
-            <CardHeader className="border-b bg-gray-50">
+          <Card className="overflow-hidden border border-emerald-100 bg-white shadow-[0_12px_32px_rgba(20,83,45,0.06)]">
+            <CardHeader className="border-b border-emerald-100 bg-gradient-to-r from-white to-emerald-50/70">
               <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
                 <div>
                   <CardTitle className="text-xl font-bold">
@@ -1524,7 +1725,7 @@ Return ONLY valid JSON with this structure:
                   )}
                 </LineChart>
               </ResponsiveContainer>
-              <div className="mt-6 flex flex-wrap items-center justify-center gap-6 rounded-lg bg-gray-50 p-4 text-sm">
+              <div className="mt-6 flex flex-wrap items-center justify-center gap-5 rounded-xl border border-emerald-100 bg-emerald-50/50 p-4 text-sm text-slate-700">
                 <div className="flex items-center gap-2">
                   <span className="h-1.5 w-8 rounded bg-green-900"></span>
                   Historical Sales
@@ -1536,16 +1737,184 @@ Return ONLY valid JSON with this structure:
                   </div>
                 )}
                 <div className="flex items-center gap-2">
-                  <span className="w-4 h-4 rounded bg-green-200"></span>
+                  <span className="w-4 h-4 rounded bg-green-200 ring-1 ring-green-500/40"></span>
                   Dry Season
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className="w-4 h-4 rounded bg-emerald-100"></span>
+                  <span className="w-4 h-4 rounded bg-blue-100 ring-1 ring-blue-500/40"></span>
                   Rainy Season
                 </div>
               </div>
             </CardContent>
           </Card>
+
+          {/* ============================================================
+              SEASONAL ANALYSIS
+              ============================================================ */}
+          {computedSeasonalData && (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <Card className="border border-blue-200 border-l-4 border-l-blue-600 bg-blue-50/50 shadow-sm">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2 text-blue-800">
+                    <CloudRain className="w-5 h-5" />
+                    Rainy Season Analysis
+                  </CardTitle>
+                  <CardDescription>Based on {computedSeasonalData.rainy.monthCount} months</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="flex justify-between">
+                    <span>Total Sales</span>
+                    <span className="font-bold">
+                      ₱{computedSeasonalData.rainy.totalSales.toLocaleString()}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Average Monthly Sales</span>
+                    <span className="font-bold">
+                      ₱{computedSeasonalData.rainy.averageMonthlySales.toLocaleString()}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span>Sales Trend</span>
+                    <Badge className="bg-blue-100 text-blue-700">
+                      {computedSeasonalData.rainy.trend}
+                    </Badge>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="border border-green-200 border-l-4 border-l-green-600 bg-green-50/50 shadow-sm">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2 text-green-700">
+                    <TrendingUp className="w-5 h-5" />
+                    Dry Season Analysis
+                  </CardTitle>
+                  <CardDescription>Based on {computedSeasonalData.dry.monthCount} months</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="flex justify-between">
+                    <span>Total Sales</span>
+                    <span className="font-bold">
+                      ₱{computedSeasonalData.dry.totalSales.toLocaleString()}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Average Monthly Sales</span>
+                    <span className="font-bold">
+                      ₱{computedSeasonalData.dry.averageMonthlySales.toLocaleString()}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span>Sales Trend</span>
+                    <Badge className="bg-green-100 text-green-700">
+                      {computedSeasonalData.dry.trend}
+                    </Badge>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          )}
+
+          {/* ============================================================
+              HIGH DEMAND PRODUCTS
+              ============================================================ */}
+          {computedHighDemand && (
+            <Card className="overflow-hidden border border-emerald-100 bg-white shadow-[0_12px_32px_rgba(20,83,45,0.06)]">
+              <CardHeader className="border-b border-emerald-100 bg-gradient-to-r from-white to-emerald-50/70">
+                <CardTitle className="flex items-center gap-2 text-xl">
+                  <Target className="w-5 h-5 text-green-700" />
+                  High Demand Products Per Season
+                </CardTitle>
+                <CardDescription>
+                  Top-performing categories for each season (calculated from actual sales data)
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Tabs defaultValue="dry" className="w-full">
+                  <TabsList className="grid w-full max-w-sm grid-cols-2 mb-6">
+                    <TabsTrigger value="dry" className="data-[state=active]:bg-green-700 data-[state=active]:text-white">Dry Season</TabsTrigger>
+                    <TabsTrigger value="rainy" className="data-[state=active]:bg-blue-700 data-[state=active]:text-white">Rainy Season</TabsTrigger>
+                  </TabsList>
+                  {["dry", "rainy"].map((season) => {
+                    const products = computedHighDemand[season] || [];
+                    return (
+                      <TabsContent key={season} value={season}>
+                        <Card className={`border shadow-sm ${season === "dry" ? "border-green-200 bg-green-50/30" : "border-blue-200 bg-blue-50/30"}`}>
+                          <CardHeader className={season === "dry" ? "border-b border-green-100" : "border-b border-blue-100"}>
+                            <div className="flex justify-between items-center">
+                              <div>
+                                <CardTitle className={`flex items-center gap-2 text-lg ${season === "dry" ? "text-green-800" : "text-blue-800"}`}>
+                                  {season === "dry" ? <Sun className="size-5" /> : <CloudRain className="size-5" />}
+                                  {season === "dry" ? "Dry Season" : "Rainy Season"}
+                                </CardTitle>
+                                <CardDescription>
+                                  {season === "dry" ? "November – May" : "June – October"}
+                                </CardDescription>
+                              </div>
+                              <Badge
+                                className={
+                                  season === "dry"
+                                    ? "bg-green-700 text-white"
+                                    : "bg-blue-700 text-white"
+                                }
+                              >
+                                {products.length} Categories
+                              </Badge>
+                            </div>
+                          </CardHeader>
+                          <CardContent>
+                            {products.length > 0 ? (
+                              <Table>
+                                <TableHeader>
+                                  <TableRow>
+                                    <TableHead className="w-20">Rank</TableHead>
+                                    <TableHead>Category</TableHead>
+                                    <TableHead>Units</TableHead>
+                                    <TableHead>Revenue</TableHead>
+                                  </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                  {products.map((product: any, index: number) => (
+                                    <TableRow key={index} className="hover:bg-gray-50 transition-colors">
+                                      <TableCell>
+                                        <Badge
+                                          className={
+                                            season === "dry"
+                                              ? "bg-green-700"
+                                              : "bg-blue-700"
+                                          }
+                                        >
+                                          #{index + 1}
+                                        </Badge>
+                                      </TableCell>
+                                      <TableCell>
+                                        <p className="font-semibold">{product.name}</p>
+                                      </TableCell>
+                                      <TableCell className="font-medium">
+                                        {product.units?.toLocaleString() || 0}
+                                      </TableCell>
+                                      <TableCell className="font-bold">
+                                        ₱{product.revenue?.toLocaleString() || 0}
+                                      </TableCell>
+                                    </TableRow>
+                                  ))}
+                                </TableBody>
+                              </Table>
+                            ) : (
+                              <div className="text-center py-8 text-gray-500">
+                                <p>No products found for this season.</p>
+                                <p className="text-sm mt-1">Please check your data.</p>
+                              </div>
+                            )}
+                          </CardContent>
+                        </Card>
+                      </TabsContent>
+                    );
+                  })}
+                </Tabs>
+              </CardContent>
+            </Card>
+          )}
         </>
       )}
 
@@ -1553,11 +1922,11 @@ Return ONLY valid JSON with this structure:
           GENERATE REPORT BUTTON
           ============================================================ */}
       {salesData.length > 0 && forecastStatus !== "success" && isDataSaved && (
-        <div className="flex justify-center">
+        <div className="flex justify-center rounded-2xl border border-emerald-100 bg-white p-4 shadow-sm">
           <button
             onClick={generateForecast}
             disabled={forecastStatus === "loading"}
-            className="flex items-center gap-3 rounded-lg bg-[#1a4d2e] px-8 py-4 text-white hover:bg-[#2d6b45] disabled:opacity-60 transition-all shadow-lg hover:shadow-xl"
+            className="flex items-center gap-3 rounded-xl bg-[#174d32] px-6 py-3.5 text-sm font-semibold text-white shadow-[0_12px_24px_rgba(23,77,50,0.2)] transition-all hover:-translate-y-0.5 hover:bg-[#123e28] disabled:opacity-60"
           >
             {forecastStatus === "loading" ? (
               <>
@@ -1575,10 +1944,10 @@ Return ONLY valid JSON with this structure:
       )}
 
       {/* ============================================================
-          LOCKED STATE (when data loaded but not saved)
+          LOCKED STATE
           ============================================================ */}
       {isDataLoaded && !isDataSaved && salesData.length > 0 && (
-        <Card className="border-2 border-green-200 bg-green-50">
+        <Card className="border border-emerald-200 bg-emerald-50/70 shadow-sm">
           <CardContent className="py-8">
             <div className="flex flex-col items-center text-center">
               <Save className="size-12 text-green-500 mb-4" />
@@ -1597,10 +1966,12 @@ Return ONLY valid JSON with this structure:
           EMPTY STATE
           ============================================================ */}
       {!salesData.length && !uploadedData && (
-        <Card className="border border-dashed border-gray-300 shadow-sm">
+        <Card className="border-2 border-dashed border-emerald-200 bg-white shadow-sm">
           <CardContent className="flex flex-col items-center justify-center py-16 text-center">
-            <TrendingUp className="size-14 text-gray-300 mb-4" />
-            <h2 className="text-2xl font-bold text-gray-700">No Sales Records Found</h2>
+            <div className="mb-4 rounded-2xl bg-emerald-50 p-4">
+              <Paintbrush className="size-10 text-emerald-700" />
+            </div>
+            <h2 className="text-2xl font-bold text-slate-800">No sales records found</h2>
             <p className="mt-2 max-w-md text-gray-500 text-sm">
               Please upload a CSV or Excel file with your sales data to generate forecasts and insights.
             </p>
@@ -1617,7 +1988,7 @@ Return ONLY valid JSON with this structure:
           LOADING STATE
           ============================================================ */}
       {forecastStatus === "loading" && (
-        <Card className="shadow-lg border-0 bg-gradient-to-r from-green-50 to-emerald-50">
+        <Card className="border border-emerald-200 bg-gradient-to-r from-emerald-50 to-white shadow-sm">
           <CardContent className="py-12">
             <div className="flex flex-col items-center justify-center text-center">
               <Loader2 className="size-12 text-green-700 animate-spin mb-4" />
@@ -1625,7 +1996,7 @@ Return ONLY valid JSON with this structure:
                 AI is Analyzing Your Data...
               </h3>
               <p className="text-gray-600 mt-2">
-                Generating seasonal insights, product performance, and strategic recommendations.
+                Generating product performance insights, stock recommendations, and marketing strategies.
               </p>
               <div className="mt-6 w-64 h-2 bg-gray-200 rounded-full overflow-hidden">
                 <div
@@ -1668,167 +2039,14 @@ Return ONLY valid JSON with this structure:
           ============================================================ */}
       {forecastData && forecastStatus === "success" && (
         <div id="ai-results" className="space-y-6">
-          {/* ── Seasonal Analysis ── */}
-          {seasonalTrends && (
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <Card className="shadow-md border-l-4 border-green-500">
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2 text-green-700">
-                    <TrendingDown className="w-5 h-5" />
-                    Rainy Season Analysis
-                  </CardTitle>
-                  <CardDescription>Based on {salesData.filter(r => r.season === "Rainy").length} months</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="flex justify-between">
-                    <span>Total Sales</span>
-                    <span className="font-bold">
-                      ₱{seasonalTrends.rainy?.totalSales?.toLocaleString() || 0}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Average Monthly Sales</span>
-                    <span className="font-bold">
-                      ₱{seasonalTrends.rainy?.averageMonthlySales?.toLocaleString() || 0}
-                    </span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span>Sales Trend</span>
-                    <Badge className="bg-green-100 text-green-700">
-                      {seasonalTrends.rainy?.trend || "N/A"}
-                    </Badge>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card className="shadow-md border-l-4 border-green-600">
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2 text-green-700">
-                    <TrendingUp className="w-5 h-5" />
-                    Dry Season Analysis
-                  </CardTitle>
-                  <CardDescription>Based on {salesData.filter(r => r.season === "Dry").length} months</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="flex justify-between">
-                    <span>Total Sales</span>
-                    <span className="font-bold">
-                      ₱{seasonalTrends.dry?.totalSales?.toLocaleString() || 0}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Average Monthly Sales</span>
-                    <span className="font-bold">
-                      ₱{seasonalTrends.dry?.averageMonthlySales?.toLocaleString() || 0}
-                    </span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span>Sales Trend</span>
-                    <Badge className="bg-green-100 text-green-700">
-                      {seasonalTrends.dry?.trend || "N/A"}
-                    </Badge>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-          )}
-
-          {/* ── High Demand Products ── */}
-          {highDemand && (
-            <Card className="shadow-lg border-0">
-              <CardHeader className="border-b bg-gray-50">
-                <CardTitle className="flex items-center gap-2 text-xl">
-                  <Target className="w-5 h-5 text-green-700" />
-                  High Demand Products
-                </CardTitle>
-                <CardDescription>
-                  Top-performing categories for each season
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="pt-6">
-                <Tabs defaultValue="dry" className="w-full">
-                  <TabsList className="grid w-full max-w-sm grid-cols-2 mb-6">
-                    <TabsTrigger value="dry">🌞 Dry Season</TabsTrigger>
-                    <TabsTrigger value="rainy">🌧 Rainy Season</TabsTrigger>
-                  </TabsList>
-                  {["dry", "rainy"].map((season) => (
-                    <TabsContent key={season} value={season}>
-                      <Card className="shadow-sm border">
-                        <CardHeader>
-                          <div className="flex justify-between items-center">
-                            <div>
-                              <CardTitle className="text-lg">
-                                {season === "dry" ? "Dry Season" : "Rainy Season"}
-                              </CardTitle>
-                              <CardDescription>
-                                {season === "dry" ? "November – May" : "June – October"}
-                              </CardDescription>
-                            </div>
-                            <Badge
-                              className={
-                                season === "dry"
-                                  ? "bg-green-700 text-white"
-                                  : "bg-green-600 text-white"
-                              }
-                            >
-                              {(highDemand[season] || []).length} Categories
-                            </Badge>
-                          </div>
-                        </CardHeader>
-                        <CardContent>
-                          <Table>
-                            <TableHeader>
-                              <TableRow>
-                                <TableHead className="w-20">Rank</TableHead>
-                                <TableHead>Category</TableHead>
-                                <TableHead>Units</TableHead>
-                                <TableHead>Revenue</TableHead>
-                              </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                              {(highDemand[season] || []).map((product: any, index: number) => (
-                                <TableRow key={index} className="hover:bg-gray-50 transition-colors">
-                                  <TableCell>
-                                    <Badge
-                                      className={
-                                        season === "dry"
-                                          ? "bg-green-700"
-                                          : "bg-green-600"
-                                      }
-                                    >
-                                      #{index + 1}
-                                    </Badge>
-                                  </TableCell>
-                                  <TableCell>
-                                    <p className="font-semibold">{product.name}</p>
-                                  </TableCell>
-                                  <TableCell className="font-medium">
-                                    {product.units?.toLocaleString() || 0}
-                                  </TableCell>
-                                  <TableCell className="font-bold">
-                                    ₱{product.revenue?.toLocaleString() || 0}
-                                  </TableCell>
-                                </TableRow>
-                              ))}
-                            </TableBody>
-                          </Table>
-                        </CardContent>
-                      </Card>
-                    </TabsContent>
-                  ))}
-                </Tabs>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* ── Business Analytics ── */}
+          {/* ── Stock Recommendation ── */}
           {stockRecs.length > 0 && (
             <Card className="shadow-lg border-0 overflow-hidden">
               <div className="bg-gradient-to-r from-green-700 to-green-600 px-6 py-4">
                 <div className="flex items-center gap-3">
                   <Lightbulb className="w-5 h-5 text-white" />
                   <div>
-                    <h3 className="text-lg font-bold text-white">AI Business Analytics</h3>
+                    <h3 className="text-lg font-bold text-white">Stock Recommendation</h3>
                     <p className="text-green-100 text-sm">Inventory recommendations from seasonal analysis</p>
                   </div>
                 </div>
@@ -1836,7 +2054,6 @@ Return ONLY valid JSON with this structure:
 
               <CardContent className="pt-4 px-6 pb-6">
                 {(() => {
-                  // Group categories by action
                   const groupedByAction = stockRecs.reduce((acc: any, category: any) => {
                     const action = category.items?.[0]?.action || 'Maintain';
                     if (!acc[action]) acc[action] = [];
@@ -1844,7 +2061,6 @@ Return ONLY valid JSON with this structure:
                     return acc;
                   }, {});
 
-                  // Define action order and colors
                   const actionOrder = ['Increase', 'Maintain'];
                   const actionColors: Record<string, string> = {
                     'Increase': 'border-red-500 bg-red-50/30',
@@ -1863,7 +2079,6 @@ Return ONLY valid JSON with this structure:
                     <div className="space-y-6">
                       {actionOrder.filter(action => groupedByAction[action]).map((action) => (
                         <div key={action} className={`border-l-4 ${actionColors[action]} rounded-r-lg p-4`}>
-                          {/* Action Header with Legend */}
                           <div className="flex items-center gap-3 mb-4 pb-3 border-b border-gray-200">
                             <span className={`w-3 h-3 rounded-full ${actionDotColors[action]}`}></span>
                             <h4 className="text-sm font-semibold text-gray-700">{action} Stock</h4>
@@ -1872,7 +2087,6 @@ Return ONLY valid JSON with this structure:
                             </Badge>
                           </div>
 
-                          {/* Combined Table for all categories in this action group */}
                           <div className="overflow-x-auto">
                             <Table>
                               <TableHeader>
@@ -1910,7 +2124,6 @@ Return ONLY valid JSON with this structure:
                         </div>
                       ))}
 
-                      {/* Legend */}
                       <div className="mt-2 pt-3 border-t border-gray-200">
                         <div className="flex flex-wrap items-center gap-4 text-xs text-gray-500">
                           <span className="flex items-center gap-1.5">
@@ -1930,23 +2143,22 @@ Return ONLY valid JSON with this structure:
             </Card>
           )}
 
-          {/* ── Product Performance Analysis ── */}
+          {/* ── Product Performance ── */}
           {(bestSelling.length > 0 || slowMoving.length > 0) && (
             <section className="space-y-4">
               <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-green-100 to-green-200 flex items-center justify-center shadow-sm">
+                <div className="w-9 h-9 rounded-xl bg-white flex items-center justify-center shadow-sm">
                   <Target className="size-5 text-[#1a4d2e]" />
                 </div>
                 <div>
                   <h2 className="text-xl font-bold text-gray-900 tracking-tight">Product Performance</h2>
-                  <p className="text-sm text-gray-500">Best and slowest moving products analysis</p>
+                  <p className="text-sm text-gray-500">AI-generated best and slowest moving products analysis</p>
                 </div>
               </div>
               <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-                {/* Best Selling */}
                 {bestSelling.length > 0 && (
                   <Card className="shadow-lg border-0 hover:shadow-xl transition-all duration-300">
-                    <CardHeader className="bg-gradient-to-r from-green-50 to-emerald-50 border-b border-green-100 py-3.5">
+                    <CardHeader className="rounded-t-lg bg-gradient-to-r from-green-50 to-emerald-50 border-b border-green-100 py-3.5">
                       <div className="flex items-center gap-2.5">
                         <div className="w-7 h-7 rounded-lg bg-green-600 flex items-center justify-center">
                           <TrendingUp className="size-4 text-white" />
@@ -1961,7 +2173,7 @@ Return ONLY valid JSON with this structure:
                         </div>
                       </div>
                     </CardHeader>
-                    <CardContent className="space-y-3 pt-4">
+                    <CardContent className="space-y-3">
                       {bestSelling.map((product: any, index: number) => (
                         <div key={index} className="border rounded-lg p-3 hover:shadow-md transition">
                           <div className="flex justify-between items-center">
@@ -1992,10 +2204,9 @@ Return ONLY valid JSON with this structure:
                   </Card>
                 )}
 
-                {/* Slow Moving */}
                 {slowMoving.length > 0 && (
                   <Card className="shadow-lg border-0 hover:shadow-xl transition-all duration-300">
-                    <CardHeader className="bg-gradient-to-r from-orange-50 to-amber-50 border-b border-orange-100 py-3.5">
+                    <CardHeader className="rounded-t-lg bg-gradient-to-r from-orange-50 to-amber-50 border-b border-orange-100 py-3.5">
                       <div className="flex items-center gap-2.5">
                         <div className="w-7 h-7 rounded-lg bg-orange-500 flex items-center justify-center">
                           <TrendingDown className="size-4 text-white" />
@@ -2010,7 +2221,7 @@ Return ONLY valid JSON with this structure:
                         </div>
                       </div>
                     </CardHeader>
-                    <CardContent className="space-y-3 pt-4">
+                    <CardContent className="space-y-3">
                       {slowMoving.map((product: any, index: number) => (
                         <div key={index} className="border rounded-lg p-3 hover:shadow-md transition">
                           <div className="flex flex-col gap-2">
@@ -2050,11 +2261,11 @@ Return ONLY valid JSON with this structure:
             </section>
           )}
 
-          {/* ── Marketing Strategy Recommendations ── */}
+          {/* ── Marketing Strategies ── */}
           {marketing.length > 0 && (
             <section className="space-y-4">
               <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-green-100 to-emerald-200 flex items-center justify-center shadow-sm">
+                <div className="w-9 h-9 rounded-xl bg-white flex items-center justify-center shadow-sm">
                   <Lightbulb className="size-5 text-green-700" />
                 </div>
                 <div>
@@ -2067,7 +2278,7 @@ Return ONLY valid JSON with this structure:
                   const drySeason = (strategy.season || "").toLowerCase().includes("dry");
                   return (
                     <Card key={index} className="border-0 shadow-lg hover:shadow-xl transition-all duration-300 overflow-hidden">
-                      <div className={`${drySeason ? "bg-gradient-to-r from-green-600 to-emerald-600" : "bg-gradient-to-r from-green-600 to-cyan-600"} px-4 py-3`}>
+                      <div className={`${drySeason ? "bg-gradient-to-r from-green-700 to-emerald-600" : "bg-gradient-to-r from-blue-700 to-sky-600"} px-4 py-3`}>
                         <div className="flex items-center gap-2.5">
                           <div className="w-7 h-7 rounded-lg bg-white/20 flex items-center justify-center backdrop-blur-sm">
                             <Lightbulb className={`size-4 text-white`} />
@@ -2086,12 +2297,12 @@ Return ONLY valid JSON with this structure:
                         </div>
                       </div>
 
-                      <CardContent className="pt-4 px-4 pb-4">
+                      <CardContent>
                         <div className="grid gap-2.5">
                           {(strategy.strategies || []).map((item: string, i: number) => (
                             <div key={i} className="flex gap-3 rounded-xl border border-gray-100 bg-white p-3 hover:shadow-md transition-all hover:border-gray-200">
-                              <div className={`flex h-7 w-7 items-center justify-center rounded-full flex-shrink-0 ${drySeason ? "bg-green-100" : "bg-green-100"}`}>
-                                <CheckCircle2 className={`size-4 ${drySeason ? "text-green-600" : "text-green-600"}`} />
+                              <div className={`flex h-7 w-7 items-center justify-center rounded-full flex-shrink-0 ${drySeason ? "bg-green-100" : "bg-blue-100"}`}>
+                                <CheckCircle2 className={`size-4 ${drySeason ? "text-green-600" : "text-blue-700"}`} />
                               </div>
                               <div className="flex-1">
                                 <p className="text-sm font-medium text-gray-700">Strategy {i + 1}</p>
@@ -2117,36 +2328,7 @@ Return ONLY valid JSON with this structure:
         </div>
       )}
 
-      {/* ============================================================
-          CACHE STATUS BAR
-          ============================================================ */}
-      {forecastStatus === "success" && lastGenerated && (
-        <div className="fixed bottom-0 left-0 right-0 bg-green-50 border-t border-green-200 px-4 py-2 shadow-lg z-50">
-          <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2">
-            <div className="flex items-center gap-2 text-xs text-green-700">
-              <Database className="size-3.5 flex-shrink-0" />
-              <span className="text-center sm:text-left">
-                Cached • Generated: {lastGenerated}
-              </span>
-            </div>
-            <div className="flex gap-2">
-              <button
-                onClick={generateForecast}
-                className="flex items-center gap-1 px-2.5 py-1 text-xs bg-green-600 text-white rounded hover:bg-green-700 transition whitespace-nowrap"
-              >
-                <RefreshCw className="size-3" />
-                Regenerate
-              </button>
-              <button
-                onClick={clearCache}
-                className="flex items-center gap-1 px-2.5 py-1 text-xs bg-red-500 text-white rounded hover:bg-red-600 transition whitespace-nowrap"
-              >
-                Clear Cache
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+
     </div>
   );
 }

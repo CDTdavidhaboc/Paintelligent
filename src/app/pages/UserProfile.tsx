@@ -2,12 +2,14 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../co
 import { Badge } from "../components/ui/badge";
 import { 
   LogOut, User, Mail, Phone, MapPin, Calendar, Shield, Activity, Building2, Clock, Camera, 
-  Edit2, Save, X, UserPlus, Award, CheckCircle, Pencil, UserCircle, Check, Plus, Trash2, Building, Users, Search
+  Edit2, Save, X, UserPlus, Award, CheckCircle, Pencil, UserCircle, Check, Plus, Trash2, Building, Users, Search,
+  Paintbrush, Loader2
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { getUserData, saveUserProfile, saveProfilePicture } from "../lib/supabase";
+
 
 // Default user data for new users
 const DEFAULT_USER_DATA = {
@@ -50,8 +52,15 @@ export default function UserProfile() {
   const [notificationMessage, setNotificationMessage] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
   const [localAddress, setLocalAddress] = useState('');
+  const [isVisible, setIsVisible] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const notificationTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Animation
+  useEffect(() => {
+    const timer = setTimeout(() => setIsVisible(true), 80);
+    return () => clearTimeout(timer);
+  }, []);
 
   // Get user-specific storage keys
   const getUserStorageKey = (key: string) => {
@@ -587,9 +596,9 @@ export default function UserProfile() {
     );
   }, [displayData.contacts, searchTerm]);
 
-  // Editable field component
+  // Editable field component - memoized to prevent unnecessary re-renders
   const EditableField = useMemo(() => {
-    return ({ label, value, field, type = "text", icon: Icon }: any) => {
+    return function EditableField({ label, value, field, type = "text", icon: Icon }: any) {
       if (isEditing) {
         return (
           <div className="flex items-start gap-4 p-3 rounded-lg hover:bg-gray-50 transition-colors">
@@ -602,7 +611,7 @@ export default function UserProfile() {
                 type={type}
                 value={value || ''}
                 onChange={(e) => handleInputChange(field, e.target.value)}
-                className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#1a4d2e] focus:border-transparent"
+                className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#174d32] focus:border-transparent"
                 placeholder={`Enter ${label.toLowerCase()}`}
               />
             </div>
@@ -625,30 +634,30 @@ export default function UserProfile() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-center">
-          <div className="size-12 border-4 border-[#1a4d2e] border-t-transparent rounded-full animate-spin mx-auto" />
-          <p className="mt-4 text-gray-600">Loading profile...</p>
+      <div className="flex min-h-screen items-center justify-center bg-[#f3f7f4] p-6">
+        <div className="rounded-2xl border border-emerald-100 bg-white px-10 py-8 text-center shadow-[0_18px_50px_rgba(20,83,45,0.08)]">
+          <Loader2 className="mx-auto size-12 animate-spin text-[#174d32]" />
+          <p className="mt-4 text-sm font-medium text-slate-600">Loading profile...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="p-8 space-y-6 bg-gray-50 min-h-screen relative">
-      {/* Notification Toast */}
+    <>
+      {/* Notification Toast - Original Design with Fixed Positioning */}
       {showNotification && (
-        <div className="fixed top-4 right-4 z-50 animate-slide-in">
-          <div className={`flex items-center gap-3 px-6 py-4 rounded-lg shadow-lg ${
+        <div className="fixed bottom-6 right-6 z-[9999] animate-slide-up">
+          <div className={`flex items-center gap-3 px-6 py-4 rounded-lg shadow-2xl border max-w-md ${
             notificationMessage.includes("saved") || notificationMessage.includes("✅") || notificationMessage.includes("uploaded")
-              ? "bg-green-600 text-white"
+              ? "bg-green-800 border-green-400/30 text-white"
               : notificationMessage.includes("cancelled") || notificationMessage.includes("removed")
-              ? "bg-gray-600 text-white"
+              ? "bg-gray-600 border-gray-400/30 text-white"
               : notificationMessage.includes("Error") || notificationMessage.includes("Please")
-              ? "bg-red-600 text-white"
-              : "bg-blue-600 text-white"
+              ? "bg-red-600 border-red-400/30 text-white"
+              : "bg-blue-600 border-blue-400/30 text-white"
           }`}>
-            <Check className="size-5" />
+            <Check className="size-5 flex-shrink-0" />
             <span className="font-medium">{notificationMessage}</span>
             <div className="ml-2 w-1 h-8 bg-white/20 rounded-full">
               <div className="w-1 bg-white rounded-full animate-shrink" style={{ height: '100%' }} />
@@ -657,478 +666,515 @@ export default function UserProfile() {
         </div>
       )}
 
-      {/* New User Banner */}
-      {isNewUser && (
-        <div className="bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 rounded-lg p-4 flex items-start gap-4 shadow-sm">
-          <div className="p-2 bg-green-500 rounded-full">
-            <UserPlus className="size-6 text-white" />
-          </div>
-          <div className="flex-1">
-            <h3 className="font-semibold text-green-800 text-lg">Welcome to Paintelligent!</h3>
-            <p className="text-green-700 text-sm">
-              This is your profile page. Fill in your details to personalize your experience.
-            </p>
-          </div>
-        </div>
-      )}
+      <div
+        className={`
+          user-profile-page min-h-screen space-y-6 bg-[#f3f7f4] px-4 py-5 sm:px-6 lg:px-8 lg:py-7
+          transition-all duration-700 ease-out
+          ${isVisible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-5"}
+        `}
+      >
+        <style>{`
+          @keyframes slideUp {
+            from {
+              opacity: 0;
+              transform: translateY(20px) scale(0.95);
+            }
+            to {
+              opacity: 1;
+              transform: translateY(0) scale(1);
+            }
+          }
+          
+          @keyframes shrink {
+            from {
+              height: 100%;
+            }
+            to {
+              height: 0%;
+            }
+          }
+          
+          .animate-slide-up {
+            animation: slideUp 0.3s ease-out forwards;
+          }
+          
+          .animate-shrink {
+            animation: shrink 3s linear forwards;
+          }
 
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">User Profile</h1>
-          <p className="text-gray-600 mt-2">
-            {isNewUser 
-              ? "Complete your profile to get started" 
-              : "Manage your account settings and view system information"}
-          </p>
-        </div>
-        <div className="flex gap-3">
-          <button
-            onClick={handleEditToggle}
-            className={`flex items-center gap-2 px-6 py-3 rounded-lg font-medium transition-all shadow-md hover:shadow-lg transform hover:scale-105 ${
-              isEditing 
-                ? "bg-gray-600 hover:bg-gray-700 text-white" 
-                : "bg-[#1a4d2e] hover:bg-[#2d6b45] text-white"
-            }`}
-          >
-            {isEditing ? (
-              <>
-                <X className="size-5" />
-                Cancel
-              </>
-            ) : (
-              <>
-                <Pencil className="size-5" />
-                Edit Profile
-              </>
-            )}
-          </button>
-          {isEditing && (
-            <button
-              onClick={handleSave}
-              className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white px-6 py-3 rounded-lg font-medium transition-all shadow-md hover:shadow-lg transform hover:scale-105"
-            >
-              <Save className="size-5" />
-              Save Changes
-            </button>
-          )}
-          <button
-            onClick={handleLogout}
-            className="flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white px-6 py-3 rounded-lg font-medium transition-all shadow-md hover:shadow-lg transform hover:scale-105"
-          >
-            <LogOut className="size-5" />
-            Log Out
-          </button>
-        </div>
-      </div>
+          .user-profile-page [data-slot="card"] {
+            border-radius: 1rem;
+          }
 
-      {/* Profile Overview Card - MERGED with System Permissions */}
-      <Card className={`border-l-4 ${isNewUser ? 'border-emerald-500' : 'border-[#1a4d2e]'} shadow-xl hover:shadow-2xl transition-shadow duration-300`}>
-        <CardHeader className="pb-4 border-b border-gray-100">
-          <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-3">
-            <div className="flex items-start gap-6">
-              {/* Profile Picture Section */}
-              <div className="relative group">
-                <input
-                  type="file"
-                  ref={fileInputRef}
-                  onChange={handleFileChange}
-                  accept="image/*"
-                  className="hidden"
-                />
-                <div
-                  className={`w-32 h-32 rounded-2xl overflow-hidden shadow-lg ring-2 ring-offset-2 ring-offset-white ring-[#1a4d2e]/20 
-                    cursor-pointer transition-all duration-300 hover:scale-105 hover:rotate-3 
-                    bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center
-                    ${isEditing ? 'hover:ring-[#1a4d2e] hover:ring-4' : ''}
-                    group-hover:shadow-2xl`}
-                  onClick={handleProfilePictureClick}
+          .user-profile-page select {
+            border-color: rgb(167 243 208);
+            background: rgb(255 255 255);
+            color: rgb(20 83 45);
+            outline: none;
+          }
+
+          .user-profile-page select:focus {
+            box-shadow: 0 0 0 3px rgb(209 250 229);
+            border-color: rgb(5 150 105);
+          }
+
+          .user-profile-page [data-slot="table-head"] {
+            color: rgb(22 101 52);
+            font-weight: 700;
+          }
+
+          .user-profile-page [data-slot="table-row"]:hover {
+            background: rgb(240 253 244 / 0.7);
+          }
+        `}</style>
+
+        {/* Header */}
+        <header className="overflow-hidden rounded-2xl bg-[#174d32] px-5 py-5 text-white shadow-[0_18px_45px_rgba(23,77,50,0.18)] sm:px-7 sm:py-6">
+          <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-start gap-4">
+              <div className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-white/12 ring-1 ring-white/15">
+                <User className="size-5 text-emerald-100" />
+              </div>
+              <div>
+                <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">User Profile</h1>
+                <p className="mt-1 text-sm text-emerald-100">
+                  {isNewUser 
+                    ? "Complete your profile to get started" 
+                    : "Manage your account settings and view system information"}
+                </p>
+              </div>
+            </div>
+            <div className="flex flex-wrap items-center gap-3">
+              <button
+                onClick={handleEditToggle}
+                className={`flex items-center gap-2 rounded-xl px-5 py-2.5 text-sm font-semibold transition-all hover:-translate-y-0.5 ${
+                  isEditing 
+                    ? "bg-white/20 text-white hover:bg-white/30" 
+                    : "bg-white text-[#174d32] shadow-lg shadow-black/20 hover:bg-emerald-50 hover:shadow-xl"
+                }`}
+              >
+                {isEditing ? (
+                  <>
+                    <X className="size-4" />
+                    Cancel
+                  </>
+                ) : (
+                  <>
+                    <Pencil className="size-4" />
+                    Edit Profile
+                  </>
+                )}
+              </button>
+              {isEditing && (
+                <button
+                  onClick={handleSave}
+                  className="flex items-center gap-2 rounded-xl bg-emerald-500 px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-emerald-500/30 transition-all hover:-translate-y-0.5 hover:bg-emerald-600 hover:shadow-xl"
                 >
-                  {displayPicture ? (
-                    <img
-                      src={displayPicture}
-                      alt="Profile"
-                      className="w-full h-full object-cover"
-                    />
-                  ) : (
-                    <UserCircle className="w-24 h-24 text-gray-400 group-hover:text-[#1a4d2e] transition-colors" />
+                  <Save className="size-4" />
+                  Save Changes
+                </button>
+              )}
+              <button
+                onClick={handleLogout}
+                className="flex items-center gap-2 rounded-xl bg-red-500 px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-red-500/30 transition-all hover:-translate-y-0.5 hover:bg-red-600 hover:shadow-xl"
+              >
+                <LogOut className="size-4" />
+                Log Out
+              </button>
+            </div>
+          </div>
+        </header>
+
+        {/* New User Banner */}
+        {isNewUser && (
+          <div className="flex items-start gap-4 rounded-2xl border border-emerald-200 bg-gradient-to-r from-emerald-50 to-white p-4 shadow-sm">
+            <div className="flex size-12 shrink-0 items-center justify-center rounded-xl bg-emerald-500">
+              <UserPlus className="size-6 text-white" />
+            </div>
+            <div className="flex-1">
+              <h3 className="text-lg font-semibold text-emerald-800">Welcome to Paintelligent!</h3>
+              <p className="text-sm text-emerald-700">
+                This is your profile page. Fill in your details to personalize your experience.
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Profile Overview Card - MERGED with System Permissions */}
+        <Card className={`overflow-hidden rounded-2xl border ${isNewUser ? 'border-emerald-200' : 'border-emerald-100'} bg-white shadow-[0_12px_32px_rgba(20,83,45,0.06)]`}>
+          <CardHeader className="border-b border-emerald-100 bg-gradient-to-r from-white to-emerald-50/70 px-6 py-5">
+            <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
+              <div className="flex items-start gap-6">
+                {/* Profile Picture Section */}
+                <div className="relative group">
+                  <input
+                    type="file"
+                    ref={fileInputRef}
+                    onChange={handleFileChange}
+                    accept="image/*"
+                    className="hidden"
+                  />
+                  <div
+                    className={`w-28 h-28 rounded-2xl overflow-hidden shadow-lg ring-2 ring-offset-2 ring-offset-white ring-emerald-200/50 
+                      cursor-pointer transition-all duration-300 hover:scale-105 hover:rotate-3 
+                      bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center
+                      ${isEditing ? 'hover:ring-[#174d32] hover:ring-4' : ''}
+                      group-hover:shadow-2xl`}
+                    onClick={handleProfilePictureClick}
+                  >
+                    {displayPicture ? (
+                      <img
+                        src={displayPicture}
+                        alt="Profile"
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <UserCircle className="w-20 h-20 text-gray-400 group-hover:text-[#174d32] transition-colors" />
+                    )}
+                  </div>
+                  
+                  {isEditing && (
+                    <div className="absolute -bottom-2 -right-2 flex gap-1.5">
+                      {displayPicture && (
+                        <button
+                          onClick={handleRemovePicture}
+                          className="bg-red-500 hover:bg-red-600 text-white p-1.5 rounded-xl shadow-lg 
+                            transition-all duration-200 hover:scale-110"
+                          title="Remove profile picture"
+                        >
+                          <X className="size-3" />
+                        </button>
+                      )}
+                      <button
+                        onClick={handleProfilePictureClick}
+                        className="bg-[#174d32] hover:bg-[#123e28] text-white p-1.5 rounded-xl shadow-lg 
+                          transition-all duration-200 hover:scale-110"
+                        title="Change profile picture"
+                      >
+                        <Camera className="size-3" />
+                      </button>
+                    </div>
                   )}
                 </div>
-                
-                {isEditing && (
-                  <div className="absolute -bottom-2 -right-2 flex gap-1.5">
-                    {displayPicture && (
-                      <button
-                        onClick={handleRemovePicture}
-                        className="bg-red-500 hover:bg-red-600 text-white p-2 rounded-xl shadow-lg 
-                          transition-all duration-200 hover:scale-110 hover:shadow-red-200/50"
-                        title="Remove profile picture"
-                      >
-                        <X className="size-3.5" />
-                      </button>
-                    )}
-                    <button
-                      onClick={handleProfilePictureClick}
-                      className="bg-[#1a4d2e] hover:bg-[#2d6b45] text-white p-2 rounded-xl shadow-lg 
-                        transition-all duration-200 hover:scale-110 hover:shadow-[#1a4d2e]/30"
-                      title="Change profile picture"
-                    >
-                      <Camera className="size-3.5" />
-                    </button>
-                  </div>
-                )}
-              </div>
 
-              {/* User Info Section */}
-              <div className="flex-1 min-w-0 pt-1">
-                {isEditing ? (
-                  <div className="relative">
-                    <input
-                      type="text"
-                      value={displayData.name}
-                      onChange={(e) => handleInputChange('name', e.target.value)}
-                      className="text-3xl font-bold text-gray-900 bg-transparent border-b-2 
-                        border-[#1a4d2e] focus:border-[#2d6b45] focus:outline-none 
-                        w-full max-w-md pb-1 transition-colors duration-200
-                        placeholder:text-gray-400"
-                      placeholder="Enter your name"
-                    />
-                    <div className="absolute bottom-0 left-0 w-full h-0.5 bg-[#1a4d2e] scale-x-0 
-                      focus-within:scale-x-100 transition-transform duration-300 origin-left" />
-                  </div>
-                ) : (
-                  <CardTitle className="text-3xl font-bold text-gray-900 truncate">
-                    {displayData.name}
-                  </CardTitle>
-                )}
-                
-                <div className="flex flex-wrap items-center gap-3 mt-2">
+                {/* User Info Section */}
+                <div className="flex-1 min-w-0 pt-1">
                   {isEditing ? (
-                    <div className="flex items-center gap-2 bg-gray-50 px-3 py-1.5 rounded-lg 
-                      border border-gray-200 hover:border-[#1a4d2e] transition-colors duration-200">
-                      <Shield className="size-4 text-[#1a4d2e]" />
-                      <select
-                        value={displayData.role}
-                        onChange={(e) => handleInputChange('role', e.target.value)}
-                        className="bg-transparent border-none focus:outline-none text-sm font-medium 
-                          text-gray-700 cursor-pointer py-0.5"
-                      >
-                        <option value="User">User</option>
-                        <option value="System Administrator">System Administrator</option>
-                        <option value="Manager">Manager</option>
-                        <option value="Owner">Owner</option>
-                      </select>
+                    <div className="relative">
+                      <input
+                        type="text"
+                        value={displayData.name}
+                        onChange={(e) => handleInputChange('name', e.target.value)}
+                        className="text-2xl font-bold text-gray-900 bg-transparent border-b-2 
+                          border-[#174d32] focus:border-emerald-500 focus:outline-none 
+                          w-full max-w-md pb-1 transition-colors duration-200
+                          placeholder:text-gray-400"
+                        placeholder="Enter your name"
+                      />
+                      <div className="absolute bottom-0 left-0 w-full h-0.5 bg-[#174d32] scale-x-0 
+                        focus-within:scale-x-100 transition-transform duration-300 origin-left" />
                     </div>
                   ) : (
-                    <Badge className="bg-gradient-to-r from-[#1a4d2e] to-[#2d6b45] 
-                      hover:from-[#2d6b45] hover:to-[#3d8b5a] px-4 py-1.5 rounded-lg 
-                      text-sm font-medium shadow-lg shadow-[#1a4d2e]/20 
-                      transition-all duration-300 hover:shadow-xl hover:scale-105">
-                      <Shield className="size-3 mr-1.5 inline-block" />
-                      {displayData.role}
-                    </Badge>
+                    <CardTitle className="text-2xl font-bold text-gray-900 truncate">
+                      {displayData.name}
+                    </CardTitle>
                   )}
-                </div>
-                
-                <div className="mt-2">
-                  <div className="flex items-center gap-2 text-gray-600 
-                    bg-gray-50/50 px-3 py-1.5 rounded-lg border border-gray-100/50
-                    hover:bg-gray-50 transition-colors duration-200">
-                    <Mail className="size-4 text-[#1a4d2e]/70" />
-                    <span className="text-sm font-medium truncate">
-                      {displayData.email || userEmail}
-                    </span>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Metadata Section */}
-            <div className="flex flex-col items-start lg:items-end gap-3 flex-shrink-0">
-              {isNewUser && (
-                <div className="flex items-center gap-2 bg-emerald-50 px-4 py-2 rounded-xl 
-                  border border-emerald-200 shadow-sm">
-                  <div className="relative">
-                    <div className="w-2.5 h-2.5 bg-emerald-500 rounded-full animate-pulse" />
-                    <div className="absolute inset-0 w-2.5 h-2.5 bg-emerald-500 rounded-full 
-                      animate-ping opacity-75" />
-                  </div>
-                  <span className="text-sm font-semibold text-emerald-700">New User</span>
-                </div>
-              )}
-              
-              <div className="flex items-center gap-2 text-gray-500 text-sm 
-                bg-white/50 backdrop-blur-sm px-4 py-2 rounded-xl border border-gray-200/50
-                shadow-sm hover:shadow-md transition-all duration-200">
-                <Clock className="size-4 text-[#1a4d2e]/60" />
-                <span className="font-medium">
-                  Last login: <span className="text-gray-700">{lastLoginDate}</span>
-                </span>
-              </div>
-              
-              {!isEditing && (
-                <div className="flex items-center gap-2 text-gray-400 text-xs 
-                  bg-gray-50/50 px-3 py-1.5 rounded-lg border border-gray-100">
-                  <Calendar className="size-3" />
-                  <span>Member since 2024</span>
-                </div>
-              )}
-            </div>
-          </div>
-        </CardHeader>
-        
-        {/* System Permissions - MERGED INSIDE PROFILE CARD */}
-        <CardContent className="pt-4">
-          <div className="flex items-center gap-2 mb-3">
-            <Shield className="size-4 text-[#1a4d2e]" />
-            <h3 className="text-sm font-semibold text-gray-700">System Permissions & Access</h3>
-            <Badge className="bg-[#1a4d2e] text-xs ml-2">
-              {displayData.permissions?.length || 0} Permissions
-            </Badge>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            {displayData.permissions && displayData.permissions.length > 0 ? (
-              displayData.permissions.map((permission: string, index: number) => (
-                <div
-                  key={index}
-                  className="flex items-center gap-2 px-3 py-2 border border-green-100 bg-green-50 rounded-lg hover:border-green-200 transition-colors"
-                >
-                  <CheckCircle className="size-4 text-green-600 flex-shrink-0" />
-                  <span className="text-sm font-medium text-gray-700">{permission}</span>
-                </div>
-              ))
-            ) : (
-              <div className="col-span-2 text-center text-gray-400 text-sm py-2">
-                No permissions assigned yet
-              </div>
-            )}
-          </div>
-        </CardContent>
-      </Card>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Contact Information */}
-        <Card className="shadow-md hover:shadow-lg transition-shadow">
-          <CardHeader className="bg-gradient-to-r from-gray-50 to-white border-b">
-            <CardTitle className="flex items-center gap-2 text-lg">
-              <div className="p-1.5 bg-[#1a4d2e] rounded-lg">
-                <Mail className="size-4 text-white" />
-              </div>
-              Contact Information
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4 pt-4">
-            <EditableField
-              label="Email Address"
-              value={displayData.email || userEmail}
-              field="email"
-              icon={Mail}
-            />
-            <EditableField
-              label="Phone Number"
-              value={displayData.phone}
-              field="phone"
-              icon={Phone}
-            />
-            <EditableField
-              label="Office Location"
-              value={displayData.location}
-              field="location"
-              icon={MapPin}
-            />
-            {isEditing ? (
-              <div className="flex items-start gap-4 p-3 rounded-lg hover:bg-gray-50 transition-colors">
-                <div className="p-1.5 bg-green-50 rounded-lg">
-                  <MapPin className="size-4 text-green-600" />
-                </div>
-                <div className="flex-1">
-                  <p className="text-sm font-medium text-gray-500 mb-1">Address</p>
-                  <textarea
-                    value={localAddress}
-                    onChange={(e) => {
-                      setLocalAddress(e.target.value);
-                      handleInputChange('address', e.target.value);
-                    }}
-                    className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#1a4d2e] focus:border-transparent min-h-[60px] text-sm"
-                    placeholder="Enter your address"
-                  />
-                </div>
-              </div>
-            ) : (
-              displayData.address && (
-                <div className="flex items-start gap-4 p-3 rounded-lg hover:bg-gray-50 transition-colors">
-                  <div className="p-1.5 bg-purple-50 rounded-lg">
-                    <MapPin className="size-4 text-purple-600" />
-                  </div>
-                  <div className="flex-1">
-                    <p className="text-sm font-medium text-gray-500 mb-1">Address</p>
-                    <p className="text-sm font-semibold text-gray-900">{displayData.address}</p>
-                  </div>
-                </div>
-              )
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Contacts */}
-        <Card className="shadow-md hover:shadow-lg transition-shadow">
-          <CardHeader className="bg-gradient-to-r from-gray-50 to-white border-b py-3">
-            <CardTitle className="flex items-center gap-2 text-lg">
-              <div className="p-1.5 bg-[#1a4d2e] rounded-lg">
-                <Users className="size-4 text-white" />
-              </div>
-              Contacts
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="pt-4">
-            <div className="relative mb-3">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 size-4 text-gray-400" />
-              <input
-                type="text"
-                placeholder="Search contacts..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-9 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1a4d2e] focus:border-transparent text-sm"
-              />
-              {searchTerm && (
-                <button
-                  onClick={() => setSearchTerm("")}
-                  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                >
-                  <X className="size-4" />
-                </button>
-              )}
-            </div>
-
-            {isEditing && (
-              <div className="flex justify-end mb-3">
-                <button
-                  onClick={handleAddContact}
-                  className="flex items-center gap-1 px-3 py-1.5 bg-[#1a4d2e] hover:bg-[#2d6b45] text-white text-sm rounded-lg transition-all"
-                >
-                  <Plus className="size-3.5" />
-                  Add Contact
-                </button>
-              </div>
-            )}
-            
-            <div className="space-y-2 max-h-[300px] overflow-y-auto pr-1">
-              {filteredContacts.length > 0 ? (
-                filteredContacts.map((contact: any) => (
-                  <div key={contact.id} className="p-2.5 border border-gray-200 rounded-lg hover:border-[#1a4d2e] transition-colors">
+                  
+                  <div className="flex flex-wrap items-center gap-3 mt-2">
                     {isEditing ? (
-                      <div className="space-y-1.5">
-                        <div className="flex gap-1.5">
-                          <input
-                            type="text"
-                            value={contact.name}
-                            onChange={(e) => handleContactChange(contact.id, 'name', e.target.value)}
-                            placeholder="Name"
-                            className="flex-1 p-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-[#1a4d2e]"
-                          />
-                          <input
-                            type="email"
-                            value={contact.email}
-                            onChange={(e) => handleContactChange(contact.id, 'email', e.target.value)}
-                            placeholder="Email"
-                            className="flex-1 p-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-[#1a4d2e]"
-                          />
-                        </div>
-                        <div className="flex gap-1.5">
-                          <input
-                            type="text"
-                            value={contact.phone}
-                            onChange={(e) => handleContactChange(contact.id, 'phone', e.target.value)}
-                            placeholder="Phone"
-                            className="flex-1 p-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-[#1a4d2e]"
-                          />
-                          <input
-                            type="text"
-                            value={contact.role}
-                            onChange={(e) => handleContactChange(contact.id, 'role', e.target.value)}
-                            placeholder="Role"
-                            className="flex-1 p-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-[#1a4d2e]"
-                          />
-                          <button
-                            onClick={() => handleRemoveContact(contact.id)}
-                            className="p-1 bg-red-500 hover:bg-red-600 text-white rounded transition-colors"
-                          >
-                            <Trash2 className="size-3.5" />
-                          </button>
-                        </div>
+                      <div className="flex items-center gap-2 bg-gray-50 px-3 py-1.5 rounded-lg 
+                        border border-gray-200 hover:border-[#174d32] transition-colors duration-200">
+                        <Shield className="size-4 text-[#174d32]" />
+                        <select
+                          value={displayData.role}
+                          onChange={(e) => handleInputChange('role', e.target.value)}
+                          className="bg-transparent border-none focus:outline-none text-sm font-medium 
+                            text-gray-700 cursor-pointer py-0.5"
+                        >
+                          <option value="User">User</option>
+                          <option value="System Administrator">System Administrator</option>
+                          <option value="Manager">Manager</option>
+                          <option value="Owner">Owner</option>
+                        </select>
                       </div>
                     ) : (
-                      <div className="flex items-center justify-between">
-                        <div className="flex-1 min-w-0">
-                          <p className="font-medium text-gray-900 text-sm">{contact.name}</p>
-                          <div className="flex flex-wrap gap-2 mt-0.5 text-xs text-gray-600">
-                            <span className="flex items-center gap-0.5">
-                              <Mail className="size-3" />
-                              {contact.email}
-                            </span>
-                            <span className="flex items-center gap-0.5">
-                              <Phone className="size-3" />
-                              {contact.phone}
-                            </span>
-                            <span className="flex items-center gap-0.5">
-                              <Shield className="size-3" />
-                              {contact.role}
-                            </span>
-                          </div>
-                        </div>
-                        <Badge className="bg-[#1a4d2e] text-xs ml-2 flex-shrink-0">
-                          Contact
-                        </Badge>
-                      </div>
+                      <Badge className="bg-gradient-to-r from-[#174d32] to-[#123e28] px-4 py-1.5 rounded-lg text-sm font-medium shadow-lg shadow-[#174d32]/20">
+                        <Shield className="size-3 mr-1.5 inline-block" />
+                        {displayData.role}
+                      </Badge>
                     )}
+                  </div>
+                  
+                  <div className="mt-2">
+                    <div className="flex items-center gap-2 text-gray-600 
+                      bg-gray-50/50 px-3 py-1.5 rounded-lg border border-gray-100/50
+                      hover:bg-gray-50 transition-colors duration-200">
+                      <Mail className="size-4 text-[#174d32]/70" />
+                      <span className="text-sm font-medium truncate">
+                        {displayData.email || userEmail}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Metadata Section */}
+              <div className="flex flex-col items-start lg:items-end gap-3 flex-shrink-0">
+                {isNewUser && (
+                  <div className="flex items-center gap-2 bg-emerald-50 px-4 py-2 rounded-xl 
+                    border border-emerald-200 shadow-sm">
+                    <div className="relative">
+                      <div className="w-2.5 h-2.5 bg-emerald-500 rounded-full animate-pulse" />
+                      <div className="absolute inset-0 w-2.5 h-2.5 bg-emerald-500 rounded-full 
+                        animate-ping opacity-75" />
+                    </div>
+                    <span className="text-sm font-semibold text-emerald-700">New User</span>
+                  </div>
+                )}
+                
+                <div className="flex items-center gap-2 text-gray-500 text-sm 
+                  bg-white/50 backdrop-blur-sm px-4 py-2 rounded-xl border border-gray-200/50
+                  shadow-sm hover:shadow-md transition-all duration-200">
+                  <Clock className="size-4 text-[#174d32]/60" />
+                  <span className="font-medium">
+                    Last login: <span className="text-gray-700">{lastLoginDate}</span>
+                  </span>
+                </div>
+                
+                {!isEditing && (
+                  <div className="flex items-center gap-2 text-gray-400 text-xs 
+                    bg-gray-50/50 px-3 py-1.5 rounded-lg border border-gray-100">
+                    <Calendar className="size-3" />
+                    <span>Member since 2024</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          </CardHeader>
+          
+          {/* System Permissions - MERGED INSIDE PROFILE CARD */}
+          <CardContent className="pt-5">
+            <div className="flex items-center gap-2 mb-3">
+              <Shield className="size-4 text-[#174d32]" />
+              <h3 className="text-sm font-semibold text-gray-700">System Permissions & Access</h3>
+              <Badge className="bg-[#174d32] text-xs ml-2">
+                {displayData.permissions?.length || 0} Permissions
+              </Badge>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {displayData.permissions && displayData.permissions.length > 0 ? (
+                displayData.permissions.map((permission: string, index: number) => (
+                  <div
+                    key={index}
+                    className="flex items-center gap-2 px-3 py-2 border border-green-100 bg-green-50 rounded-lg hover:border-green-200 transition-colors"
+                  >
+                    <CheckCircle className="size-4 text-green-600 flex-shrink-0" />
+                    <span className="text-sm font-medium text-gray-700">{permission}</span>
                   </div>
                 ))
               ) : (
-                <p className="text-gray-500 text-sm text-center py-4">
-                  {searchTerm ? "No contacts match your search" : "No contacts added yet"}
-                </p>
-              )}
-            </div>
-
-            <div className="mt-3 pt-2 border-t border-gray-200 flex justify-between text-xs text-gray-500">
-              <span>{filteredContacts.length} contact{filteredContacts.length !== 1 ? 's' : ''}</span>
-              {searchTerm && filteredContacts.length !== (displayData.contacts || []).length && (
-                <span>Showing {filteredContacts.length} of {(displayData.contacts || []).length}</span>
+                <div className="col-span-2 text-center text-gray-400 text-sm py-2">
+                  No permissions assigned yet
+                </div>
               )}
             </div>
           </CardContent>
         </Card>
-      </div>
 
-      <style>{`
-        @keyframes slideIn {
-          from {
-            transform: translateX(100%);
-            opacity: 0;
-          }
-          to {
-            transform: translateX(0);
-            opacity: 1;
-          }
-        }
-        
-        @keyframes shrink {
-          from {
-            height: 100%;
-          }
-          to {
-            height: 0%;
-          }
-        }
-        
-        .animate-slide-in {
-          animation: slideIn 0.3s ease-out forwards;
-        }
-        
-        .animate-shrink {
-          animation: shrink 3s linear forwards;
-        }
-      `}</style>
-    </div>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Contact Information */}
+          <Card className="overflow-hidden rounded-2xl border border-emerald-100 bg-white shadow-[0_12px_32px_rgba(20,83,45,0.06)]">
+            <CardHeader className="border-b border-emerald-100 bg-gradient-to-r from-white to-emerald-50/70 px-6 py-4">
+              <CardTitle className="flex items-center gap-2 text-lg font-semibold text-gray-900">
+                <div className="flex size-8 items-center justify-center rounded-lg bg-[#174d32]">
+                  <Mail className="size-4 text-white" />
+                </div>
+                Contact Information
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4 pt-5">
+              <EditableField
+                label="Email Address"
+                value={displayData.email || userEmail}
+                field="email"
+                icon={Mail}
+              />
+              <EditableField
+                label="Phone Number"
+                value={displayData.phone}
+                field="phone"
+                icon={Phone}
+              />
+              <EditableField
+                label="Office Location"
+                value={displayData.location}
+                field="location"
+                icon={MapPin}
+              />
+              {isEditing ? (
+                <div className="flex items-start gap-4 p-3 rounded-lg hover:bg-gray-50 transition-colors">
+                  <div className="p-2 bg-green-50 rounded-lg">
+                    <MapPin className="size-5 text-green-600" />
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-sm font-medium text-gray-500 mb-1">Address</p>
+                    <textarea
+                      value={localAddress}
+                      onChange={(e) => {
+                        setLocalAddress(e.target.value);
+                        handleInputChange('address', e.target.value);
+                      }}
+                      className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#174d32] focus:border-transparent min-h-[60px] text-sm"
+                      placeholder="Enter your address"
+                    />
+                  </div>
+                </div>
+              ) : (
+                displayData.address && (
+                  <div className="flex items-start gap-4 p-3 rounded-lg hover:bg-gray-50 transition-colors">
+                    <div className="p-2 bg-purple-50 rounded-lg">
+                      <MapPin className="size-5 text-purple-600" />
+                    </div>
+                    <div className="flex-1">
+                      <p className="text-sm font-medium text-gray-500 mb-1">Address</p>
+                      <p className="text-sm font-semibold text-gray-900">{displayData.address}</p>
+                    </div>
+                  </div>
+                )
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Contacts */}
+          <Card className="overflow-hidden rounded-2xl border border-emerald-100 bg-white shadow-[0_12px_32px_rgba(20,83,45,0.06)]">
+            <CardHeader className="border-b border-emerald-100 bg-gradient-to-r from-white to-emerald-50/70 px-6 py-4">
+              <CardTitle className="flex items-center gap-2 text-lg font-semibold text-gray-900">
+                <div className="flex size-8 items-center justify-center rounded-lg bg-[#174d32]">
+                  <Users className="size-4 text-white" />
+                </div>
+                Contacts
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="pt-5">
+              <div className="relative mb-3">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 size-4 text-gray-400" />
+                <input
+                  type="text"
+                  placeholder="Search contacts..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full pl-9 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#174d32] focus:border-transparent text-sm"
+                />
+                {searchTerm && (
+                  <button
+                    onClick={() => setSearchTerm("")}
+                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  >
+                    <X className="size-4" />
+                  </button>
+                )}
+              </div>
+
+              {isEditing && (
+                <div className="flex justify-end mb-3">
+                  <button
+                    onClick={handleAddContact}
+                    className="flex items-center gap-1 px-3 py-1.5 bg-[#174d32] hover:bg-[#123e28] text-white text-sm rounded-lg transition-all"
+                  >
+                    <Plus className="size-3.5" />
+                    Add Contact
+                  </button>
+                </div>
+              )}
+              
+              <div className="space-y-2 max-h-[300px] overflow-y-auto pr-1">
+                {filteredContacts.length > 0 ? (
+                  filteredContacts.map((contact: any) => (
+                    <div key={contact.id} className="p-2.5 border border-gray-200 rounded-lg hover:border-[#174d32] transition-colors">
+                      {isEditing ? (
+                        <div className="space-y-1.5">
+                          <div className="flex gap-1.5">
+                            <input
+                              type="text"
+                              value={contact.name}
+                              onChange={(e) => handleContactChange(contact.id, 'name', e.target.value)}
+                              placeholder="Name"
+                              className="flex-1 p-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-[#174d32]"
+                            />
+                            <input
+                              type="email"
+                              value={contact.email}
+                              onChange={(e) => handleContactChange(contact.id, 'email', e.target.value)}
+                              placeholder="Email"
+                              className="flex-1 p-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-[#174d32]"
+                            />
+                          </div>
+                          <div className="flex gap-1.5">
+                            <input
+                              type="text"
+                              value={contact.phone}
+                              onChange={(e) => handleContactChange(contact.id, 'phone', e.target.value)}
+                              placeholder="Phone"
+                              className="flex-1 p-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-[#174d32]"
+                            />
+                            <input
+                              type="text"
+                              value={contact.role}
+                              onChange={(e) => handleContactChange(contact.id, 'role', e.target.value)}
+                              placeholder="Role"
+                              className="flex-1 p-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-[#174d32]"
+                            />
+                            <button
+                              onClick={() => handleRemoveContact(contact.id)}
+                              className="p-1 bg-red-500 hover:bg-red-600 text-white rounded transition-colors"
+                            >
+                              <Trash2 className="size-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex items-center justify-between">
+                          <div className="flex-1 min-w-0">
+                            <p className="font-medium text-gray-900 text-sm">{contact.name}</p>
+                            <div className="flex flex-wrap gap-2 mt-0.5 text-xs text-gray-600">
+                              <span className="flex items-center gap-0.5">
+                                <Mail className="size-3" />
+                                {contact.email}
+                              </span>
+                              <span className="flex items-center gap-0.5">
+                                <Phone className="size-3" />
+                                {contact.phone}
+                              </span>
+                              <span className="flex items-center gap-0.5">
+                                <Shield className="size-3" />
+                                {contact.role}
+                              </span>
+                            </div>
+                          </div>
+                          <Badge className="bg-[#174d32] text-xs ml-2 flex-shrink-0">
+                            Contact
+                          </Badge>
+                        </div>
+                      )}
+                    </div>
+                  ))
+                ) : (
+                  <p className="text-gray-500 text-sm text-center py-4">
+                    {searchTerm ? "No contacts match your search" : "No contacts added yet"}
+                  </p>
+                )}
+              </div>
+
+              <div className="mt-3 pt-2 border-t border-gray-200 flex justify-between text-xs text-gray-500">
+                <span>{filteredContacts.length} contact{filteredContacts.length !== 1 ? 's' : ''}</span>
+                {searchTerm && filteredContacts.length !== (displayData.contacts || []).length && (
+                  <span>Showing {filteredContacts.length} of {(displayData.contacts || []).length}</span>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    </>
   );
 }

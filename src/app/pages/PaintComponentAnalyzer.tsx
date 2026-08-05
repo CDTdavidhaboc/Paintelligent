@@ -36,6 +36,7 @@ import {
   RefreshCw,
   Cloud,
   CloudOff,
+  Paintbrush,
 } from "lucide-react";
 import Papa from "papaparse";
 import { GoogleGenAI } from "@google/genai";
@@ -345,7 +346,7 @@ const loadInventory = (uploadedData: any[] | null) => {
 
 const showNotification = (message: string, type: 'success' | 'error' | 'info' = 'success') => {
   const colors = {
-    success: 'bg-green-600 border-green-400/30',
+    success: 'bg-green-800 border-green-400/30',
     error: 'bg-red-600 border-red-400/30',
     info: 'bg-blue-600 border-blue-400/30'
   };
@@ -356,7 +357,6 @@ const showNotification = (message: string, type: 'success' | 'error' | 'info' = 
     info: 'M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z'
   };
 
-  // Remove existing notifications
   const existing = document.querySelectorAll('.custom-notification');
   existing.forEach(el => el.remove());
 
@@ -433,31 +433,26 @@ export default function PaintComponentAnalyzer() {
         const data = await getPaintAnalyzerData(userEmail);
         
         if (data) {
-          // Restore inventory data
           if (data.inventory_data) {
             setUploadedData(data.inventory_data);
             setUploadedDataName(data.inventory_data_name || "");
             setIsDataSaved(true);
           }
           
-          // Restore analysis results
           if (data.color_analysis) {
             setColorAnalysis(data.color_analysis);
           }
           
-          // Restore uploaded image
           if (data.uploaded_image) {
             setUploadedImage(data.uploaded_image);
             setUploadedFileName(data.uploaded_file_name || "");
             setUploadedFileSize(data.uploaded_file_size || "");
           }
           
-          // Restore batch size
           if (data.batch_size) {
             setBatchSizeLiters(data.batch_size);
           }
           
-          // Restore last fetched
           if (data.last_fetched) {
             setLastFetched(new Date(data.last_fetched));
           }
@@ -519,7 +514,6 @@ export default function PaintComponentAnalyzer() {
       }
     };
 
-    // Debounce saves to avoid too many writes
     const timeoutId = setTimeout(() => {
       if (userEmail && (uploadedData || colorAnalysis || uploadedImage)) {
         saveToCloud();
@@ -604,7 +598,6 @@ export default function PaintComponentAnalyzer() {
   };
 
   const handleClearSavedData = () => {
-    // Clear local state
     setIsDataSaved(false);
     setUploadedData(null);
     setUploadedDataName("");
@@ -612,7 +605,6 @@ export default function PaintComponentAnalyzer() {
     setAnalyzeError("");
     if (csvInputRef.current) csvInputRef.current.value = "";
     
-    // Clear from Supabase
     clearSupabaseData();
   };
 
@@ -726,14 +718,12 @@ export default function PaintComponentAnalyzer() {
   };
 
   const handleRemoveData = () => {
-    // Clear local state
     setUploadedData(null);
     setUploadedDataName("");
     setUploadError("");
     setIsDataSaved(false);
     if (csvInputRef.current) csvInputRef.current.value = "";
     
-    // Clear from Supabase
     clearSupabaseData();
   };
 
@@ -1078,10 +1068,10 @@ Required JSON format:
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-center">
-          <Loader2 className="size-12 animate-spin text-[#1a4d2e] mx-auto" />
-          <p className="mt-4 text-gray-600">Loading your data...</p>
+      <div className="flex min-h-screen items-center justify-center bg-[#f3f7f4] p-6">
+        <div className="rounded-2xl border border-emerald-100 bg-white px-10 py-8 text-center shadow-[0_18px_50px_rgba(20,83,45,0.08)]">
+          <Loader2 className="mx-auto size-12 animate-spin text-[#1a4d2e]" />
+          <p className="mt-4 text-sm font-medium text-slate-600">Loading your data...</p>
         </div>
       </div>
     );
@@ -1090,9 +1080,9 @@ Required JSON format:
   return (
     <div
       className={`
-        min-h-screen bg-green-100 p-7 pt-3 space-y-3
-        transition-all duration-700 ease-out transform
-        ${isVisible ? "opacity-100 translate-y-0 scale-100" : "opacity-0 translate-y-6 scale-[0.98]"}
+        paint-analyzer-page min-h-screen space-y-5 bg-[#f3f7f4] px-4 py-5 sm:px-6 lg:px-8 lg:py-7 
+        transition-all duration-700 ease-out
+        ${isVisible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-5"}
       `}
     >
       <style>{`
@@ -1117,64 +1107,93 @@ Required JSON format:
         .animate-slide-up {
           animation: slideUp 0.3s ease-out forwards;
         }
+
+        .paint-analyzer-page [data-slot="card"] {
+          border-radius: 1rem;
+        }
+
+        .paint-analyzer-page select {
+          border-color: rgb(167 243 208);
+          background: rgb(255 255 255);
+          color: rgb(20 83 45);
+          outline: none;
+        }
+
+        .paint-analyzer-page select:focus {
+          box-shadow: 0 0 0 3px rgb(209 250 229);
+          border-color: rgb(5 150 105);
+        }
+
+        .paint-analyzer-page [data-slot="table-head"] {
+          color: rgb(22 101 52);
+          font-weight: 700;
+        }
+
+        .paint-analyzer-page [data-slot="table-row"]:hover {
+          background: rgb(240 253 244 / 0.7);
+        }
       `}</style>
 
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          {lastFetched && (
-            <p className="text-xs text-gray-500 mt-1">
-              Analyzed via Gemini AI · {lastFetched.toLocaleTimeString()}
-            </p>
+      {/* Page header - Matching SalesForecasting */}
+      <header className="overflow-hidden rounded-2xl bg-[#174d32] px-5 py-5 text-white shadow-[0_18px_45px_rgba(23,77,50,0.18)] sm:px-7 sm:py-6">
+        <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-start gap-4">
+            <div className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-white/12 ring-1 ring-white/15">
+              <Paintbrush className="size-5 text-emerald-100" />
+            </div>
+            <div>
+              <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">Paint Component Analyzer</h1>
+              <p className="mt-1 text-sm text-emerald-100">Upload a paint sample and get a residential formula from your inventory.</p>
+              
+            </div>
+          </div>
+          {userEmail && (
+            <div className="flex w-fit items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-1.5 text-xs">
+              {syncStatus === "syncing" && (
+                <>
+                  <Loader2 className="size-3 animate-spin text-emerald-100" />
+                  <span className="text-emerald-50">Syncing...</span>
+                </>
+              )}
+              {syncStatus === "success" && (
+                <>
+                  <Cloud className="size-3 text-emerald-100" />
+                  <span className="text-emerald-50">Cloud synced</span>
+                </>
+              )}
+              {syncStatus === "error" && (
+                <>
+                  <CloudOff className="size-3 text-red-200" />
+                  <span className="text-red-100">Sync error</span>
+                </>
+              )}
+              {syncStatus === "idle" && userEmail && (
+                <>
+                  <Cloud className="size-3 text-emerald-100/70" />
+                  <span className="text-emerald-100/80">Not synced</span>
+                </>
+              )}
+            </div>
           )}
         </div>
-        {/* Sync Status Indicator */}
-        {userEmail && (
-          <div className="flex items-center gap-2 text-xs">
-            {syncStatus === "syncing" && (
-              <>
-                <Loader2 className="size-3 animate-spin text-yellow-500" />
-                <span className="text-yellow-600">Syncing...</span>
-              </>
-            )}
-            {syncStatus === "success" && (
-              <>
-                <Cloud className="size-3 text-green-500" />
-                <span className="text-green-600">Cloud Synced</span>
-              </>
-            )}
-            {syncStatus === "error" && (
-              <>
-                <CloudOff className="size-3 text-red-500" />
-                <span className="text-red-600">Sync Error</span>
-              </>
-            )}
-            {syncStatus === "idle" && userEmail && (
-              <>
-                <Cloud className="size-3 text-gray-400" />
-                <span className="text-gray-400">Not Synced</span>
-              </>
-            )}
-          </div>
-        )}
-      </div>
+      </header>
 
-      {/* Minimal Inventory Source */}
+      {/* Inventory Section - Matching SalesForecasting style */}
       <section>
-        <Card className="overflow-hidden border border-green-100 shadow-sm ">
-          <CardHeader className="py-3 px-4 bg-gradient-to-r from-green-50 via-white to-green-50">
+        <Card className="overflow-hidden rounded-2xl border border-emerald-100 bg-white shadow-[0_12px_32px_rgba(20,83,45,0.06)]">
+          <CardHeader className="border-b border-emerald-100 bg-gradient-to-r from-emerald-50/80 via-white to-white px-5 py-4">
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2">
                 <Database className="size-4 text-green-600" />
-                <CardTitle className="text-sm font-semibold text-gray-900">Inventory</CardTitle>
+                <CardTitle className="text-sm font-semibold text-gray-900">Inventory Source</CardTitle>
               </div>
-              <Badge className={isDataLoaded ? "bg-green-600 text-white shadow-sm text-xs" : "bg-green-500 text-white shadow-sm text-xs"}>
+              <Badge className={isDataLoaded ? "bg-green-800 text-white shadow-sm text-xs" : "bg-green-600 text-white shadow-sm text-xs"}>
                 {isDataSaved ? "✅ SAVED" : isDataLoaded ? "📂 LOADED" : "✗ EMPTY DATA"}
               </Badge>
             </div>
           </CardHeader>
 
-          <CardContent className="">
+          <CardContent>
             <input
               ref={csvInputRef}
               type="file"
@@ -1218,23 +1237,21 @@ Required JSON format:
                   </div>
                 </div>
                 
-                {/* HEADER REMINDER - ADDED HERE */}
                 <div className="mt-3 p-3 bg-green-50 rounded-lg border border-green-200">
-                  <p className="text-xs font-medium text-green-800">📋 Required Headers:</p>
+                  <p className="text-xs font-medium text-green-800">Required Headers:</p>
                   <div className="flex flex-wrap gap-1.5 mt-1.5">
-                    <Badge variant="outline" className="text-xs bg-white border-green-300 text-green-700">Product</Badge>
-                    <Badge variant="outline" className="text-xs bg-white border-green-300 text-green-700">Brand</Badge>
-                    <Badge variant="outline" className="text-xs bg-white border-green-300 text-green-700">Category</Badge>
-                    <Badge variant="outline" className="text-xs bg-white border-green-300 text-green-700">Stocks</Badge>
-                    <Badge variant="outline" className="text-xs bg-white border-green-300 text-green-700">Est. Price (PHP)</Badge>
-                    <Badge variant="outline" className="text-xs bg-white border-green-300 text-green-700">Unit Purchase Price</Badge>
+                    <Badge variant="outline" className="text-xs bg-white border-green-300 text-green-700 font-mono">Product</Badge>
+                    <Badge variant="outline" className="text-xs bg-white border-green-300 text-green-700 font-mono">Brand</Badge>
+                    <Badge variant="outline" className="text-xs bg-white border-green-300 text-green-700 font-mono">Category</Badge>
+                    <Badge variant="outline" className="text-xs bg-white border-green-300 text-green-700 font-mono">Stocks</Badge>
+                    <Badge variant="outline" className="text-xs bg-white border-green-300 text-green-700 font-mono">Est. Price (PHP)</Badge>
+                    <Badge variant="outline" className="text-xs bg-white border-green-300 text-green-700 font-mono">Unit Purchase Price</Badge>
                   </div>
-                  <p className="text-[11px] text-green-600 mt-1.5">⚠️ Headers are case-sensitive (match exactly)</p>
+                  <p className="text-[11px] text-green-600 mt-1.5">Headers are case-sensitive (match exactly)</p>
                 </div>
               </div>
             ) : (
               <div className="space-y-2">
-                {/* File Info */}
                 <div className={`flex items-center justify-between p-2 rounded-lg border transition-all duration-300 ${
                   isDataSaved 
                     ? "bg-gray-50 border-gray-200 opacity-70" 
@@ -1255,7 +1272,6 @@ Required JSON format:
                       <p className="text-xs text-gray-500">{uploadedData.length} rows</p>
                     </div>
                   </div>
-                  {/* Save button - only visible when not saved */}
                   {!isDataSaved && (
                     <Button
                       onClick={handleSaveData}
@@ -1267,7 +1283,6 @@ Required JSON format:
                   )}
                 </div>
 
-                {/* Action Buttons */}
                 <div className="flex items-center gap-2">
                   {!isDataSaved ? (
                     <>
@@ -1282,7 +1297,7 @@ Required JSON format:
                       <Button
                         onClick={handleRemoveData}
                         variant="outline"
-                        className="border-green-300 text-green-600 hover:bg-green-50 text-xs h-7 px-2"
+                        className="border-green-300 text-green-600 hover:bg-red-50 text-xs h-7 px-2"
                       >
                         <X className="size-3 mr-1" />
                         Remove
@@ -1326,18 +1341,17 @@ Required JSON format:
         </Card>
       </section>
 
-      {/* Image Upload Section - DISABLED when data not saved */}
+      {/* Vision Scanner Section */}
       <section>
-        <Card className={`overflow-hidden border shadow-sm ${isAnalyzerEnabled ? 'border-green-100' : 'border-gray-200 opacity-60'}`}>
-          <CardHeader className={`relative overflow-hidden ${isAnalyzerEnabled ? 'bg-gradient-to-r from-green-50 via-white to-green-50' : 'bg-gray-50'}`}>
-            <div className="absolute inset-0 opacity-30 [background-image:linear-gradient(#1a4d2e18_1px,transparent_1px),linear-gradient(90deg,#1a4d2e18_1px,transparent_1px)] [background-size:22px_22px]" />
-            <div className="relative flex items-start justify-between gap-4">
+        <Card className={`overflow-hidden rounded-2xl border shadow-[0_12px_32px_rgba(20,83,45,0.06)] ${isAnalyzerEnabled ? 'border-emerald-100 bg-white' : 'border-gray-200 bg-white/60'}`}>
+          <CardHeader className={`border-b ${isAnalyzerEnabled ? 'border-emerald-100 bg-gradient-to-r from-emerald-50/80 via-white to-white' : 'border-gray-200 bg-gray-50'} px-5 py-4`}>
+            <div className="flex items-start justify-between gap-4">
               <div>
                 <CardTitle className="flex items-center gap-2 text-gray-900">
-                  
-                  AI Vision Scanner - Residential Paints Only
+                  <ImageIcon className="size-4 text-green-600" />
+                  AI Vision Scanner — Residential Paints Only
                 </CardTitle>
-                <CardDescription className="pb-2">
+                <CardDescription className="pt-1">
                   {isAnalyzerEnabled 
                     ? "Upload a residential paint sample. Gemini will detect the color and formulate a mixture using your inventory."
                     : isDataLoaded 
@@ -1345,21 +1359,20 @@ Required JSON format:
                       : "⚠ Please upload a CSV or Excel inventory file first to enable paint analysis."}
                 </CardDescription>
               </div>
-              <Badge className={isAnalyzerEnabled ? "bg-[#1a4d2e] text-white shadow-sm" : "bg-gray-500 text-white shadow-sm"}>
+              <Badge className={isAnalyzerEnabled ? "bg-green-800 text-white shadow-sm" : "bg-gray-500 text-white shadow-sm"}>
                 {isAnalyzerEnabled 
                   ? (uploadedImage ? "IMAGE READY" : "AWAITING SAMPLE")
-                  : "🔒 LOCKED"}
+                  : "LOCKED"}
               </Badge>
             </div>
           </CardHeader>
 
-          <CardContent className="space-y-4">
+          <CardContent>
             {!isAnalyzerEnabled ? (
-              <div className="relative min-h-[300px] rounded-2xl border-2 border-dashed border-gray-300 bg-gray-50 p-6">
-                <div className="absolute inset-0 opacity-20 [background-image:radial-gradient(circle_at_1px_1px,#9ca3af_1px,transparent_0)] [background-size:24px_24px]" />
-                <div className="relative flex min-h-[252px] flex-col items-center justify-center text-center">
+              <div className="relative min-h-[300px] rounded-2xl border-2 border-dashed border-gray-300 bg-gray-50/60 p-6">
+                <div className="flex min-h-[252px] flex-col items-center justify-center text-center">
                   <div className="relative mb-5">
-                    <div className="relative flex size-24 items-center justify-center rounded-full border border-gray-300 bg-gray-100 shadow-lg">
+                    <div className="flex size-24 items-center justify-center rounded-full border border-gray-300 bg-gray-100 shadow-lg">
                       {isDataLoaded ? (
                         <Save className="size-11 text-yellow-500" />
                       ) : (
@@ -1376,7 +1389,7 @@ Required JSON format:
                       : "Please upload a CSV or Excel inventory file above to unlock the paint analyzer."}
                   </p>
                   <div className="mt-6 rounded-full border border-gray-200 bg-gray-100/80 px-4 py-2 text-xs font-medium text-gray-500 shadow-sm">
-                    {isDataLoaded ? "💾 Save Required → Vision AI → Residential Paint Formula" : "🔒 File Required → Vision AI → Residential Paint Formula"}
+                    {isDataLoaded ? "Save Required → Vision AI → Residential Paint Formula" : "File Required → Vision AI → Residential Paint Formula"}
                   </div>
                 </div>
               </div>
@@ -1403,23 +1416,15 @@ Required JSON format:
                       group relative min-h-[300px] cursor-pointer overflow-hidden rounded-2xl border-2 border-dashed p-6
                       transition-all duration-300
                       ${isDragging
-                        ? "border-[#1a4d2e] bg-green-50 shadow-xl shadow-green-900/10 scale-[1.01]"
-                        : "border-green-800/60 bg-white hover:border-[#1a4d2e] hover:bg-green-50/60 hover:shadow-xl hover:shadow-green-900/10"
+                        ? "border-green-600 bg-green-50 shadow-xl shadow-green-900/10 scale-[1.01]"
+                        : "border-green-300/60 bg-white hover:border-green-600 hover:bg-green-50/60 hover:shadow-xl hover:shadow-green-900/10"
                       }
                     `}
                   >
-                    <div className="absolute inset-0 opacity-40 [background-image:radial-gradient(circle_at_1px_1px,#1a4d2e_1px,transparent_0)] [background-size:24px_24px]" />
-                    
-                    <div className="absolute bottom-4 left-4 h-10 w-10 border-b-2 border-l-2 border-[#1a4d2e]/60" />
-                    <div className="absolute bottom-4 right-4 h-10 w-10 border-b-2 border-r-2 border-[#1a4d2e]/60" />
-                    <div className="absolute left-4 top-4 h-10 w-10 border-l-2 border-t-2 border-[#1a4d2e]/60" />
-                    <div className="absolute right-4 top-4 h-10 w-10 border-r-2 border-t-2 border-[#1a4d2e]/60" />
-
-                    <div className="relative flex min-h-[252px] flex-col items-center justify-center text-center">
+                    <div className="flex min-h-[252px] flex-col items-center justify-center text-center">
                       <div className="relative mb-5">
-                        <div className="absolute inset-0 animate-ping rounded-full bg-[#1a4d2e]/20" />
-                        <div className="relative flex size-24 items-center justify-center rounded-full border border-[#1a4d2e]/20 bg-white shadow-lg shadow-green-900/10 transition-transform duration-300 group-hover:scale-105">
-                          <Upload className="size-11 text-[#1a4d2e]" />
+                        <div className="relative flex size-24 items-center justify-center rounded-full border border-green-200 bg-white shadow-lg shadow-green-900/10 transition-transform duration-300 group-hover:scale-105">
+                          <Upload className="size-11 text-green-600" />
                         </div>
                       </div>
 
@@ -1432,7 +1437,7 @@ Required JSON format:
 
                       <div className="mt-5 flex flex-wrap justify-center gap-2">
                         {['JPG', 'PNG', 'JPEG', 'WEBP'].map((format) => (
-                          <Badge key={format} variant="secondary" className="bg-green-50 text-[#1a4d2e] border border-green-100">
+                          <Badge key={format} variant="secondary" className="bg-green-50 text-green-700 border border-green-200">
                             {format}
                           </Badge>
                         ))}
@@ -1449,7 +1454,7 @@ Required JSON format:
                       <div className="absolute left-4 top-4 z-10 rounded-full border border-green-300/40 bg-black/40 px-3 py-1 text-xs font-semibold text-green-100 backdrop-blur">
                         AI CAMERA FEED
                       </div>
-                      <div className="absolute right-4 top-4 z-10 rounded-full border border-green-300/40 bg-[#1a4d2e]/80 px-3 py-1 text-xs font-semibold text-white backdrop-blur">
+                      <div className="absolute right-4 top-4 z-10 rounded-full border border-green-300/40 bg-green-800/80 px-3 py-1 text-xs font-semibold text-white backdrop-blur">
                         SAMPLE LOCKED
                       </div>
 
@@ -1459,8 +1464,6 @@ Required JSON format:
                         className="max-h-[420px] w-full object-contain opacity-95"
                       />
 
-                      <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(transparent_0%,rgba(26,77,46,0.08)_50%,transparent_100%)]" />
-                      <div className="pointer-events-none absolute inset-0 [background-image:linear-gradient(#ffffff10_1px,transparent_1px),linear-gradient(90deg,#ffffff10_1px,transparent_1px)] [background-size:34px_34px]" />
                       <div className="absolute left-5 top-5 h-12 w-12 border-l-2 border-t-2 border-green-300" />
                       <div className="absolute right-5 top-5 h-12 w-12 border-r-2 border-t-2 border-green-300" />
                       <div className="absolute bottom-5 left-5 h-12 w-12 border-b-2 border-l-2 border-green-300" />
@@ -1470,7 +1473,7 @@ Required JSON format:
 
                       {isAnalyzing && (
                         <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-black/70 p-6 text-center backdrop-blur-sm">
-                          <div className="relative flex size-20 items-center justify-center rounded-full border border-green-300/40 bg-[#1a4d2e]/40">
+                          <div className="relative flex size-20 items-center justify-center rounded-full border border-green-300/40 bg-green-800/40">
                             <Loader2 className="size-10 animate-spin text-white" />
                           </div>
                           <div>
@@ -1512,9 +1515,9 @@ Required JSON format:
                     </div>
 
                     <div className="space-y-4">
-                      <div className="rounded-2xl border border-green-100 bg-gradient-to-br from-green-50 via-white to-white p-5 shadow-sm">
+                      <div className="rounded-2xl border border-emerald-100 bg-gradient-to-br from-green-50 via-white to-white p-5 shadow-sm">
                         <div className="flex items-center gap-3">
-                          <div className="flex size-12 items-center justify-center rounded-xl bg-[#1a4d2e] text-white shadow-md">
+                          <div className="flex size-12 items-center justify-center rounded-xl bg-[#174d32] text-white shadow-md">
                             <ImageIcon className="size-6" />
                           </div>
                           <div>
@@ -1534,11 +1537,11 @@ Required JSON format:
                           </div>
                           <div className="flex items-center justify-between rounded-lg bg-white px-3 py-2 shadow-sm">
                             <span className="text-gray-500">Status</span>
-                            <Badge className="bg-[#1a4d2e] text-white">AI READY</Badge>
+                            <Badge className="bg-[#174d32] text-white">AI READY</Badge>
                           </div>
                           <div className="flex items-center justify-between rounded-lg bg-white px-3 py-2 shadow-sm">
                             <span className="text-gray-500">Batch</span>
-                            <span className="font-semibold text-[#1a4d2e]">{(batchSizeLiters * 1000).toFixed(0)} ml</span>
+                            <span className="font-semibold text-[#174d32]">{(batchSizeLiters * 1000).toFixed(0)} ml</span>
                           </div>
                         </div>
                       </div>
@@ -1553,7 +1556,7 @@ Required JSON format:
                       <Button
                         onClick={() => analyzeWithGemini(uploadedImage)}
                         disabled={isAnalyzing || !isAnalyzerEnabled || !!colorAnalysis}
-                        className="h-12 w-full rounded-xl bg-[#1a4d2e] text-white shadow-lg shadow-green-900/15 transition-all duration-200 hover:bg-[#1a4d2e] hover:shadow-xl hover:-translate-y-0.5 disabled:opacity-50"
+                        className="h-12 w-full rounded-xl bg-[#174d32] text-white shadow-lg shadow-green-900/15 transition-all duration-200 hover:bg-[#123e28] hover:shadow-xl hover:-translate-y-0.5 disabled:opacity-50"
                       >
                         {isAnalyzing ? (
                           <>
@@ -1605,7 +1608,7 @@ Required JSON format:
       {colorAnalysis && (
         <>
           {/* Color Overview */}
-          <Card className="border-l-4 border-[#1a4d2e]">
+          <Card className="border-l-4 border-[#174d32] overflow-hidden rounded-2xl border border-emerald-100 bg-white shadow-[0_12px_32px_rgba(20,83,45,0.06)]">
             <CardContent className="pt-5">
               <div className="flex items-center gap-4">
                 <div
@@ -1635,11 +1638,11 @@ Required JSON format:
             </CardContent>
           </Card>
 
-          {/* Paint Mixing Formula + Prices - SIZE COLUMN REMOVED */}
-          <Card>
-            <CardHeader>
+          {/* Paint Mixing Formula + Prices */}
+          <Card className="overflow-hidden rounded-2xl border border-emerald-100 bg-white shadow-[0_12px_32px_rgba(20,83,45,0.06)]">
+            <CardHeader className="border-b border-emerald-100 bg-gradient-to-r from-white to-emerald-50/70">
               <CardTitle className="flex items-center gap-2">
-                <Droplet className="size-5 text-[#1a4d2e]" />
+                <Droplet className="size-5 text-[#174d32]" />
                 Suggested Residential Paint Mixture & Pricing
               </CardTitle>
               <CardDescription>
@@ -1649,7 +1652,7 @@ Required JSON format:
             </CardHeader>
             <CardContent>
               {/* Batch Size */}
-              <div className="mb-6 p-4 bg-green-50 rounded-lg border-2 border-[#1a4d2e]">
+              <div className="mb-6 p-4 bg-green-50 rounded-xl border-2 border-[#174d32]">
                 <Label className="text-sm font-semibold text-gray-700 mb-2 block">
                   Target Batch Size (Liters)
                 </Label>
@@ -1664,7 +1667,7 @@ Required JSON format:
                         parseFloat(e.target.value) || 0.1,
                       )
                     }
-                    className="w-36 px-4 py-2 border-2 border-[#1a4d2e] rounded-lg font-medium focus:outline-none focus:ring-2 focus:ring-[#1a4d2e]"
+                    className="w-36 px-4 py-2 border-2 border-[#174d32] rounded-lg font-medium focus:outline-none focus:ring-2 focus:ring-[#174d32]"
                   />
                   <span className="text-sm text-gray-600">
                     = {(batchSizeLiters * 1000).toFixed(0)} ml
@@ -1679,7 +1682,7 @@ Required JSON format:
                       <Button
                         key={val}
                         onClick={() => setBatchSizeLiters(val)}
-                        className={`text-xs ${batchSizeLiters === val ? "bg-[#2d6b45]" : "bg-[#1a4d2e] hover:bg-[#2d6b45]"}`}
+                        className={`text-xs ${batchSizeLiters === val ? "bg-[#2d6b45]" : "bg-[#174d32] hover:bg-[#2d6b45]"}`}
                       >
                         {label}
                       </Button>
@@ -1728,11 +1731,11 @@ Required JSON format:
                           </Badge>
                         </TableCell>
                         <TableCell>
-                          <Badge className="bg-[#1a4d2e]">
+                          <Badge className="bg-[#174d32]">
                             {c.percentage}%
                           </Badge>
                         </TableCell>
-                        <TableCell className="font-mono text-sm font-semibold text-[#1a4d2e]">
+                        <TableCell className="font-mono text-sm font-semibold text-[#174d32]">
                           {c.scaledAmountMl} ml
                         </TableCell>
                         <TableCell className="text-sm text-gray-600">
@@ -1770,7 +1773,7 @@ Required JSON format:
                         </TableCell>
                       </TableRow>
                     ))}
-                    <TableRow className="border-t-2 border-[#1a4d2e] bg-green-50">
+                    <TableRow className="border-t-2 border-[#174d32] bg-green-50">
                       <TableCell
                         colSpan={8}
                         className="font-bold text-right text-base"
@@ -1778,7 +1781,7 @@ Required JSON format:
                         Total Price — {batchSizeLiters}L /{" "}
                         {(batchSizeLiters * 1000).toFixed(0)}ml batch:
                       </TableCell>
-                      <TableCell className="text-right font-bold text-xl text-[#1a4d2e]">
+                      <TableCell className="text-right font-bold text-xl text-[#174d32]">
                         ₱{totalPrice.toFixed(2)}
                       </TableCell>
                     </TableRow>
@@ -1791,10 +1794,10 @@ Required JSON format:
           {/* Consistency */}
           {colorAnalysis.consistency &&
             colorAnalysis.consistency.type !== "—" && (
-              <Card className="border-l-4 border-[#1a4d2e]">
-                <CardHeader>
+              <Card className="border-l-4 border-[#174d32] overflow-hidden rounded-2xl border border-emerald-100 bg-white shadow-[0_12px_32px_rgba(20,83,45,0.06)]">
+                <CardHeader className="border-b border-emerald-100 bg-gradient-to-r from-white to-emerald-50/70">
                   <CardTitle className="flex items-center gap-2">
-                    <Info className="size-5 text-[#1a4d2e]" />
+                    <Info className="size-5 text-[#174d32]" />
                     Recommended Consistency
                   </CardTitle>
                 </CardHeader>
@@ -1804,7 +1807,7 @@ Required JSON format:
                       <Label className="text-sm text-gray-500">
                         Consistency Type
                       </Label>
-                      <p className="text-xl font-bold text-[#1a4d2e] mt-1">
+                      <p className="text-xl font-bold text-[#174d32] mt-1">
                         {colorAnalysis.consistency.type}
                       </p>
                     </div>
@@ -1812,7 +1815,7 @@ Required JSON format:
                       <Label className="text-sm text-gray-500">
                         Viscosity Level
                       </Label>
-                      <p className="text-xl font-bold text-[#1a4d2e] mt-1">
+                      <p className="text-xl font-bold text-[#174d32] mt-1">
                         {colorAnalysis.consistency.viscosity}
                       </p>
                     </div>
@@ -1838,8 +1841,8 @@ Required JSON format:
 
           {/* Application Guide */}
           {colorAnalysis.applicationGuide && (
-            <Card className="border-l-4 border-blue-500">
-              <CardHeader>
+            <Card className="border-l-4 border-blue-500 overflow-hidden rounded-2xl border border-blue-100 bg-white shadow-[0_12px_32px_rgba(20,83,45,0.06)]">
+              <CardHeader className="border-b border-blue-100 bg-gradient-to-r from-white to-blue-50/70">
                 <CardTitle className="flex items-center gap-2">
                   <BookOpen className="size-5 text-blue-600" />
                   Application Guide
@@ -1904,11 +1907,11 @@ Required JSON format:
 
           {/* Stock Warnings */}
           {colorAnalysis.stockWarnings.length > 0 && (
-            <Card className="border-l-4 border-red-500">
-              <CardHeader>
+            <Card className="border-l-4 border-red-500 overflow-hidden rounded-2xl border border-red-100 bg-white shadow-[0_12px_32px_rgba(20,83,45,0.06)]">
+              <CardHeader className="border-b border-red-100 bg-gradient-to-r from-white to-red-50/70">
                 <CardTitle className="flex items-center gap-2">
                   <AlertTriangle className="size-5 text-red-500" />
-                  Warning/s 
+                  Stock Warnings
                 </CardTitle>
               </CardHeader>
               <CardContent>
