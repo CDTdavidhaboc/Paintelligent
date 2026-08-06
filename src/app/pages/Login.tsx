@@ -239,9 +239,6 @@ export default function Login() {
             </form>
           </div>
 
-          <p className="text-center text-white/50 text-xs mt-2">
-            A Capstone Project.
-          </p>
         </div>
 
         {/* Forgot Password Modal */}
@@ -337,17 +334,22 @@ export default function Login() {
                 </button>
 
                 <button
-                  type="button"
-                  onClick={() => {
-                    setShowForgotPassword(false);
-                    setResetMessage("");
-                    setError("");
-                    setResetSuccess(false);
-                  }}
-                  className="w-full text-center text-white/60 hover:text-white/90 text-sm transition-colors"
-                >
-                  Back to Login
-                </button>
+  type="button"
+  onClick={() => {
+    setShowForgotPassword(false);
+    setResetMessage("");
+    setError("");
+    setResetSuccess(false);
+  }}
+  className="group relative w-full rounded-xl border border-emerald-200/50 bg-white/80 px-4 py-2.5 text-sm font-medium text-emerald-700 shadow-sm backdrop-blur-sm transition-all duration-300 hover:border-emerald-300 hover:bg-emerald-50 hover:shadow-md hover:shadow-emerald-500/10 active:scale-[0.98]"
+>
+  <span className="flex items-center justify-center gap-2">
+    <svg className="size-4 transition-transform duration-300 group-hover:-translate-x-1" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+    </svg>
+    Back to Login
+  </span>
+</button>
               </form>
             </div>
           </div>

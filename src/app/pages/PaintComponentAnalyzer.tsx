@@ -1180,18 +1180,18 @@ Required JSON format:
 
       {/* Inventory Section - Matching SalesForecasting style */}
       <section>
-        <Card className="overflow-hidden rounded-2xl border border-emerald-100 bg-white shadow-[0_12px_32px_rgba(20,83,45,0.06)]">
-          <CardHeader className="border-b border-emerald-100 bg-gradient-to-r from-emerald-50/80 via-white to-white px-5 py-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Database className="size-4 text-green-600" />
-                <CardTitle className="text-sm font-semibold text-gray-900">Inventory Source</CardTitle>
-              </div>
-              <Badge className={isDataLoaded ? "bg-green-800 text-white shadow-sm text-xs" : "bg-green-600 text-white shadow-sm text-xs"}>
-                {isDataSaved ? "✅ SAVED" : isDataLoaded ? "📂 LOADED" : "✗ EMPTY DATA"}
-              </Badge>
-            </div>
-          </CardHeader>
+      <Card className="overflow-hidden rounded-2xl border border-emerald-100 bg-white shadow-[0_12px_32px_rgba(20,83,45,0.06)]">
+  <CardHeader className="border-b border-emerald-100 bg-[#174d32]  h-10 flex items-center px-4">
+    <div className="flex items-center justify-between w-full">
+      <div className="flex items-center gap-1.5">
+        <Database className="size-3.5 text-white" />
+        <CardTitle className="text-md font-medium text-white leading-none">Inventory Source</CardTitle>
+      </div>
+      <Badge variant="outline" className="border-emerald-200 bg-emerald-50 text-emerald-700 text-[10px] font-medium px-2 py-0">
+        {isDataSaved ? "SAVED" : isDataLoaded ? "LOADED" : "EMPTY"}
+      </Badge>
+    </div>
+  </CardHeader>
 
           <CardContent>
             <input
@@ -1222,7 +1222,7 @@ Required JSON format:
                   `}
                 >
                   <div className="flex items-center justify-center gap-4">
-                    <FileSpreadsheet className="size-6 text-green-500" />
+                    <FileSpreadsheet className="size-6 text-green-900" />
                     <div>
                       <p className="text-sm font-medium text-gray-700">Drop CSV or Excel file</p>
                       <p className="text-xs text-gray-400">or click to browse</p>
@@ -1259,7 +1259,7 @@ Required JSON format:
                 }`}>
                   <div className="flex items-center gap-3">
                     <div className={`flex size-8 items-center justify-center rounded-lg text-white ${
-                      isDataSaved ? "bg-gray-400" : "bg-green-600"
+                      isDataSaved ? "bg-gray-400" : "bg-[#174d32]"
                     }`}>
                       {uploadedDataName.endsWith('.csv') ? (
                         <File className="size-4" />
@@ -1275,7 +1275,7 @@ Required JSON format:
                   {!isDataSaved && (
                     <Button
                       onClick={handleSaveData}
-                      className="bg-green-600 hover:bg-green-700 text-white text-xs h-7 px-2"
+                      className="bg-[#174d32] hover:bg-green-700 text-white text-xs h-7 px-2"
                     >
                       <Save className="size-3 mr-1" />
                       Save & Enable
@@ -1322,8 +1322,7 @@ Required JSON format:
                         Clear
                       </Button>
                       <div className="ml-auto flex items-center gap-1 text-xs text-green-600">
-                        <div className="size-2 bg-green-500 rounded-full animate-pulse" />
-                        <span>Active</span>
+                  
                       </div>
                     </>
                   )}
@@ -1343,29 +1342,31 @@ Required JSON format:
 
       {/* Vision Scanner Section */}
       <section>
-        <Card className={`overflow-hidden rounded-2xl border shadow-[0_12px_32px_rgba(20,83,45,0.06)] ${isAnalyzerEnabled ? 'border-emerald-100 bg-white' : 'border-gray-200 bg-white/60'}`}>
-          <CardHeader className={`border-b ${isAnalyzerEnabled ? 'border-emerald-100 bg-gradient-to-r from-emerald-50/80 via-white to-white' : 'border-gray-200 bg-gray-50'} px-5 py-4`}>
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <CardTitle className="flex items-center gap-2 text-gray-900">
-                  <ImageIcon className="size-4 text-green-600" />
-                  AI Vision Scanner — Residential Paints Only
-                </CardTitle>
-                <CardDescription className="pt-1">
-                  {isAnalyzerEnabled 
-                    ? "Upload a residential paint sample. Gemini will detect the color and formulate a mixture using your inventory."
-                    : isDataLoaded 
-                      ? "⚠ Please click 'Save & Enable' to activate the paint analyzer."
-                      : "⚠ Please upload a CSV or Excel inventory file first to enable paint analysis."}
-                </CardDescription>
-              </div>
-              <Badge className={isAnalyzerEnabled ? "bg-green-800 text-white shadow-sm" : "bg-gray-500 text-white shadow-sm"}>
-                {isAnalyzerEnabled 
-                  ? (uploadedImage ? "IMAGE READY" : "AWAITING SAMPLE")
-                  : "LOCKED"}
-              </Badge>
-            </div>
-          </CardHeader>
+      <Card className={`overflow-hidden rounded-2xl border shadow-[0_12px_32px_rgba(20,83,45,0.06)] ${isAnalyzerEnabled ? 'border-emerald-100 bg-white' : 'border-gray-200 bg-white/60'}`}>
+  <CardHeader className={`border-b ${isAnalyzerEnabled ? 'border-emerald-100 bg-gradient-to-r from-emerald-50/80 via-white to-white' : 'border-gray-200 bg-gray-50'} p-5`}>
+    <div className="flex items-center justify-between w-full">
+      <div className="flex items-center gap-3 flex-1">
+        <ImageIcon className="size-5 text-emerald-600 flex-shrink-0" />
+        <div className="flex flex-col">
+          <CardTitle className="text-base font-semibold text-gray-900 leading-tight">
+            AI Vision Scanner — Residential Paints Only
+          </CardTitle>
+          <p className="text-sm text-gray-500 leading-tight mt-0.5">
+            {isAnalyzerEnabled 
+              ? "Upload a residential paint sample. Gemini will detect the color and formulate a mixture using your inventory."
+              : isDataLoaded 
+                ? "Please click 'Save & Enable' to activate the paint analyzer."
+                : "Please upload a CSV or Excel inventory file first to enable paint analysis."}
+          </p>
+        </div>
+      </div>
+      <Badge className={`${isAnalyzerEnabled ? "bg-emerald-700 text-white" : "bg-gray-500 text-white"} text-xs font-medium px-3 py-1 flex-shrink-0`}>
+        {isAnalyzerEnabled 
+          ? (uploadedImage ? "IMAGE READY" : "AWAITING SAMPLE")
+          : "LOCKED"}
+      </Badge>
+    </div>
+  </CardHeader>
 
           <CardContent>
             {!isAnalyzerEnabled ? (

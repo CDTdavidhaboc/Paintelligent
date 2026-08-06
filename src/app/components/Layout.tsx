@@ -196,7 +196,7 @@ export default function Layout() {
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Top Navigation Bar */}
-      <nav className="bg-[#1a4d2e] border-b border-[#2d6b45] sticky top-0 z-50 shadow-lg">
+      <nav className="bg-[#174d32] border-b border-[#1a4d2e] sticky top-0 z-50 shadow-lg rounded-b-xl">
         <div className="px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
             {/* Left: Logo and Greeting */}

@@ -123,7 +123,7 @@ const REQUIRED_HEADERS = ['Date', 'Category', 'Total Sales (PHP)', 'Units Sold',
 // ============================================================
 const showNotification = (message: string, type: 'success' | 'error' | 'info' = 'success') => {
   const colors = {
-    success: 'bg-green-800 border-green-400/30',
+    success: 'bg-green-900 border-green-400/30',
     error: 'bg-red-600 border-red-400/30',
     info: 'bg-emerald-700 border-emerald-400/30'
   };
@@ -1282,7 +1282,7 @@ Return ONLY valid JSON with this structure:
               <Paintbrush className="size-5 text-emerald-100" />
             </div>
             <div>
-              <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">Seasonal sales forecast</h1>
+              <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">Seasonal Sales Forecast</h1>
               <p className="mt-1 text-sm text-emerald-100">Plan paint inventory with clear dry and rainy season demand.</p>
               {debugInfo && <p className="mt-2 text-xs text-emerald-200/70">{debugInfo}</p>}
             </div>
@@ -1323,17 +1323,17 @@ Return ONLY valid JSON with this structure:
           ============================================================ */}
       <section>
         <Card className="overflow-hidden rounded-2xl border border-emerald-100 bg-white shadow-[0_12px_32px_rgba(20,83,45,0.06)]">
-          <CardHeader className="border-b border-emerald-100 bg-gradient-to-r from-emerald-50/80 via-white to-white px-5 py-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Database className="size-4 text-green-600" />
-                <CardTitle className="text-sm font-semibold text-gray-900">Sales Data</CardTitle>
-              </div>
-              <Badge className={isDataLoaded ? "bg-green-800 text-white shadow-sm text-xs" : "bg-green-600 text-white shadow-sm text-xs"}>
-                {isDataSaved ? "✅ SAVED" : isDataLoaded ? "📂 LOADED" : "✗ EMPTY DATA"}
-              </Badge>
-            </div>
-          </CardHeader>
+  <CardHeader className="border-b border-emerald-100 bg-[#174d32]  h-10 flex items-center px-4">
+    <div className="flex items-center justify-between w-full">
+      <div className="flex items-center gap-1.5">
+        <Database className="size-3.5 text-white" />
+        <CardTitle className="text-md font-medium text-white leading-none">Sales Data</CardTitle>
+      </div>
+      <Badge variant="outline" className="border-emerald-200 bg-emerald-50 text-emerald-700 text-[10px] font-medium px-2 py-0">
+        {isDataSaved ? "SAVED" : isDataLoaded ? "LOADED" : "EMPTY"}
+      </Badge>
+    </div>
+  </CardHeader>
 
           <CardContent>
             <input
@@ -1364,7 +1364,7 @@ Return ONLY valid JSON with this structure:
                   `}
                 >
                   <div className="flex items-center justify-center gap-4">
-                    <FileSpreadsheet className="size-6 text-green-500" />
+                    <FileSpreadsheet className="size-6 text-green-900" />
                     <div>
                       <p className="text-sm font-medium text-gray-700">Drop CSV or Excel file</p>
                       <p className="text-xs text-gray-400">or click to browse</p>
@@ -1400,7 +1400,7 @@ Return ONLY valid JSON with this structure:
                 }`}>
                   <div className="flex items-center gap-3">
                     <div className={`flex size-8 items-center justify-center rounded-lg text-white ${
-                      isDataSaved ? "bg-gray-400" : "bg-green-600"
+                      isDataSaved ? "bg-gray-400" : "bg-[#174d32]"
                     }`}>
                       {uploadedDataName.endsWith('.csv') ? (
                         <File className="size-4" />
@@ -1416,7 +1416,7 @@ Return ONLY valid JSON with this structure:
                   {!isDataSaved && (
                     <Button
                       onClick={handleSaveData}
-                      className="bg-green-600 hover:bg-green-700 text-white text-xs h-7 px-2"
+                      className="bg-[#174d32] hover:bg-green-700 text-white text-xs h-7 px-2"
                     >
                       <Save className="size-3 mr-1" />
                       Save & Enable
@@ -1501,11 +1501,11 @@ Return ONLY valid JSON with this structure:
               </CardContent>
             </Card>
 
-            <Card className="border border-green-200 border-l-4 border-l-green-600 bg-green-50/60 shadow-sm">
+            <Card className="border border-green-200 border-l-4 border-l-green-900 bg-green-50/60 shadow-sm">
               <CardContent className="py-6">
                 <div className="flex justify-between items-center">
                   <div>
-                    <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-green-800">
+                    <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-green-700">
                       <Sun className="size-4" />
                       Dry Season
                     </div>
@@ -1582,7 +1582,7 @@ Return ONLY valid JSON with this structure:
                       onClick={() => setViewMode("monthly")}
                       className={`px-4 py-2 rounded-md text-sm transition ${
                         viewMode === "monthly"
-                          ? "bg-green-700 text-white"
+                          ? "bg-green-900 text-white"
                           : "text-gray-600"
                       }`}
                     >
@@ -1592,7 +1592,7 @@ Return ONLY valid JSON with this structure:
                       onClick={() => setViewMode("weekly")}
                       className={`px-4 py-2 rounded-md text-sm transition ${
                         viewMode === "weekly"
-                          ? "bg-green-700 text-white"
+                          ? "bg-green-900 text-white"
                           : "text-gray-600"
                       }`}
                     >
@@ -1783,7 +1783,7 @@ Return ONLY valid JSON with this structure:
                 </CardContent>
               </Card>
 
-              <Card className="border border-green-200 border-l-4 border-l-green-600 bg-green-50/50 shadow-sm">
+              <Card className="border border-green-200 border-l-4 border-l-green-900 bg-green-50/50 shadow-sm">
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2 text-green-700">
                     <TrendingUp className="w-5 h-5" />
@@ -1832,7 +1832,7 @@ Return ONLY valid JSON with this structure:
               <CardContent>
                 <Tabs defaultValue="dry" className="w-full">
                   <TabsList className="grid w-full max-w-sm grid-cols-2 mb-6">
-                    <TabsTrigger value="dry" className="data-[state=active]:bg-green-700 data-[state=active]:text-white">Dry Season</TabsTrigger>
+                    <TabsTrigger value="dry" className="data-[state=active]:bg-[#174d32] data-[state=active]:text-white">Dry Season</TabsTrigger>
                     <TabsTrigger value="rainy" className="data-[state=active]:bg-blue-700 data-[state=active]:text-white">Rainy Season</TabsTrigger>
                   </TabsList>
                   {["dry", "rainy"].map((season) => {
@@ -1854,7 +1854,7 @@ Return ONLY valid JSON with this structure:
                               <Badge
                                 className={
                                   season === "dry"
-                                    ? "bg-green-700 text-white"
+                                    ? "bg-[#174d32] text-white"
                                     : "bg-blue-700 text-white"
                                 }
                               >
@@ -1880,7 +1880,7 @@ Return ONLY valid JSON with this structure:
                                         <Badge
                                           className={
                                             season === "dry"
-                                              ? "bg-green-700"
+                                              ? "bg-[#174d32]"
                                               : "bg-blue-700"
                                           }
                                         >
@@ -2042,7 +2042,7 @@ Return ONLY valid JSON with this structure:
           {/* ── Stock Recommendation ── */}
           {stockRecs.length > 0 && (
             <Card className="shadow-lg border-0 overflow-hidden">
-              <div className="bg-gradient-to-r from-green-700 to-green-600 px-6 py-4">
+              <div className="bg-[#174d32] px-6 py-4">
                 <div className="flex items-center gap-3">
                   <Lightbulb className="w-5 h-5 text-white" />
                   <div>
@@ -2063,15 +2063,15 @@ Return ONLY valid JSON with this structure:
 
                   const actionOrder = ['Increase', 'Maintain'];
                   const actionColors: Record<string, string> = {
-                    'Increase': 'border-red-500 bg-red-50/30',
-                    'Maintain': 'border-green-500 bg-green-50/30'
+                    'Increase': 'border-orange-500 bg-orange-50/30',
+                    'Maintain': 'border-green-900 bg-green-50/30'
                   };
                   const actionDotColors: Record<string, string> = {
-                    'Increase': 'bg-red-500',
-                    'Maintain': 'bg-green-500'
+                    'Increase': 'bg-orange-500',
+                    'Maintain': 'bg-[#174d32]'
                   };
                   const actionBadgeColors: Record<string, string> = {
-                    'Increase': 'bg-red-100 text-red-700',
+                    'Increase': 'bg-orange-100 text-orange-700',
                     'Maintain': 'bg-green-100 text-green-700'
                   };
 
@@ -2131,7 +2131,7 @@ Return ONLY valid JSON with this structure:
                             Increase Stock
                           </span>
                           <span className="flex items-center gap-1.5">
-                            <span className="w-3 h-3 rounded-full bg-green-500"></span>
+                            <span className="w-3 h-3 rounded-full bg-[#174d32]"></span>
                             Maintain Stock
                           </span>
                         </div>
@@ -2146,28 +2146,28 @@ Return ONLY valid JSON with this structure:
           {/* ── Product Performance ── */}
           {(bestSelling.length > 0 || slowMoving.length > 0) && (
             <section className="space-y-4">
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-3 ">
                 <div className="w-9 h-9 rounded-xl bg-white flex items-center justify-center shadow-sm">
                   <Target className="size-5 text-[#1a4d2e]" />
                 </div>
                 <div>
-                  <h2 className="text-xl font-bold text-gray-900 tracking-tight">Product Performance</h2>
+                  <h2 className="text-xl font-bold text-gray-900">Product Performance</h2>
                   <p className="text-sm text-gray-500">AI-generated best and slowest moving products analysis</p>
                 </div>
               </div>
               <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
                 {bestSelling.length > 0 && (
                   <Card className="shadow-lg border-0 hover:shadow-xl transition-all duration-300">
-                    <CardHeader className="rounded-t-lg bg-gradient-to-r from-green-50 to-emerald-50 border-b border-green-100 py-3.5">
+                    <CardHeader className="rounded-t-lg bg-gradient-to-r from-green-900 to-emerald-700 border-b border-green-900 py-3.5">
                       <div className="flex items-center gap-2.5">
-                        <div className="w-7 h-7 rounded-lg bg-green-600 flex items-center justify-center">
+                        <div className="w-7 h-7 rounded-lg bg-green-800 flex items-center justify-center">
                           <TrendingUp className="size-4 text-white" />
                         </div>
                         <div>
-                          <CardTitle className="text-sm font-semibold text-green-800">
+                          <CardTitle className="text-sm font-semibold text-white">
                             Best-Selling Products
                           </CardTitle>
-                          <CardDescription className="text-xs text-green-600">
+                          <CardDescription className="text-xs text-white">
                             Top performers by units sold
                           </CardDescription>
                         </div>
@@ -2206,16 +2206,16 @@ Return ONLY valid JSON with this structure:
 
                 {slowMoving.length > 0 && (
                   <Card className="shadow-lg border-0 hover:shadow-xl transition-all duration-300">
-                    <CardHeader className="rounded-t-lg bg-gradient-to-r from-orange-50 to-amber-50 border-b border-orange-100 py-3.5">
+                    <CardHeader className="rounded-t-lg bg-gradient-to-r from-orange-700 to-amber-600 border-b border-orange-100 py-3.5">
                       <div className="flex items-center gap-2.5">
                         <div className="w-7 h-7 rounded-lg bg-orange-500 flex items-center justify-center">
                           <TrendingDown className="size-4 text-white" />
                         </div>
                         <div>
-                          <CardTitle className="text-sm font-semibold text-orange-800">
+                          <CardTitle className="text-sm font-semibold text-white">
                             Slow-Moving Products
                           </CardTitle>
-                          <CardDescription className="text-xs text-orange-600">
+                          <CardDescription className="text-xs text-white">
                             Products requiring attention
                           </CardDescription>
                         </div>
@@ -2278,7 +2278,7 @@ Return ONLY valid JSON with this structure:
                   const drySeason = (strategy.season || "").toLowerCase().includes("dry");
                   return (
                     <Card key={index} className="border-0 shadow-lg hover:shadow-xl transition-all duration-300 overflow-hidden">
-                      <div className={`${drySeason ? "bg-gradient-to-r from-green-700 to-emerald-600" : "bg-gradient-to-r from-blue-700 to-sky-600"} px-4 py-3`}>
+                      <div className={`${drySeason ? "bg-gradient-to-r from-green-900 to-emerald-600" : "bg-gradient-to-r from-blue-700 to-sky-600"} px-4 py-3`}>
                         <div className="flex items-center gap-2.5">
                           <div className="w-7 h-7 rounded-lg bg-white/20 flex items-center justify-center backdrop-blur-sm">
                             <Lightbulb className={`size-4 text-white`} />

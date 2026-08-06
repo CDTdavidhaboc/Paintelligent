@@ -27,7 +27,7 @@ export default function ResetPassword() {
   const { 
     requestPasswordReset, 
     verifyPIN,
-    updatePasswordDirectly // ✅ New function
+    updatePasswordDirectly
   } = useAuth();
 
   // Form data
@@ -48,7 +48,7 @@ export default function ResetPassword() {
   const [isLoading, setIsLoading] = useState(false);
   const [resendCooldown, setResendCooldown] = useState(0);
   
-  // ✅ Refs to prevent double submission
+  // Refs to prevent double submission
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
   const isSubmittingRef = useRef(false);
   const isVerifyingRef = useRef(false);
@@ -158,7 +158,7 @@ export default function ResetPassword() {
     }
   };
 
-  // Step 2: Verify PIN - This marks the PIN as used and transitions to password form
+  // Step 2: Verify PIN
   const handleVerifyPIN = async (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -181,12 +181,10 @@ export default function ResetPassword() {
 
     try {
       console.log('🔍 Verifying PIN:', pinString);
-      // ✅ This marks the PIN as used and returns success/failure
       const result = await verifyPIN(email, pinString);
       console.log('🔍 Verification result:', result);
       
       if (result.success) {
-        // ✅ PIN verified - move to password reset form
         setShowEmailForm(false);
         setShowPinForm(false);
         setShowPasswordForm(true);
@@ -208,7 +206,7 @@ export default function ResetPassword() {
     }
   };
 
-  // Step 3: Reset Password - Directly update password (NO PIN verification needed)
+  // Step 3: Reset Password
   const handleResetPassword = async (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -245,16 +243,13 @@ export default function ResetPassword() {
     try {
       console.log('🔐 Updating password for:', email);
       
-      // ✅ Directly update password - NO PIN verification needed
       const result = await updatePasswordDirectly(email, newPassword);
       
       if (result.success) {
         setSuccess(true);
         setError("");
+        setShowPasswordForm(false);
         console.log("✅ Password reset successful");
-        setTimeout(() => {
-          navigate("/login");
-        }, 3000);
       } else {
         setError(result.error || "Failed to reset password. Please try again.");
       }
@@ -316,6 +311,19 @@ export default function ResetPassword() {
     }
   };
 
+  const handleBackToLogin = () => {
+    setShowEmailForm(true);
+    setShowPinForm(false);
+    setShowPasswordForm(false);
+    setSuccess(false);
+    setError("");
+    setEmail("");
+    setPin(["", "", "", "", "", ""]);
+    setNewPassword("");
+    setConfirmPassword("");
+    navigate("/login");
+  };
+
   const pinString = pin.join('');
 
   return (
@@ -368,279 +376,300 @@ export default function ResetPassword() {
             </div>
 
             <div className="bg-white/10 backdrop-blur-xl border border-white/20 rounded-2xl shadow-2xl px-6 sm:px-8 py-6 sm:py-8">
-              <button
-                onClick={goBack}
-                className="text-white/60 hover:text-white/90 transition-colors mb-4 flex items-center gap-2 text-sm"
-              >
-                <ArrowLeft className="size-4" />
-                {showPasswordForm ? "Back to PIN" : showPinForm ? "Back to Email" : "Back to Login"}
-              </button>
-
               {/* ============================================================
-                  EMAIL FORM 
+                  SUCCESS STATE - Check Animation
                   ============================================================ */}
-              {showEmailForm && (
-                <>
-                  <div className="flex items-center gap-3 mb-2">
-                    <Mail className="size-6 text-[#4a9d6f]" />
-                    <h1 className="text-white/90 text-2xl font-semibold">Reset Password</h1>
+              {success ? (
+                <div className="flex flex-col items-center justify-center gap-4 py-6">
+                  <div className="relative">
+                    <div className="absolute inset-0 animate-ping rounded-full bg-emerald-400/30" />
+                    <div className="relative flex h-20 w-20 items-center justify-center rounded-full bg-gradient-to-br from-emerald-500 to-emerald-600 shadow-lg shadow-emerald-500/30">
+                      <CheckCircle className="size-10 animate-[bounce-in_0.6s_ease-out] text-white" strokeWidth={2.5} />
+                    </div>
                   </div>
-                  
-                  <p className="text-white/60 text-sm mb-6">
-                    Enter your email address and we'll send you a 6-digit PIN to reset your password.
+                  <h3 className="text-xl font-semibold text-white">Password Changed!</h3>
+                  <p className="text-center text-sm text-white/70">
+                    Your password has been successfully updated.
                   </p>
+                  <button
+                    onClick={handleBackToLogin}
+                    className="group mt-2 flex w-fit items-center gap-2 rounded-full bg-white/10 px-6 py-2.5 text-sm font-medium text-white/80 backdrop-blur-sm transition-all duration-300 hover:bg-white/20 hover:text-white hover:shadow-lg hover:shadow-emerald-500/20 active:scale-95"
+                  >
+                    <ArrowLeft className="size-4 transition-transform duration-300 group-hover:-translate-x-1" />
+                    <span className="relative">
+                      Back to Login
+                      <span className="absolute -bottom-0.5 left-0 h-[1.5px] w-0 bg-emerald-400 transition-all duration-300 group-hover:w-full" />
+                    </span>
+                  </button>
+                </div>
+              ) : (
+                <>
+                  {/* Back Button */}
+                  <button
+                    onClick={goBack}
+                    className="group mb-6 flex w-fit items-center gap-2.5 rounded-full bg-white/10 px-4 py-2 text-sm font-medium text-white/80 backdrop-blur-sm transition-all duration-300 hover:bg-white/20 hover:text-white hover:shadow-lg hover:shadow-emerald-500/20 active:scale-95"
+                  >
+                    <ArrowLeft className="size-4 transition-transform duration-300 group-hover:-translate-x-1" />
+                    <span className="relative">
+                      {showPasswordForm ? "Back to PIN" : showPinForm ? "Back to Email" : "Back to Login"}
+                      <span className="absolute -bottom-0.5 left-0 h-[1.5px] w-0 bg-emerald-400 transition-all duration-300 group-hover:w-full" />
+                    </span>
+                  </button>
 
-                  {error && (
-                    <div className="bg-red-500/20 border border-red-300/40 rounded-lg p-3 flex items-start gap-2 mb-4">
-                      <AlertCircle className="size-5 text-red-300 flex-shrink-0 mt-0.5" />
-                      <p className="text-sm text-red-200">{error}</p>
-                    </div>
-                  )}
-
-                  {success && (
-                    <div className="bg-green-500/20 border border-green-300/40 rounded-lg p-4 mb-4 text-center">
-                      <div className="flex items-center justify-center gap-2 text-green-300">
-                        <CheckCircle className="size-6" />
-                        <span className="font-semibold">Password updated successfully!</span>
+                  {/* ============================================================
+                      EMAIL FORM 
+                      ============================================================ */}
+                  {showEmailForm && (
+                    <>
+                      <div className="flex items-center gap-3 mb-2">
+                        <Mail className="size-6 text-[#4a9d6f]" />
+                        <h1 className="text-white/90 text-2xl font-semibold">Reset Password</h1>
                       </div>
-                      <p className="text-green-200 text-sm mt-1">Redirecting to login...</p>
-                    </div>
-                  )}
-
-                  <form onSubmit={handleSendPIN} className="space-y-4">
-                    <div>
-                      <label className="block text-sm font-medium text-white/90 mb-1">
-                        Email Address
-                      </label>
-                      <div className="relative">
-                        <User className="absolute left-3 top-1/2 -translate-y-1/2 size-5 text-white/50 pointer-events-none" />
-                        <input
-                          type="email"
-                          value={email}
-                          onChange={(e) => setEmail(e.target.value)}
-                          className="w-full pl-10 pr-4 py-3 bg-white/10 border border-white/30 text-white placeholder-white/50 rounded-lg focus:outline-none focus:ring-2 focus:ring-white/50 focus:border-white/50 disabled:opacity-50"
-                          placeholder="Enter your email"
-                          disabled={isLoading}
-                          required
-                        />
-                      </div>
-                      <p className="text-white/40 text-xs mt-1">
-                        PIN expires in 10 minutes
+                      
+                      <p className="text-white/60 text-sm mb-6">
+                        Enter your email address and we'll send you a 6-digit PIN to reset your password.
                       </p>
-                    </div>
 
-                    <button
-                      type="submit"
-                      disabled={isLoading}
-                      className="w-full text-white py-3 rounded-lg font-semibold transition-all shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                      style={{ backgroundColor: "#4a9d6f" }}
-                      onMouseEnter={(e) => {
-                        if (!isLoading) e.currentTarget.style.backgroundColor = "#5db888";
-                      }}
-                      onMouseLeave={(e) => {
-                        if (!isLoading) e.currentTarget.style.backgroundColor = "#4a9d6f";
-                      }}
-                    >
-                      {isLoading ? (
-                        <>
-                          <Loader2 className="size-5 animate-spin" />
-                          Sending PIN...
-                        </>
-                      ) : (
-                        "Send PIN"
+                      {error && (
+                        <div className="bg-red-500/20 border border-red-300/40 rounded-lg p-3 flex items-start gap-2 mb-4">
+                          <AlertCircle className="size-5 text-red-300 flex-shrink-0 mt-0.5" />
+                          <p className="text-sm text-red-200">{error}</p>
+                        </div>
                       )}
-                    </button>
-                  </form>
-                </>
-              )}
 
-              {/* ============================================================
-                  PIN FORM - 6 Separate Input Fields
-                  ============================================================ */}
-              {showPinForm && !success && (
-                <>
-                  <div className="flex items-center gap-3 mb-2">
-                    <Key className="size-6 text-[#4a9d6f]" />
-                    <h1 className="text-white/90 text-2xl font-semibold">Enter PIN</h1>
-                  </div>
-                  
-                  <p className="text-white/60 text-sm mb-6">
-                    We sent a 6-digit PIN to <span className="text-white/80 font-medium">{email}</span>
-                  </p>
+                      <form onSubmit={handleSendPIN} className="space-y-4">
+                        <div>
+                          <label className="block text-sm font-medium text-white/90 mb-1">
+                            Email Address
+                          </label>
+                          <div className="relative">
+                            <User className="absolute left-3 top-1/2 -translate-y-1/2 size-5 text-white/50 pointer-events-none" />
+                            <input
+                              type="email"
+                              value={email}
+                              onChange={(e) => setEmail(e.target.value)}
+                              className="w-full pl-10 pr-4 py-3 bg-white/10 border border-white/30 text-white placeholder-white/50 rounded-lg focus:outline-none focus:ring-2 focus:ring-white/50 focus:border-white/50 disabled:opacity-50"
+                              placeholder="Enter your email"
+                              disabled={isLoading}
+                              required
+                            />
+                          </div>
+                          <p className="text-white/40 text-xs mt-1">
+                            PIN expires in 10 minutes
+                          </p>
+                        </div>
 
-                  {error && (
-                    <div className="bg-red-500/20 border border-red-300/40 rounded-lg p-3 flex items-start gap-2 mb-4">
-                      <AlertCircle className="size-5 text-red-300 flex-shrink-0 mt-0.5" />
-                      <p className="text-sm text-red-200">{error}</p>
-                    </div>
+                        <button
+                          type="submit"
+                          disabled={isLoading}
+                          className="w-full text-white py-3 rounded-lg font-semibold transition-all shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                          style={{ backgroundColor: "#4a9d6f" }}
+                          onMouseEnter={(e) => {
+                            if (!isLoading) e.currentTarget.style.backgroundColor = "#5db888";
+                          }}
+                          onMouseLeave={(e) => {
+                            if (!isLoading) e.currentTarget.style.backgroundColor = "#4a9d6f";
+                          }}
+                        >
+                          {isLoading ? (
+                            <>
+                              <Loader2 className="size-5 animate-spin" />
+                              Sending PIN...
+                            </>
+                          ) : (
+                            "Send PIN"
+                          )}
+                        </button>
+                      </form>
+                    </>
                   )}
 
-                  <form onSubmit={handleVerifyPIN} className="space-y-4">
-                    <div>
-                      <label className="block text-sm font-medium text-white/90 mb-3 text-center">
-                        Enter 6-Digit PIN
-                      </label>
-                      <div className="flex justify-center gap-3">
-                        {[0, 1, 2, 3, 4, 5].map((index) => (
-                          <input
-                            key={index}
-                            ref={(el) => (inputRefs.current[index] = el)}
-                            type="text"
-                            maxLength={1}
-                            value={pin[index]}
-                            onChange={(e) => handlePinChange(index, e.target.value)}
-                            onKeyDown={(e) => handleKeyDown(index, e)}
-                            onPaste={handlePaste}
-                            className="w-12 h-14 text-center text-2xl font-semibold bg-white/10 border border-white/30 text-white placeholder-white/50 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#4a9d6f] focus:border-[#4a9d6f] disabled:opacity-50 transition-all"
-                            disabled={isLoading}
-                            required
-                            autoFocus={index === 0}
-                          />
-                        ))}
+                  {/* ============================================================
+                      PIN FORM - 6 Separate Input Fields
+                      ============================================================ */}
+                  {showPinForm && !success && (
+                    <>
+                      <div className="flex items-center gap-3 mb-2">
+                        <Key className="size-6 text-[#4a9d6f]" />
+                        <h1 className="text-white/90 text-2xl font-semibold">Enter PIN</h1>
                       </div>
-                      <p className="text-white/40 text-xs text-center mt-3">
-                        ⏱️ PIN expires in 10 minutes
+                      
+                      <p className="text-white/60 text-sm mb-6">
+                        We sent a 6-digit PIN to <span className="text-white/80 font-medium">{email}</span>
                       </p>
-                    </div>
 
-                    <div className="flex justify-between items-center mt-2">
-                      <button
-                        type="button"
-                        onClick={handleResendPIN}
-                        disabled={resendCooldown > 0 || isLoading}
-                        className="text-[#4a9d6f] hover:text-[#5db888] text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        {resendCooldown > 0 ? `Resend in ${resendCooldown}s` : "Resend PIN"}
-                      </button>
-                    </div>
-
-                    <button
-                      type="submit"
-                      disabled={isLoading || pinString.length !== 6}
-                      className="w-full text-white py-3 rounded-lg font-semibold transition-all shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                      style={{ backgroundColor: "#4a9d6f" }}
-                      onMouseEnter={(e) => {
-                        if (!isLoading && pinString.length === 6) e.currentTarget.style.backgroundColor = "#5db888";
-                      }}
-                      onMouseLeave={(e) => {
-                        if (!isLoading) e.currentTarget.style.backgroundColor = "#4a9d6f";
-                      }}
-                    >
-                      {isLoading ? (
-                        <>
-                          <Loader2 className="size-5 animate-spin" />
-                          Verifying...
-                        </>
-                      ) : (
-                        "Verify PIN"
+                      {error && (
+                        <div className="bg-red-500/20 border border-red-300/40 rounded-lg p-3 flex items-start gap-2 mb-4">
+                          <AlertCircle className="size-5 text-red-300 flex-shrink-0 mt-0.5" />
+                          <p className="text-sm text-red-200">{error}</p>
+                        </div>
                       )}
-                    </button>
-                  </form>
-                </>
-              )}
 
-              {/* ============================================================
-                  NEW PASSWORD FORM - Direct update (NO PIN verification)
-                  ============================================================ */}
-              {showPasswordForm && !success && (
-                <>
-                  <div className="flex items-center gap-3 mb-2">
-                    <Lock className="size-6 text-[#4a9d6f]" />
-                    <h1 className="text-white/90 text-2xl font-semibold">New Password</h1>
-                  </div>
-                  
-                  <p className="text-white/60 text-sm mb-6">
-                    Enter your new password for <span className="text-white/80 font-medium">{email}</span>
-                  </p>
+                      <form onSubmit={handleVerifyPIN} className="space-y-4">
+                        <div>
+                          <label className="block text-sm font-medium text-white/90 mb-3 text-center">
+                            Enter 6-Digit PIN
+                          </label>
+                          <div className="flex justify-center gap-3">
+                            {[0, 1, 2, 3, 4, 5].map((index) => (
+                              <input
+                                key={index}
+                                ref={(el) => (inputRefs.current[index] = el)}
+                                type="text"
+                                maxLength={1}
+                                value={pin[index]}
+                                onChange={(e) => handlePinChange(index, e.target.value)}
+                                onKeyDown={(e) => handleKeyDown(index, e)}
+                                onPaste={handlePaste}
+                                className="w-12 h-14 text-center text-2xl font-semibold bg-white/10 border border-white/30 text-white placeholder-white/50 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#4a9d6f] focus:border-[#4a9d6f] disabled:opacity-50 transition-all"
+                                disabled={isLoading}
+                                required
+                                autoFocus={index === 0}
+                              />
+                            ))}
+                          </div>
+                          <p className="text-white/40 text-xs text-center mt-3">
+                            ⏱️ PIN expires in 10 minutes
+                          </p>
+                        </div>
 
-                  {error && (
-                    <div className="bg-red-500/20 border border-red-300/40 rounded-lg p-3 flex items-start gap-2 mb-4">
-                      <AlertCircle className="size-5 text-red-300 flex-shrink-0 mt-0.5" />
-                      <p className="text-sm text-red-200">{error}</p>
-                    </div>
+                        <div className="flex justify-between items-center mt-2">
+                          <button
+                            type="button"
+                            onClick={handleResendPIN}
+                            disabled={resendCooldown > 0 || isLoading}
+                            className="text-[#4a9d6f] hover:text-[#5db888] text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            {resendCooldown > 0 ? `Resend in ${resendCooldown}s` : "Resend PIN"}
+                          </button>
+                        </div>
+
+                        <button
+                          type="submit"
+                          disabled={isLoading || pinString.length !== 6}
+                          className="w-full text-white py-3 rounded-lg font-semibold transition-all shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                          style={{ backgroundColor: "#4a9d6f" }}
+                          onMouseEnter={(e) => {
+                            if (!isLoading && pinString.length === 6) e.currentTarget.style.backgroundColor = "#5db888";
+                          }}
+                          onMouseLeave={(e) => {
+                            if (!isLoading) e.currentTarget.style.backgroundColor = "#4a9d6f";
+                          }}
+                        >
+                          {isLoading ? (
+                            <>
+                              <Loader2 className="size-5 animate-spin" />
+                              Verifying...
+                            </>
+                          ) : (
+                            "Verify PIN"
+                          )}
+                        </button>
+                      </form>
+                    </>
                   )}
 
-                  <form onSubmit={handleResetPassword} className="space-y-4">
-                    <div>
-                      <label className="block text-sm font-medium text-white/90 mb-1">
-                        New Password
-                      </label>
-                      <div className="relative">
-                        <Lock className="absolute left-3 top-1/2 -translate-y-1/2 size-5 text-white/50 pointer-events-none" />
-                        <input
-                          type={showPassword ? "text" : "password"}
-                          autoComplete="new-password"
-                          value={newPassword}
-                          onChange={(e) => setNewPassword(e.target.value)}
-                          className="w-full pl-10 pr-12 py-3 bg-white/10 border border-white/30 text-white placeholder-white/50 rounded-lg focus:outline-none focus:ring-2 focus:ring-white/50 focus:border-white/50 disabled:opacity-50"
-                          placeholder="Enter new password (min 6 characters)"
-                          disabled={isLoading}
-                          required
-                          minLength={6}
-                        />
-                        <button
-                          type="button"
-                          className="absolute right-3 top-1/2 -translate-y-1/2 text-white/50 hover:text-white/80 transition-colors z-10"
-                          onClick={() => setShowPassword(!showPassword)}
-                        >
-                          {showPassword ? <EyeOff className="size-5" /> : <Eye className="size-5" />}
-                        </button>
+                  {/* ============================================================
+                      NEW PASSWORD FORM
+                      ============================================================ */}
+                  {showPasswordForm && !success && (
+                    <>
+                      <div className="flex items-center gap-3 mb-2">
+                        <Lock className="size-6 text-[#4a9d6f]" />
+                        <h1 className="text-white/90 text-2xl font-semibold">New Password</h1>
                       </div>
-                    </div>
+                      
+                      <p className="text-white/60 text-sm mb-6">
+                        Enter your new password for <span className="text-white/80 font-medium">{email}</span>
+                      </p>
 
-                    <div>
-                      <label className="block text-sm font-medium text-white/90 mb-1">
-                        Confirm Password
-                      </label>
-                      <div className="relative">
-                        <Lock className="absolute left-3 top-1/2 -translate-y-1/2 size-5 text-white/50 pointer-events-none" />
-                        <input
-                          type={showConfirmPassword ? "text" : "password"}
-                          autoComplete="new-password"
-                          value={confirmPassword}
-                          onChange={(e) => setConfirmPassword(e.target.value)}
-                          className="w-full pl-10 pr-12 py-3 bg-white/10 border border-white/30 text-white placeholder-white/50 rounded-lg focus:outline-none focus:ring-2 focus:ring-white/50 focus:border-white/50 disabled:opacity-50"
-                          placeholder="Confirm your password"
-                          disabled={isLoading}
-                          required
-                        />
-                        <button
-                          type="button"
-                          className="absolute right-3 top-1/2 -translate-y-1/2 text-white/50 hover:text-white/80 transition-colors z-10"
-                          onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                        >
-                          {showConfirmPassword ? <EyeOff className="size-5" /> : <Eye className="size-5" />}
-                        </button>
-                      </div>
-                    </div>
-
-                    <button
-                      type="submit"
-                      disabled={isLoading}
-                      className="w-full text-white py-3 rounded-lg font-semibold transition-all shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                      style={{ backgroundColor: "#4a9d6f" }}
-                      onMouseEnter={(e) => {
-                        if (!isLoading) e.currentTarget.style.backgroundColor = "#5db888";
-                      }}
-                      onMouseLeave={(e) => {
-                        if (!isLoading) e.currentTarget.style.backgroundColor = "#4a9d6f";
-                      }}
-                    >
-                      {isLoading ? (
-                        <>
-                          <Loader2 className="size-5 animate-spin" />
-                          Resetting Password...
-                        </>
-                      ) : (
-                        "Reset Password"
+                      {error && (
+                        <div className="bg-red-500/20 border border-red-300/40 rounded-lg p-3 flex items-start gap-2 mb-4">
+                          <AlertCircle className="size-5 text-red-300 flex-shrink-0 mt-0.5" />
+                          <p className="text-sm text-red-200">{error}</p>
+                        </div>
                       )}
-                    </button>
-                  </form>
+
+                      <form onSubmit={handleResetPassword} className="space-y-4">
+                        <div>
+                          <label className="block text-sm font-medium text-white/90 mb-1">
+                            New Password
+                          </label>
+                          <div className="relative">
+                            <Lock className="absolute left-3 top-1/2 -translate-y-1/2 size-5 text-white/50 pointer-events-none" />
+                            <input
+                              type={showPassword ? "text" : "password"}
+                              autoComplete="new-password"
+                              value={newPassword}
+                              onChange={(e) => setNewPassword(e.target.value)}
+                              className="w-full pl-10 pr-12 py-3 bg-white/10 border border-white/30 text-white placeholder-white/50 rounded-lg focus:outline-none focus:ring-2 focus:ring-white/50 focus:border-white/50 disabled:opacity-50"
+                              placeholder="Enter new password (min 6 characters)"
+                              disabled={isLoading}
+                              required
+                              minLength={6}
+                            />
+                            <button
+                              type="button"
+                              className="absolute right-3 top-1/2 -translate-y-1/2 text-white/50 hover:text-white/80 transition-colors z-10"
+                              onClick={() => setShowPassword(!showPassword)}
+                            >
+                              {showPassword ? <EyeOff className="size-5" /> : <Eye className="size-5" />}
+                            </button>
+                          </div>
+                        </div>
+
+                        <div>
+                          <label className="block text-sm font-medium text-white/90 mb-1">
+                            Confirm Password
+                          </label>
+                          <div className="relative">
+                            <Lock className="absolute left-3 top-1/2 -translate-y-1/2 size-5 text-white/50 pointer-events-none" />
+                            <input
+                              type={showConfirmPassword ? "text" : "password"}
+                              autoComplete="new-password"
+                              value={confirmPassword}
+                              onChange={(e) => setConfirmPassword(e.target.value)}
+                              className="w-full pl-10 pr-12 py-3 bg-white/10 border border-white/30 text-white placeholder-white/50 rounded-lg focus:outline-none focus:ring-2 focus:ring-white/50 focus:border-white/50 disabled:opacity-50"
+                              placeholder="Confirm your password"
+                              disabled={isLoading}
+                              required
+                            />
+                            <button
+                              type="button"
+                              className="absolute right-3 top-1/2 -translate-y-1/2 text-white/50 hover:text-white/80 transition-colors z-10"
+                              onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                            >
+                              {showConfirmPassword ? <EyeOff className="size-5" /> : <Eye className="size-5" />}
+                            </button>
+                          </div>
+                        </div>
+
+                        <button
+                          type="submit"
+                          disabled={isLoading}
+                          className="w-full text-white py-3 rounded-lg font-semibold transition-all shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                          style={{ backgroundColor: "#4a9d6f" }}
+                          onMouseEnter={(e) => {
+                            if (!isLoading) e.currentTarget.style.backgroundColor = "#5db888";
+                          }}
+                          onMouseLeave={(e) => {
+                            if (!isLoading) e.currentTarget.style.backgroundColor = "#4a9d6f";
+                          }}
+                        >
+                          {isLoading ? (
+                            <>
+                              <Loader2 className="size-5 animate-spin" />
+                              Resetting Password...
+                            </>
+                          ) : (
+                            "Reset Password"
+                          )}
+                        </button>
+                      </form>
+                    </>
+                  )}
                 </>
               )}
-
-              {/* Footer */}
-
             </div>
           </div>
         </div>
