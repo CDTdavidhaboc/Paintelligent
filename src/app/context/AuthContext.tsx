@@ -16,6 +16,7 @@ import {
   verifyResetToken,
   updateUserPassword,
   sendPasswordResetEmailWithPIN,
+  confirmUserEmail, // ✅ ADDED
   supabase,
   supabaseAdmin,
 } from "../lib/supabase";
@@ -36,6 +37,8 @@ interface AuthContextType {
   resetPasswordWithPIN: (email: string, pin: string, newPassword: string) => Promise<{ success: boolean; error?: string }>;
   // ✅ NEW: Direct password update (no PIN verification)
   updatePasswordDirectly: (email: string, newPassword: string) => Promise<{ success: boolean; error?: string }>;
+  // ✅ NEW: Confirm email manually
+  confirmEmail: (email: string) => Promise<{ success: boolean; error?: string; message?: string }>;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -114,10 +117,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  // ✅ UPDATED: Register with auto-confirm
   const register = async (email: string, password: string, fullName: string) => {
     try {
       console.log("📝 Registering user:", email);
       const result = await registerUser(email, password, fullName);
+      
+      // ✅ AUTO-CONFIRM IN DEVELOPMENT
+      if (result.success && import.meta.env.MODE === 'development') {
+        console.log('📧 Auto-confirming email in development...');
+        const confirmResult = await confirmUserEmail(email);
+        if (confirmResult.success) {
+          console.log('✅ Email auto-confirmed!');
+        } else {
+          console.warn('⚠️ Auto-confirm failed:', confirmResult.error);
+        }
+      }
+      
       return result;
     } catch (error: any) {
       console.error("Registration error:", error);
@@ -263,6 +279,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  // ✅ NEW: Confirm email manually
+  const confirmEmail = async (email: string) => {
+    try {
+      console.log('📧 Confirming email:', email);
+      const result = await confirmUserEmail(email);
+      return result;
+    } catch (error: any) {
+      console.error('❌ Confirm email error:', error);
+      return { success: false, error: error.message };
+    }
+  };
+
   // ⚠️ DEPRECATED: Use verifyPIN + updatePasswordDirectly instead
   // Kept for backward compatibility
   const resetPasswordWithPIN = async (email: string, pin: string, newPassword: string) => {
@@ -318,7 +346,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     requestPasswordReset,
     verifyPIN,
     resetPasswordWithPIN,
-    updatePasswordDirectly, // ✅ NEW: Direct password update
+    updatePasswordDirectly,
+    confirmEmail, // ✅ NEW
   };
 
   return (
@@ -334,4 +363,4 @@ export function useAuth() {
     throw new Error("useAuth must be used within an AuthProvider");
   }
   return context;
-}
+} 

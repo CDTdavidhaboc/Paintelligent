@@ -105,7 +105,7 @@ export const registerUser = async (email: string, password: string, fullName: st
           const { data, error } = await supabaseAdmin.auth.admin.createUser({
             email: email,
             password: password,
-            email_confirm: true,
+            email_confirm: true, // ✅ AUTO-CONFIRM IN DEVELOPMENT
             user_metadata: {
               full_name: fullName,
             },
@@ -116,7 +116,7 @@ export const registerUser = async (email: string, password: string, fullName: st
             // Fall through to regular signup
           } else {
             authData = { user: data.user };
-            console.log('✅ Admin API user created:', data.user.id);
+            console.log('✅ Admin API user created and confirmed:', data.user.id);
           }
         } catch (adminErr) {
           console.error('❌ Admin API exception:', adminErr);
@@ -193,7 +193,7 @@ export const registerUser = async (email: string, password: string, fullName: st
     
     const payload = {
       email: email,
-      password: password,
+      password: null, // ✅ FIXED: Set to NULL instead of storing plain text password
       full_name: fullName,
       auth_user_id: authData.user.id,
       phone: null,
@@ -293,7 +293,109 @@ export const registerUser = async (email: string, password: string, fullName: st
   }
 };
 
-// Login user with Supabase Auth - FIXED: No auto-creation
+// ============================================================
+// AUTO-CONFIRM EMAIL IN DEVELOPMENT
+// ============================================================
+
+export const confirmUserEmail = async (email: string) => {
+  if (!isDevelopment) {
+    return { success: false, error: 'Only available in development' };
+  }
+
+  if (!supabaseAdmin) {
+    console.warn('⚠️ Admin client not available, skipping auto-confirm');
+    return { success: false, error: 'Admin client not available' };
+  }
+
+  try {
+    console.log('📧 Auto-confirming email for:', email);
+    
+    // Get user by email
+    const { data: userList, error: listError } = await supabaseAdmin.auth.admin.listUsers();
+    
+    if (listError) {
+      console.error('❌ Error listing users:', listError);
+      return { success: false, error: listError.message };
+    }
+
+    const user = userList?.users?.find((u: any) => u.email === email);
+    
+    if (!user) {
+      return { success: false, error: 'User not found' };
+    }
+
+    // Update user to confirmed
+    const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(
+      user.id,
+      { email_confirm: true }
+    );
+
+    if (updateError) {
+      console.error('❌ Error confirming email:', updateError);
+      return { success: false, error: updateError.message };
+    }
+
+    console.log('✅ Email confirmed for:', email);
+    return { success: true, message: 'Email confirmed successfully!' };
+  } catch (error: any) {
+    console.error('❌ Error confirming email:', error);
+    return { success: false, error: error.message };
+  }
+};
+
+// For manually confirming existing users
+export const confirmExistingUser = async (email: string) => {
+  console.log('📧 Manually confirming existing user:', email);
+  return await confirmUserEmail(email);
+};
+
+// ============================================================
+// DEBUG: Check user status
+// ============================================================
+
+export const checkUserStatus = async (email: string) => {
+  console.log('🔍 Checking user status for:', email);
+  
+  try {
+    // Check auth.users
+    if (supabaseAdmin) {
+      const { data: userList, error: listError } = await supabaseAdmin.auth.admin.listUsers();
+      
+      if (!listError && userList?.users) {
+        const user = userList.users.find((u: any) => u.email === email);
+        
+        if (user) {
+          console.log('✅ Auth user found:');
+          console.log('  - ID:', user.id);
+          console.log('  - Email:', user.email);
+          console.log('  - Confirmed:', user.email_confirmed_at !== null);
+          console.log('  - Created:', user.created_at);
+        } else {
+          console.log('❌ User not found in auth.users');
+        }
+      }
+    }
+    
+    // Check user_data
+    const { data, error } = await supabase
+      .from('user_data')
+      .select('email, auth_user_id, full_name, created_at')
+      .eq('email', email)
+      .maybeSingle();
+    
+    if (error) {
+      console.error('❌ Error checking user_data:', error);
+    } else if (data) {
+      console.log('✅ user_data found:', data);
+    } else {
+      console.log('❌ user_data not found');
+    }
+  } catch (error) {
+    console.error('❌ Error checking user status:', error);
+  }
+};
+
+// Login user with Supabase Auth - ✅ FIXED: Auto-creates user_data if missing
 export const loginUser = async (email: string, password: string) => {
   console.log('🔑 Logging in user:', email);
   
@@ -363,9 +465,9 @@ export const loginUser = async (email: string, password: string) => {
     console.log('✅ Auth login successful:', authData.user.id);
 
     // ============================================================
-    // ✅ FIX: Check if user exists in user_data - NO AUTO-CREATION
+    // ✅ FIX: Check if user exists in user_data - CREATE IF MISSING
     // ============================================================
-    const { data, error } = await supabase
+    let { data, error } = await supabase
       .from('user_data')
       .select('*')
       .eq('email', email)
@@ -376,17 +478,101 @@ export const loginUser = async (email: string, password: string) => {
       return { success: false, error: error.message };
     }
 
-    // ✅ If user_data record doesn't exist, FAIL the login
+    // ✅ NEW: If user_data doesn't exist, CREATE IT automatically
     if (!data) {
-      console.log('❌ User found in Auth but NOT in user_data. Access denied.');
+      console.log('ℹ️ User found in Auth but NOT in user_data. Creating now...');
       
-      // ✅ Sign out from Auth to clean up the session
-      await supabase.auth.signOut();
-      
-      return { 
-        success: false, 
-        error: 'Account not found. Please register or contact support.' 
+      // Create user_data record
+      const newUserData = {
+        email: email,
+        auth_user_id: authData.user.id,
+        full_name: authData.user.user_metadata?.full_name || email,
+        email_verified: authData.user.email_confirmed_at !== null,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        password: null,
+        role: 'User',
+        permissions: ['Seasonal Forecast', 'Paint Analyzer'],
+        contacts: [],
+        batch_size: 0.1,
+        phone: null,
+        location: null,
+        address: null,
+        join_date: null,
+        employee_id: null,
+        profile_picture: null,
+        inventory_data: null,
+        inventory_data_name: null,
+        color_analysis: null,
+        uploaded_image: null,
+        uploaded_file_name: null,
+        uploaded_file_size: null,
+        sales_data: null,
+        sales_data_name: null,
+        forecast_data: null,
+        last_fetched: null,
       };
+
+      let insertResult = null;
+      let insertError = null;
+
+      // Try using Admin client first (bypasses RLS)
+      if (supabaseAdmin) {
+        try {
+          const { data: inserted, error: err } = await supabaseAdmin
+            .from('user_data')
+            .insert(newUserData)
+            .select()
+            .single();
+
+          if (err) {
+            console.error('❌ Admin client insert error:', err);
+            insertError = err;
+          } else {
+            insertResult = inserted;
+            console.log('✅ User_data created using Admin client');
+          }
+        } catch (err) {
+          console.error('❌ Admin client exception:', err);
+          insertError = err as any;
+        }
+      }
+
+      // Fallback to regular client
+      if (!insertResult) {
+        try {
+          const { data: inserted, error: err } = await supabase
+            .from('user_data')
+            .insert(newUserData)
+            .select()
+            .single();
+
+          if (err) {
+            console.error('❌ Regular client insert error:', err);
+            insertError = err;
+          } else {
+            insertResult = inserted;
+            console.log('✅ User_data created using regular client');
+          }
+        } catch (err) {
+          console.error('❌ Regular client exception:', err);
+          insertError = err as any;
+        }
+      }
+
+      if (insertError || !insertResult) {
+        console.error('❌ Error creating user_data:', insertError);
+        // Still allow login, but with warning
+        return {
+          success: true,
+          user: authData.user,
+          token: authData.session?.access_token || '',
+          warning: 'Profile data missing. Please update your profile.'
+        };
+      }
+
+      data = insertResult;
+      console.log('✅ User data created successfully!');
     }
 
     console.log('✅ User logged in successfully!');
