@@ -419,6 +419,9 @@ export default function PaintComponentAnalyzer() {
   const [isDraggingFile, setIsDraggingFile] = useState(false);
   const [isDataSaved, setIsDataSaved] = useState(false);
 
+  // Add state for remove confirmation dialog
+  const [showRemoveDialog, setShowRemoveDialog] = useState(false);
+
   // ============================================================
   // SUPABASE: Load saved data on mount
   // ============================================================
@@ -1066,6 +1069,18 @@ Required JSON format:
   const isDataLoaded = uploadedData !== null && uploadedData.length > 0;
   const isAnalyzerEnabled = isDataSaved && isDataLoaded;
 
+  // Handle remove with confirmation
+  const handleRemoveWithConfirmation = () => {
+    if (uploadedImage) {
+      setShowRemoveDialog(true);
+    }
+  };
+
+  const confirmRemoveImage = () => {
+    handleRemoveImage();
+    setShowRemoveDialog(false);
+  };
+
   if (isLoading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-[#f3f7f4] p-6">
@@ -1181,7 +1196,7 @@ Required JSON format:
       {/* Inventory Section - Matching SalesForecasting style */}
       <section>
       <Card className="overflow-hidden rounded-2xl border border-emerald-100 bg-white shadow-[0_12px_32px_rgba(20,83,45,0.06)]">
-  <CardHeader className="border-b border-emerald-100 bg-[#174d32]  h-10 flex items-center px-4">
+  <CardHeader className="border-b border-emerald-100 bg-[#174d32] h-10 flex items-center px-4">
     <div className="flex items-center justify-between w-full">
       <div className="flex items-center gap-1.5">
         <Database className="size-3.5 text-white" />
@@ -1557,7 +1572,7 @@ Required JSON format:
                       <Button
                         onClick={() => analyzeWithGemini(uploadedImage)}
                         disabled={isAnalyzing || !isAnalyzerEnabled || !!colorAnalysis}
-                        className="h-12 w-full rounded-xl bg-[#174d32] text-white shadow-lg shadow-green-900/15 transition-all duration-200 hover:bg-[#123e28] hover:shadow-xl hover:-translate-y-0.5 disabled:opacity-50"
+                        className="h-12 w-full rounded-lg bg-[#174d32] text-white shadow-lg shadow-green-900/15 transition-all duration-200 hover:bg-[#123e28] hover:shadow-xl hover:-translate-y-0.5 disabled:opacity-50"
                       >
                         {isAnalyzing ? (
                           <>
@@ -1582,17 +1597,17 @@ Required JSON format:
                           onClick={() => fileInputRef.current?.click()}
                           variant="outline"
                           disabled={isAnalyzing || !isAnalyzerEnabled}
-                          className="h-11 rounded-xl border-gray-300 bg-white shadow-sm transition-all duration-200 hover:bg-gray-50 hover:shadow-md disabled:opacity-50"
+                          className="h-11 rounded-lg border-2 border-green-950 bg-white text-green-950 shadow-sm transition-all duration-200 hover:bg-green-300 hover:border-green-300 hover:text-green-950 hover:shadow-md disabled:opacity-50 disabled:hover:bg-white disabled:hover:text-green-950 disabled:hover:border-green-950"
                         >
                           <Upload className="mr-2 size-4" />
                           Replace
                         </Button>
                         <Button
-                          onClick={handleRemoveImage}
+                          onClick={handleRemoveWithConfirmation}
                           disabled={isAnalyzing || !isAnalyzerEnabled}
-                          className="h-11 rounded-xl bg-red-500 text-white shadow-sm transition-all duration-200 hover:bg-red-600 hover:shadow-md disabled:opacity-50"
+                          className="h-11 rounded-lg bg-white border-2 border-orange-500 text-orange-600 shadow-sm transition-all duration-200 hover:bg-orange-300 hover:border-orange-300 hover:text-orange-600 hover:shadow-md disabled:opacity-50 disabled:hover:bg-white disabled:hover:text-orange-600 disabled:hover:border-orange-500"
                         >
-                          <X className="mr-2 size-4" />
+                          <X className="mr-2 size-4 text-orange-600" />
                           Remove
                         </Button>
                       </div>
@@ -1604,6 +1619,40 @@ Required JSON format:
           </CardContent>
         </Card>
       </section>
+
+      {/* Confirmation Dialog */}
+      {showRemoveDialog && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl animate-in slide-in-from-bottom-4 duration-300">
+            <div className="flex items-start gap-4">
+              <div className="flex size-12 flex-shrink-0 items-center justify-center rounded-full bg-orange-100">
+                <AlertTriangle className="size-6 text-orange-600" />
+              </div>
+              <div className="flex-1">
+                <h3 className="text-lg font-semibold text-gray-900">Remove Uploaded Image?</h3>
+                <p className="mt-1 text-sm text-gray-500">
+                  Are you sure you want to remove this uploaded paint sample? This will also clear the analysis results.
+                </p>
+              </div>
+            </div>
+            <div className="mt-6 flex gap-3 justify-end">
+              <Button
+                onClick={() => setShowRemoveDialog(false)}
+                variant="outline"
+                className="border-gray-300 text-gray-700 hover:bg-gray-50"
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={confirmRemoveImage}
+                className="bg-orange-500 hover:bg-orange-600 text-white"
+              >
+                Yes, Remove
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Results from Gemini AI */}
       {colorAnalysis && (
@@ -1908,10 +1957,10 @@ Required JSON format:
 
           {/* Stock Warnings */}
           {colorAnalysis.stockWarnings.length > 0 && (
-            <Card className="border-l-4 border-red-500 overflow-hidden rounded-2xl border border-red-100 bg-white shadow-[0_12px_32px_rgba(20,83,45,0.06)]">
-              <CardHeader className="border-b border-red-100 bg-gradient-to-r from-white to-red-50/70">
+            <Card className="border-l-4 border-orange-500 overflow-hidden rounded-2xl border border-orange-100 bg-white shadow-[0_12px_32px_rgba(20,83,45,0.06)]">
+              <CardHeader className="border-b border-orange-100 bg-gradient-to-r from-white to-orange-50/70">
                 <CardTitle className="flex items-center gap-2">
-                  <AlertTriangle className="size-5 text-red-500" />
+                  <AlertTriangle className="size-5 text-orange-500" />
                   Stock Warnings
                 </CardTitle>
               </CardHeader>
@@ -1921,10 +1970,10 @@ Required JSON format:
                     (warning, i) => (
                       <div
                         key={i}
-                        className="flex gap-3 items-start p-3 bg-red-50 rounded-lg border border-red-100"
+                        className="flex gap-3 items-start p-3 bg-orange-50 rounded-lg border border-orange-100"
                       >
-                        <AlertTriangle className="size-5 text-red-600 flex-shrink-0 mt-0.5" />
-                        <p className="text-sm text-red-800 font-medium">
+                        <AlertTriangle className="size-5 text-orange-600 flex-shrink-0 mt-0.5" />
+                        <p className="text-sm text-orange-800 font-medium">
                           {warning}
                         </p>
                       </div>
