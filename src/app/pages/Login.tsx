@@ -140,7 +140,7 @@ export default function Login() {
             <p className="text-sm text-white/70 absolute bottom-3">by Garcia Paint Center</p>
           </div>
 
-          <div className="bg-white/20 backdrop-blur-2xl border border-white/20 rounded-2xl shadow-2xl px-8 py-6 pt-7">
+          <div className="bg-white/20 backdrop-blur-2xl border border-white/20 rounded-2xl hover:border-y-green-300 hover:duration-600 shadow-2xl px-8 py-6 pt-7">
             <h1 className="text-center text-white/90 text-3xl font-semibold mb-4">USER LOGIN</h1>
 
             <form onSubmit={handleSubmit} className="space-y-1">

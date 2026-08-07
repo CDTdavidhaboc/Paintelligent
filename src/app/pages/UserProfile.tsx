@@ -983,8 +983,7 @@ export default function UserProfile() {
                 {!isEditing && (
                   <div className="flex items-center gap-2 text-gray-400 text-xs 
                     bg-gray-50/50 px-3 py-1.5 rounded-lg border border-gray-100">
-                    <Calendar className="size-3" />
-                    <span>Member since 2024</span>
+          
                   </div>
                 )}
               </div>
