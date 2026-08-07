@@ -3,7 +3,7 @@ import { Badge } from "../components/ui/badge";
 import { 
   LogOut, User, Mail, Phone, MapPin, Calendar, Shield, Activity, Building2, Clock, Camera, 
   Edit2, Save, X, UserPlus, Award, CheckCircle, Pencil, UserCircle, Check, Plus, Trash2, Building, Users, Search,
-  Paintbrush, Loader2
+  Paintbrush, Loader2, AlertTriangle
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
@@ -53,6 +53,7 @@ export default function UserProfile() {
   const [searchTerm, setSearchTerm] = useState("");
   const [localAddress, setLocalAddress] = useState('');
   const [isVisible, setIsVisible] = useState(false);
+  const [showLogoutDialog, setShowLogoutDialog] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const notificationTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -466,10 +467,13 @@ export default function UserProfile() {
     }));
   };
 
-  // Handle logout
-  const handleLogout = () => {
-    const confirmLogout = window.confirm("Are you sure you want to log out?");
-    if (!confirmLogout) return;
+  // Handle logout with confirmation
+  const handleLogoutWithConfirmation = () => {
+    setShowLogoutDialog(true);
+  };
+
+  const confirmLogout = () => {
+    setShowLogoutDialog(false);
     
     console.log("🔴 Logging out...");
     
@@ -666,6 +670,39 @@ export default function UserProfile() {
         </div>
       )}
 
+      {/* Logout Confirmation Dialog */}
+      {showLogoutDialog && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl animate-in slide-in-from-bottom-4 duration-300">
+            <div className="flex items-start gap-4">
+              <div className="flex size-12 flex-shrink-0 items-center justify-center rounded-full bg-red-100">
+                <AlertTriangle className="size-6 text-red-600" />
+              </div>
+              <div className="flex-1">
+                <h3 className="text-lg font-semibold text-gray-900">Log Out?</h3>
+                <p className="mt-1 text-sm text-gray-500">
+                  Are you sure you want to log out? You'll need to sign in again to access your account.
+                </p>
+              </div>
+            </div>
+            <div className="mt-6 flex gap-3 justify-end">
+              <button
+                onClick={() => setShowLogoutDialog(false)}
+                className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 transition-all hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmLogout}
+                className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition-all hover:bg-red-700 hover:shadow-lg"
+              >
+                Yes, Log Out
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div
         className={`
           user-profile-page min-h-screen space-y-6 bg-[#f3f7f4] px-4 py-5 sm:px-6 lg:px-8 lg:py-7
@@ -747,10 +784,10 @@ export default function UserProfile() {
             <div className="flex flex-wrap items-center gap-3">
               <button
                 onClick={handleEditToggle}
-                className={`flex items-center gap-2 rounded-xl px-5 py-2.5 text-sm font-semibold transition-all hover:-translate-y-0.5 ${
+                className={`flex items-center gap-2 rounded-lg px-5 py-2.5 text-sm font-semibold transition-all ${
                   isEditing 
-                    ? "bg-white/20 text-white hover:bg-white/30" 
-                    : "bg-white text-[#174d32] shadow-lg shadow-black/20 hover:bg-emerald-50 hover:shadow-xl"
+                    ? "bg-red-50 text-red-600 hover:bg-red-100" 
+                    : "bg-[#174d32] text-white shadow-lg shadow-[#174d32]/20 hover:-translate-y-0.5 hover:shadow-xl"
                 }`}
               >
                 {isEditing ? (
@@ -765,18 +802,20 @@ export default function UserProfile() {
                   </>
                 )}
               </button>
+              
               {isEditing && (
                 <button
                   onClick={handleSave}
-                  className="flex items-center gap-2 rounded-xl bg-emerald-500 px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-emerald-500/30 transition-all hover:-translate-y-0.5 hover:bg-emerald-600 hover:shadow-xl"
+                  className="flex items-center gap-2 rounded-lg bg-emerald-600 px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-emerald-600/20 transition-all hover:-translate-y-0.5 hover:bg-emerald-700 hover:shadow-xl"
                 >
                   <Save className="size-4" />
                   Save Changes
                 </button>
               )}
+              
               <button
-                onClick={handleLogout}
-                className="flex items-center gap-2 rounded-xl bg-red-500 px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-red-500/30 transition-all hover:-translate-y-0.5 hover:bg-red-600 hover:shadow-xl"
+                onClick={handleLogoutWithConfirmation}
+                className="flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-4 py-2.5 text-sm font-medium text-gray-600 transition-all hover:border-red-200 hover:bg-red-50 hover:text-red-600"
               >
                 <LogOut className="size-4" />
                 Log Out

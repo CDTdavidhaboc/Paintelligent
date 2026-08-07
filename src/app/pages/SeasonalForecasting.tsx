@@ -199,6 +199,8 @@ export default function SeasonalForecasting() {
   const [timeFilter, setTimeFilter] = useState("all");
   const [chartKey, setChartKey] = useState(0);
   const [isVisible, setIsVisible] = useState(false);
+  // Add state for remove confirmation dialog
+  const [showRemoveDialog, setShowRemoveDialog] = useState(false);
 
   // Cache keys
   const CACHE_KEY = 'sales_forecast_data';
@@ -1060,20 +1062,6 @@ Return ONLY valid JSON with this structure:
     }
   };
 
-  useEffect(() => {
-    if (forecastStatus === "success" && forecastData) {
-      setTimeout(() => {
-        const resultsElement = document.getElementById('ai-results');
-        if (resultsElement) {
-          resultsElement.scrollIntoView({
-            behavior: 'smooth',
-            block: 'start'
-          });
-        }
-      }, 300);
-    }
-  }, [forecastStatus, forecastData]);
-
   // ============================================================
   // COMPUTED VALUES
   // ============================================================
@@ -1213,6 +1201,18 @@ Return ONLY valid JSON with this structure:
   const isDataLoaded = uploadedData !== null && uploadedData.length > 0;
   const isAnalyzerEnabled = isDataSaved && isDataLoaded;
 
+  // Handle remove with confirmation
+  const handleRemoveWithConfirmation = () => {
+    if (uploadedData) {
+      setShowRemoveDialog(true);
+    }
+  };
+
+  const confirmRemoveData = () => {
+    handleRemoveData();
+    setShowRemoveDialog(false);
+  };
+
   if (isLoading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-[#f3f7f4] p-6">
@@ -1323,7 +1323,7 @@ Return ONLY valid JSON with this structure:
           ============================================================ */}
       <section>
         <Card className="overflow-hidden rounded-2xl border border-emerald-100 bg-white shadow-[0_12px_32px_rgba(20,83,45,0.06)]">
-  <CardHeader className="border-b border-emerald-100 bg-[#174d32]  h-10 flex items-center px-4">
+  <CardHeader className="border-b border-emerald-100 bg-[#174d32] h-10 flex items-center px-4">
     <div className="flex items-center justify-between w-full">
       <div className="flex items-center gap-1.5">
         <Database className="size-3.5 text-white" />
@@ -1436,7 +1436,7 @@ Return ONLY valid JSON with this structure:
                         Replace
                       </Button>
                       <Button
-                        onClick={handleRemoveData}
+                        onClick={handleRemoveWithConfirmation}
                         variant="outline"
                         className="border-green-300 text-green-600 hover:bg-red-50 text-xs h-7 px-2"
                       >
@@ -1477,6 +1477,40 @@ Return ONLY valid JSON with this structure:
           </CardContent>
         </Card>
       </section>
+
+      {/* Confirmation Dialog */}
+      {showRemoveDialog && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl animate-in slide-in-from-bottom-4 duration-300">
+            <div className="flex items-start gap-4">
+              <div className="flex size-12 flex-shrink-0 items-center justify-center rounded-full bg-red-100">
+                <AlertTriangle className="size-6 text-red-600" />
+              </div>
+              <div className="flex-1">
+                <h3 className="text-lg font-semibold text-gray-900">Remove Uploaded Data?</h3>
+                <p className="mt-1 text-sm text-gray-500">
+                  Are you sure you want to remove this uploaded sales data? This will also clear all analysis and forecast results.
+                </p>
+              </div>
+            </div>
+            <div className="mt-6 flex gap-3 justify-end">
+              <Button
+                onClick={() => setShowRemoveDialog(false)}
+                variant="outline"
+                className="border-gray-300 text-gray-700 hover:bg-gray-50"
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={confirmRemoveData}
+                className="bg-red-600 hover:bg-red-700 text-white"
+              >
+                Yes, Remove
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ============================================================
           SUMMARY CARDS
