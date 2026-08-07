@@ -1,4 +1,5 @@
 import { useMemo, useRef, useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import type { ChangeEvent, DragEvent } from "react";
 import {
   Card,
@@ -421,6 +422,18 @@ export default function PaintComponentAnalyzer() {
 
   // Add state for remove confirmation dialog
   const [showRemoveDialog, setShowRemoveDialog] = useState(false);
+
+  // Lock body scroll when dialog is open
+  useEffect(() => {
+    if (showRemoveDialog) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = 'unset';
+    }
+    return () => {
+      document.body.style.overflow = 'unset';
+    };
+  }, [showRemoveDialog]);
 
   // ============================================================
   // SUPABASE: Load saved data on mount
@@ -1044,6 +1057,7 @@ Required JSON format:
     setColorAnalysis(null);
     setAnalyzeError("");
     if (fileInputRef.current) fileInputRef.current.value = "";
+    setShowRemoveDialog(false);
     showNotification("🗑️ Image removed", "info");
   };
 
@@ -1069,7 +1083,7 @@ Required JSON format:
   const isDataLoaded = uploadedData !== null && uploadedData.length > 0;
   const isAnalyzerEnabled = isDataSaved && isDataLoaded;
 
-  // Handle remove with confirmation
+  // Handle remove with confirmation - centered dialog
   const handleRemoveWithConfirmation = () => {
     if (uploadedImage) {
       setShowRemoveDialog(true);
@@ -1078,7 +1092,6 @@ Required JSON format:
 
   const confirmRemoveImage = () => {
     handleRemoveImage();
-    setShowRemoveDialog(false);
   };
 
   if (isLoading) {
@@ -1093,537 +1106,885 @@ Required JSON format:
   }
 
   return (
-    <div
-      className={`
-        paint-analyzer-page min-h-screen space-y-5 bg-[#f3f7f4] px-4 py-5 sm:px-6 lg:px-8 lg:py-7 
-        transition-all duration-700 ease-out
-        ${isVisible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-5"}
-      `}
-    >
-      <style>{`
-        @keyframes scan {
-          0% { transform: translateY(0); opacity: 0; }
-          12% { opacity: 1; }
-          50% { opacity: 1; }
-          100% { transform: translateY(360px); opacity: 0; }
-        }
-        
-        @keyframes slideUp {
-          from {
-            opacity: 0;
-            transform: translateY(20px) scale(0.95);
+    <>
+      <div
+        className={`
+          paint-analyzer-page min-h-screen space-y-5 bg-[#f3f7f4] px-4 py-5 sm:px-6 lg:px-8 lg:py-7 
+          transition-all duration-700 ease-out
+          ${isVisible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-5"}
+        `}
+      >
+        <style>{`
+          @keyframes scan {
+            0% { transform: translateY(0); opacity: 0; }
+            12% { opacity: 1; }
+            50% { opacity: 1; }
+            100% { transform: translateY(360px); opacity: 0; }
           }
-          to {
-            opacity: 1;
-            transform: translateY(0) scale(1);
+          
+          @keyframes slideUp {
+            from {
+              opacity: 0;
+              transform: translateY(20px) scale(0.95);
+            }
+            to {
+              opacity: 1;
+              transform: translateY(0) scale(1);
+            }
           }
-        }
-        
-        .animate-slide-up {
-          animation: slideUp 0.3s ease-out forwards;
-        }
+          
+          @keyframes fadeIn {
+            from {
+              opacity: 0;
+              transform: scale(0.95);
+            }
+            to {
+              opacity: 1;
+              transform: scale(1);
+            }
+          }
+          
+          .animate-slide-up {
+            animation: slideUp 0.3s ease-out forwards;
+          }
 
-        .paint-analyzer-page [data-slot="card"] {
-          border-radius: 1rem;
-        }
+          .animate-fade-in {
+            animation: fadeIn 0.2s ease-out forwards;
+          }
 
-        .paint-analyzer-page select {
-          border-color: rgb(167 243 208);
-          background: rgb(255 255 255);
-          color: rgb(20 83 45);
-          outline: none;
-        }
+          .paint-analyzer-page [data-slot="card"] {
+            border-radius: 1rem;
+          }
 
-        .paint-analyzer-page select:focus {
-          box-shadow: 0 0 0 3px rgb(209 250 229);
-          border-color: rgb(5 150 105);
-        }
+          .paint-analyzer-page select {
+            border-color: rgb(167 243 208);
+            background: rgb(255 255 255);
+            color: rgb(20 83 45);
+            outline: none;
+          }
 
-        .paint-analyzer-page [data-slot="table-head"] {
-          color: rgb(22 101 52);
-          font-weight: 700;
-        }
+          .paint-analyzer-page select:focus {
+            box-shadow: 0 0 0 3px rgb(209 250 229);
+            border-color: rgb(5 150 105);
+          }
 
-        .paint-analyzer-page [data-slot="table-row"]:hover {
-          background: rgb(240 253 244 / 0.7);
-        }
-      `}</style>
+          .paint-analyzer-page [data-slot="table-head"] {
+            color: rgb(22 101 52);
+            font-weight: 700;
+          }
 
-      {/* Page header - Matching SalesForecasting */}
-      <header className="overflow-hidden rounded-2xl bg-[#174d32] px-5 py-5 text-white shadow-[0_18px_45px_rgba(23,77,50,0.18)] sm:px-7 sm:py-6">
-        <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-start gap-4">
-            <div className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-white/12 ring-1 ring-white/15">
-              <Paintbrush className="size-5 text-emerald-100" />
-            </div>
-            <div>
-              <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">Paint Component Analyzer</h1>
-              <p className="mt-1 text-sm text-emerald-100">Upload a paint sample and get a residential formula from your inventory.</p>
-              
-            </div>
-          </div>
-          {userEmail && (
-            <div className="flex w-fit items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-1.5 text-xs">
-              {syncStatus === "syncing" && (
-                <>
-                  <Loader2 className="size-3 animate-spin text-emerald-100" />
-                  <span className="text-emerald-50">Syncing...</span>
-                </>
-              )}
-              {syncStatus === "success" && (
-                <>
-                  <Cloud className="size-3 text-emerald-100" />
-                  <span className="text-emerald-50">Cloud synced</span>
-                </>
-              )}
-              {syncStatus === "error" && (
-                <>
-                  <CloudOff className="size-3 text-red-200" />
-                  <span className="text-red-100">Sync error</span>
-                </>
-              )}
-              {syncStatus === "idle" && userEmail && (
-                <>
-                  <Cloud className="size-3 text-emerald-100/70" />
-                  <span className="text-emerald-100/80">Not synced</span>
-                </>
-              )}
-            </div>
-          )}
-        </div>
-      </header>
+          .paint-analyzer-page [data-slot="table-row"]:hover {
+            background: rgb(240 253 244 / 0.7);
+          }
+        `}</style>
 
-      {/* Inventory Section - Matching SalesForecasting style */}
-      <section>
-      <Card className="overflow-hidden rounded-2xl border border-emerald-100 bg-white shadow-[0_12px_32px_rgba(20,83,45,0.06)]">
-  <CardHeader className="border-b border-emerald-100 bg-[#174d32] h-10 flex items-center px-4">
-    <div className="flex items-center justify-between w-full">
-      <div className="flex items-center gap-1.5">
-        <Database className="size-3.5 text-white" />
-        <CardTitle className="text-md font-medium text-white leading-none">Inventory Source</CardTitle>
-      </div>
-      <Badge variant="outline" className="border-emerald-200 bg-emerald-50 text-emerald-700 text-[10px] font-medium px-2 py-0">
-        {isDataSaved ? "SAVED" : isDataLoaded ? "LOADED" : "EMPTY"}
-      </Badge>
-    </div>
-  </CardHeader>
-
-          <CardContent>
-            <input
-              ref={csvInputRef}
-              type="file"
-              accept=".csv,.xlsx,.xls"
-              onChange={handleFileUploadChange}
-              className="hidden"
-            />
-
-            {!isDataLoaded ? (
+        {/* Page header */}
+        <header className="overflow-hidden rounded-2xl bg-[#174d32] px-5 py-5 text-white shadow-[0_18px_45px_rgba(23,77,50,0.18)] sm:px-7 sm:py-6">
+          <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-start gap-4">
+              <div className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-white/12 ring-1 ring-white/15">
+                <Paintbrush className="size-5 text-emerald-100" />
+              </div>
               <div>
-                <div
-                  onClick={() => csvInputRef.current?.click()}
-                  onDragOver={(e) => {
-                    e.preventDefault();
-                    setIsDraggingFile(true);
-                  }}
-                  onDragLeave={() => setIsDraggingFile(false)}
-                  onDrop={handleFileDrop}
-                  className={`
-                    relative min-h-[80px] cursor-pointer overflow-hidden rounded-xl border-2 border-dashed p-4
-                    transition-all duration-300
-                    ${isDraggingFile
-                      ? "border-green-600 bg-green-50 shadow-md"
-                      : "border-green-300/60 bg-white hover:border-green-600 hover:bg-green-50/60"
-                    }
-                  `}
-                >
-                  <div className="flex items-center justify-center gap-4">
-                    <FileSpreadsheet className="size-6 text-green-900" />
-                    <div>
-                      <p className="text-sm font-medium text-gray-700">Drop CSV or Excel file</p>
-                      <p className="text-xs text-gray-400">or click to browse</p>
-                    </div>
-                    <div className="flex gap-1">
-                      {['CSV', 'XLSX'].map((format) => (
-                        <Badge key={format} variant="secondary" className="text-xs bg-green-50 text-green-700 border border-green-200">
-                          {format}
-                        </Badge>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-                
-                <div className="mt-3 p-3 bg-green-50 rounded-lg border border-green-200">
-                  <p className="text-xs font-medium text-green-800">Required Headers:</p>
-                  <div className="flex flex-wrap gap-1.5 mt-1.5">
-                    <Badge variant="outline" className="text-xs bg-white border-green-300 text-green-700 font-mono">Product</Badge>
-                    <Badge variant="outline" className="text-xs bg-white border-green-300 text-green-700 font-mono">Brand</Badge>
-                    <Badge variant="outline" className="text-xs bg-white border-green-300 text-green-700 font-mono">Category</Badge>
-                    <Badge variant="outline" className="text-xs bg-white border-green-300 text-green-700 font-mono">Stocks</Badge>
-                    <Badge variant="outline" className="text-xs bg-white border-green-300 text-green-700 font-mono">Est. Price (PHP)</Badge>
-                    <Badge variant="outline" className="text-xs bg-white border-green-300 text-green-700 font-mono">Unit Purchase Price</Badge>
-                  </div>
-                  <p className="text-[11px] text-green-600 mt-1.5">Headers are case-sensitive (match exactly)</p>
-                </div>
+                <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">Paint Component Analyzer</h1>
+                <p className="mt-1 text-sm text-emerald-100">Upload a paint sample and get a residential formula from your inventory.</p>
               </div>
-            ) : (
-              <div className="space-y-2">
-                <div className={`flex items-center justify-between p-2 rounded-lg border transition-all duration-300 ${
-                  isDataSaved 
-                    ? "bg-gray-50 border-gray-200 opacity-70" 
-                    : "bg-green-50 border-green-200"
-                }`}>
-                  <div className="flex items-center gap-3">
-                    <div className={`flex size-8 items-center justify-center rounded-lg text-white ${
-                      isDataSaved ? "bg-gray-400" : "bg-[#174d32]"
-                    }`}>
-                      {uploadedDataName.endsWith('.csv') ? (
-                        <File className="size-4" />
-                      ) : (
-                        <FileSpreadsheet className="size-4" />
-                      )}
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium text-gray-900 truncate max-w-[150px]">{uploadedDataName}</p>
-                      <p className="text-xs text-gray-500">{uploadedData.length} rows</p>
-                    </div>
-                  </div>
-                  {!isDataSaved && (
-                    <Button
-                      onClick={handleSaveData}
-                      className="bg-[#174d32] hover:bg-green-700 text-white text-xs h-7 px-2"
-                    >
-                      <Save className="size-3 mr-1" />
-                      Save & Enable
-                    </Button>
-                  )}
-                </div>
-
-                <div className="flex items-center gap-2">
-                  {!isDataSaved ? (
-                    <>
-                      <Button
-                        onClick={() => csvInputRef.current?.click()}
-                        variant="outline"
-                        className="border-green-300 text-green-600 hover:bg-green-50 text-xs h-7 px-2"
-                      >
-                        <RefreshCw className="size-3 mr-1" />
-                        Replace
-                      </Button>
-                      <Button
-                        onClick={handleRemoveData}
-                        variant="outline"
-                        className="border-green-300 text-green-600 hover:bg-red-50 text-xs h-7 px-2"
-                      >
-                        <X className="size-3 mr-1" />
-                        Remove
-                      </Button>
-                    </>
-                  ) : (
-                    <>
-                      <Button
-                        onClick={() => csvInputRef.current?.click()}
-                        variant="outline"
-                        className="border-green-300 text-green-600 hover:bg-green-50 text-xs h-7 px-2"
-                      >
-                        <RefreshCw className="size-3 mr-1" />
-                        Replace
-                      </Button>
-                      <Button
-                        onClick={handleClearSavedData}
-                        variant="outline"
-                        className="border-green-300 text-green-600 hover:bg-green-50 text-xs h-7 px-2"
-                      >
-                        <X className="size-3 mr-1" />
-                        Clear
-                      </Button>
-                      <div className="ml-auto flex items-center gap-1 text-xs text-green-600">
-                  
-                      </div>
-                    </>
-                  )}
-                </div>
+            </div>
+            {userEmail && (
+              <div className="flex w-fit items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-1.5 text-xs">
+                {syncStatus === "syncing" && (
+                  <>
+                    <Loader2 className="size-3 animate-spin text-emerald-100" />
+                    <span className="text-emerald-50">Syncing...</span>
+                  </>
+                )}
+                {syncStatus === "success" && (
+                  <>
+                    <Cloud className="size-3 text-emerald-100" />
+                    <span className="text-emerald-50">Cloud synced</span>
+                  </>
+                )}
+                {syncStatus === "error" && (
+                  <>
+                    <CloudOff className="size-3 text-red-200" />
+                    <span className="text-red-100">Sync error</span>
+                  </>
+                )}
+                {syncStatus === "idle" && userEmail && (
+                  <>
+                    <Cloud className="size-3 text-emerald-100/70" />
+                    <span className="text-emerald-100/80">Not synced</span>
+                  </>
+                )}
               </div>
             )}
+          </div>
+        </header>
 
-            {uploadError && (
-              <div className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 p-2 mt-2">
-                <AlertTriangle className="size-4 flex-shrink-0 text-red-600" />
-                <p className="text-xs text-red-700">{uploadError}</p>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </section>
-
-      {/* Vision Scanner Section */}
-      <section>
-      <Card className={`overflow-hidden rounded-2xl border shadow-[0_12px_32px_rgba(20,83,45,0.06)] ${isAnalyzerEnabled ? 'border-emerald-100 bg-white' : 'border-gray-200 bg-white/60'}`}>
-  <CardHeader className={`border-b ${isAnalyzerEnabled ? 'border-emerald-100 bg-gradient-to-r from-emerald-50/80 via-white to-white' : 'border-gray-200 bg-gray-50'} p-5`}>
-    <div className="flex items-center justify-between w-full">
-      <div className="flex items-center gap-3 flex-1">
-        <ImageIcon className="size-5 text-emerald-600 flex-shrink-0" />
-        <div className="flex flex-col">
-          <CardTitle className="text-base font-semibold text-gray-900 leading-tight">
-            AI Vision Scanner — Residential Paints Only
-          </CardTitle>
-          <p className="text-sm text-gray-500 leading-tight mt-0.5">
-            {isAnalyzerEnabled 
-              ? "Upload a residential paint sample. Gemini will detect the color and formulate a mixture using your inventory."
-              : isDataLoaded 
-                ? "Please click 'Save & Enable' to activate the paint analyzer."
-                : "Please upload a CSV or Excel inventory file first to enable paint analysis."}
-          </p>
-        </div>
-      </div>
-      <Badge className={`${isAnalyzerEnabled ? "bg-emerald-700 text-white" : "bg-gray-500 text-white"} text-xs font-medium px-3 py-1 flex-shrink-0`}>
-        {isAnalyzerEnabled 
-          ? (uploadedImage ? "IMAGE READY" : "AWAITING SAMPLE")
-          : "LOCKED"}
-      </Badge>
-    </div>
-  </CardHeader>
-
-          <CardContent>
-            {!isAnalyzerEnabled ? (
-              <div className="relative min-h-[300px] rounded-2xl border-2 border-dashed border-gray-300 bg-gray-50/60 p-6">
-                <div className="flex min-h-[252px] flex-col items-center justify-center text-center">
-                  <div className="relative mb-5">
-                    <div className="flex size-24 items-center justify-center rounded-full border border-gray-300 bg-gray-100 shadow-lg">
-                      {isDataLoaded ? (
-                        <Save className="size-11 text-yellow-500" />
-                      ) : (
-                        <Lock className="size-11 text-gray-400" />
-                      )}
-                    </div>
-                  </div>
-                  <p className="text-lg font-bold text-gray-500">
-                    {isDataLoaded ? "Save Data to Enable" : "Upload File First"}
-                  </p>
-                  <p className="mt-1 text-sm text-gray-400 max-w-md">
-                    {isDataLoaded 
-                      ? "Click the 'Save & Enable' button above to activate the paint analyzer."
-                      : "Please upload a CSV or Excel inventory file above to unlock the paint analyzer."}
-                  </p>
-                  <div className="mt-6 rounded-full border border-gray-200 bg-gray-100/80 px-4 py-2 text-xs font-medium text-gray-500 shadow-sm">
-                    {isDataLoaded ? "Save Required → Vision AI → Residential Paint Formula" : "File Required → Vision AI → Residential Paint Formula"}
-                  </div>
+        {/* Inventory Section */}
+        <section>
+          <Card className="overflow-hidden rounded-2xl border border-emerald-100 bg-white shadow-[0_12px_32px_rgba(20,83,45,0.06)]">
+            <CardHeader className="border-b border-emerald-100 bg-[#174d32] h-10 flex items-center px-4">
+              <div className="flex items-center justify-between w-full">
+                <div className="flex items-center gap-1.5">
+                  <Database className="size-3.5 text-white" />
+                  <CardTitle className="text-md font-medium text-white leading-none">Inventory Source</CardTitle>
                 </div>
+                <Badge variant="outline" className="border-emerald-200 bg-emerald-50 text-emerald-700 text-[10px] font-medium px-2 py-0">
+                  {isDataSaved ? "SAVED" : isDataLoaded ? "LOADED" : "EMPTY"}
+                </Badge>
               </div>
-            ) : (
-              <>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept="image/*"
-                  onChange={handleFileChange}
-                  className="hidden"
-                />
+            </CardHeader>
 
-                {!uploadedImage ? (
+            <CardContent>
+              <input
+                ref={csvInputRef}
+                type="file"
+                accept=".csv,.xlsx,.xls"
+                onChange={handleFileUploadChange}
+                className="hidden"
+              />
+
+              {!isDataLoaded ? (
+                <div>
                   <div
-                    onClick={() => fileInputRef.current?.click()}
+                    onClick={() => csvInputRef.current?.click()}
                     onDragOver={(e) => {
                       e.preventDefault();
-                      setIsDragging(true);
+                      setIsDraggingFile(true);
                     }}
-                    onDragLeave={() => setIsDragging(false)}
-                    onDrop={handleDrop}
+                    onDragLeave={() => setIsDraggingFile(false)}
+                    onDrop={handleFileDrop}
                     className={`
-                      group relative min-h-[300px] cursor-pointer overflow-hidden rounded-2xl border-2 border-dashed p-6
+                      relative min-h-[80px] cursor-pointer overflow-hidden rounded-xl border-2 border-dashed p-4
                       transition-all duration-300
-                      ${isDragging
-                        ? "border-green-600 bg-green-50 shadow-xl shadow-green-900/10 scale-[1.01]"
-                        : "border-green-300/60 bg-white hover:border-green-600 hover:bg-green-50/60 hover:shadow-xl hover:shadow-green-900/10"
+                      ${isDraggingFile
+                        ? "border-green-600 bg-green-50 shadow-md"
+                        : "border-green-300/60 bg-white hover:border-green-600 hover:bg-green-50/60"
                       }
                     `}
                   >
-                    <div className="flex min-h-[252px] flex-col items-center justify-center text-center">
-                      <div className="relative mb-5">
-                        <div className="relative flex size-24 items-center justify-center rounded-full border border-green-200 bg-white shadow-lg shadow-green-900/10 transition-transform duration-300 group-hover:scale-105">
-                          <Upload className="size-11 text-green-600" />
-                        </div>
+                    <div className="flex items-center justify-center gap-4">
+                      <FileSpreadsheet className="size-6 text-green-900" />
+                      <div>
+                        <p className="text-sm font-medium text-gray-700">Drop CSV or Excel file</p>
+                        <p className="text-xs text-gray-400">or click to browse</p>
                       </div>
-
-                      <p className="text-lg font-bold text-gray-900">
-                        Drop residential paint sample here
-                      </p>
-                      <p className="mt-1 text-sm text-gray-500">
-                        or click to browse from your device
-                      </p>
-
-                      <div className="mt-5 flex flex-wrap justify-center gap-2">
-                        {['JPG', 'PNG', 'JPEG', 'WEBP'].map((format) => (
-                          <Badge key={format} variant="secondary" className="bg-green-50 text-green-700 border border-green-200">
+                      <div className="flex gap-1">
+                        {['CSV', 'XLSX'].map((format) => (
+                          <Badge key={format} variant="secondary" className="text-xs bg-green-50 text-green-700 border border-green-200">
                             {format}
                           </Badge>
                         ))}
                       </div>
-
-                      <div className="mt-6 rounded-full border border-green-100 bg-white/80 px-4 py-2 text-xs font-medium text-gray-500 shadow-sm">
-                        Vision AI → Residential Filter → Paint Mixture Formula
-                      </div>
                     </div>
                   </div>
-                ) : (
-                  <div className="grid gap-5 lg:grid-cols-[1.3fr_0.7fr]">
-                    <div className="relative inline-block overflow-hidden rounded-2xl border border-green-100 shadow-xl shadow-green-900/10">
-                      <div className="absolute left-4 top-4 z-10 rounded-full border border-green-300/40 bg-black/40 px-3 py-1 text-xs font-semibold text-green-100 backdrop-blur">
-                        AI CAMERA FEED
-                      </div>
-                      <div className="absolute right-4 top-4 z-10 rounded-full border border-green-300/40 bg-green-800/80 px-3 py-1 text-xs font-semibold text-white backdrop-blur">
-                        SAMPLE LOCKED
-                      </div>
-
-                      <img
-                        src={uploadedImage}
-                        alt="Uploaded color"
-                        className="max-h-[420px] w-full object-contain opacity-95"
-                      />
-
-                      <div className="absolute left-5 top-5 h-12 w-12 border-l-2 border-t-2 border-green-300" />
-                      <div className="absolute right-5 top-5 h-12 w-12 border-r-2 border-t-2 border-green-300" />
-                      <div className="absolute bottom-5 left-5 h-12 w-12 border-b-2 border-l-2 border-green-300" />
-                      <div className="absolute bottom-5 right-5 h-12 w-12 border-b-2 border-r-2 border-green-300" />
-
-                      <div className="absolute left-0 top-0 h-[3px] w-full animate-[scan_2.4s_ease-in-out_infinite] bg-gradient-to-r from-transparent via-green-300 to-transparent shadow-[0_0_18px_rgba(134,239,172,0.9)]" />
-
-                      {isAnalyzing && (
-                        <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-black/70 p-6 text-center backdrop-blur-sm">
-                          <div className="relative flex size-20 items-center justify-center rounded-full border border-green-300/40 bg-green-800/40">
-                            <Loader2 className="size-10 animate-spin text-white" />
-                          </div>
-                          <div>
-                            <p className="text-lg font-bold text-white">Gemini AI is processing the sample</p>
-                            <p className="mt-1 text-sm text-green-100">
-                              {[
-                                "Initializing Vision Agent...",
-                                "Detecting dominant paint pigment...",
-                                "Filtering residential inventory products...",
-                                "Generating paint mixture formula...",
-                                "Calculating price and stock impact...",
-                              ][processingStep]}
-                            </p>
-                          </div>
-                          <div className="h-2 w-full max-w-md overflow-hidden rounded-full bg-white/20">
-                            <div
-                              className="h-full rounded-full bg-green-300 transition-all duration-500"
-                              style={{ width: `${(processingStep + 1) * 20}%` }}
-                            />
-                          </div>
-                        </div>
-                      )}
-
-                      {showAnalysisComplete && !isAnalyzing && (
-                        <div className="absolute inset-0 z-40 flex items-center justify-center rounded-2xl bg-black/60 backdrop-blur-sm animate-in fade-in duration-300">
-                          <div className="flex flex-col items-center text-center">
-                            <div className="mb-5 flex h-20 w-20 items-center justify-center rounded-full bg-green-500">
-                              <CheckCircle2 className="h-10 w-10 text-white" />
-                            </div>
-                            <h2 className="text-2xl font-bold text-white">
-                              Analysis Complete
-                            </h2>
-                            <p className="mt-2 max-w-xs text-sm text-green-100">
-                              Residential paint formula successfully generated.
-                            </p>
-                          </div>
-                        </div>
-                      )}
+                  
+                  <div className="mt-3 p-3 bg-green-50 rounded-lg border border-green-200">
+                    <p className="text-xs font-medium text-green-800">Required Headers:</p>
+                    <div className="flex flex-wrap gap-1.5 mt-1.5">
+                      <Badge variant="outline" className="text-xs bg-white border-green-300 text-green-700 font-mono">Product</Badge>
+                      <Badge variant="outline" className="text-xs bg-white border-green-300 text-green-700 font-mono">Brand</Badge>
+                      <Badge variant="outline" className="text-xs bg-white border-green-300 text-green-700 font-mono">Category</Badge>
+                      <Badge variant="outline" className="text-xs bg-white border-green-300 text-green-700 font-mono">Stocks</Badge>
+                      <Badge variant="outline" className="text-xs bg-white border-green-300 text-green-700 font-mono">Est. Price (PHP)</Badge>
+                      <Badge variant="outline" className="text-xs bg-white border-green-300 text-green-700 font-mono">Unit Purchase Price</Badge>
                     </div>
-
-                    <div className="space-y-4">
-                      <div className="rounded-2xl border border-emerald-100 bg-gradient-to-br from-green-50 via-white to-white p-5 shadow-sm">
-                        <div className="flex items-center gap-3">
-                          <div className="flex size-12 items-center justify-center rounded-xl bg-[#174d32] text-white shadow-md">
-                            <ImageIcon className="size-6" />
-                          </div>
-                          <div>
-                            <p className="text-sm font-bold text-gray-900">Paint Sample Uploaded</p>
-                            <p className="text-xs text-gray-500">Ready for AI formulation</p>
-                          </div>
-                        </div>
-
-                        <div className="mt-5 space-y-3 text-sm">
-                          <div className="flex items-center justify-between rounded-lg bg-white px-3 py-2 shadow-sm">
-                            <span className="text-gray-500">File</span>
-                            <span className="max-w-[160px] truncate font-semibold text-gray-800">{uploadedFileName || "paint-sample"}</span>
-                          </div>
-                          <div className="flex items-center justify-between rounded-lg bg-white px-3 py-2 shadow-sm">
-                            <span className="text-gray-500">Size</span>
-                            <span className="font-semibold text-gray-800">{uploadedFileSize || "—"}</span>
-                          </div>
-                          <div className="flex items-center justify-between rounded-lg bg-white px-3 py-2 shadow-sm">
-                            <span className="text-gray-500">Status</span>
-                            <Badge className="bg-[#174d32] text-white">AI READY</Badge>
-                          </div>
-                          <div className="flex items-center justify-between rounded-lg bg-white px-3 py-2 shadow-sm">
-                            <span className="text-gray-500">Batch</span>
-                            <span className="font-semibold text-[#174d32]">{(batchSizeLiters * 1000).toFixed(0)} ml</span>
-                          </div>
-                        </div>
-                      </div>
-
-                      {analyzeError && (
-                        <div className="flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 p-3">
-                          <AlertTriangle className="mt-0.5 size-5 flex-shrink-0 text-red-600" />
-                          <p className="text-sm text-red-700">{analyzeError}</p>
-                        </div>
-                      )}
-
-                      <Button
-                        onClick={() => analyzeWithGemini(uploadedImage)}
-                        disabled={isAnalyzing || !isAnalyzerEnabled || !!colorAnalysis}
-                        className="h-12 w-full rounded-lg bg-[#174d32] text-white shadow-lg shadow-green-900/15 transition-all duration-200 hover:bg-[#123e28] hover:shadow-xl hover:-translate-y-0.5 disabled:opacity-50"
-                      >
-                        {isAnalyzing ? (
-                          <>
-                            <Loader2 className="mr-2 size-4 animate-spin" />
-                            Analyzing Paint Formula...
-                          </>
-                        ) : colorAnalysis ? (
-                          <>
-                            <CheckCircle2 className="mr-2 size-4" />
-                            Analysis Complete
-                          </>
+                    <p className="text-[11px] text-green-600 mt-1.5">Headers are case-sensitive (match exactly)</p>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <div className={`flex items-center justify-between p-2 rounded-lg border transition-all duration-300 ${
+                    isDataSaved 
+                      ? "bg-gray-50 border-gray-200 opacity-70" 
+                      : "bg-green-50 border-green-200"
+                  }`}>
+                    <div className="flex items-center gap-3">
+                      <div className={`flex size-8 items-center justify-center rounded-lg text-white ${
+                        isDataSaved ? "bg-gray-400" : "bg-[#174d32]"
+                      }`}>
+                        {uploadedDataName.endsWith('.csv') ? (
+                          <File className="size-4" />
                         ) : (
-                          <>
-                            <ImageIcon className="mr-2 size-4" />
-                            Analyze Paint Sample
-                          </>
+                          <FileSpreadsheet className="size-4" />
                         )}
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium text-gray-900 truncate max-w-[150px]">{uploadedDataName}</p>
+                        <p className="text-xs text-gray-500">{uploadedData.length} rows</p>
+                      </div>
+                    </div>
+                    {!isDataSaved && (
+                      <Button
+                        onClick={handleSaveData}
+                        className="bg-[#174d32] hover:bg-green-700 text-white text-xs h-7 px-2"
+                      >
+                        <Save className="size-3 mr-1" />
+                        Save & Enable
                       </Button>
+                    )}
+                  </div>
 
-                      <div className="grid grid-cols-2 gap-3">
+                  <div className="flex items-center gap-2">
+                    {!isDataSaved ? (
+                      <>
                         <Button
-                          onClick={() => fileInputRef.current?.click()}
+                          onClick={() => csvInputRef.current?.click()}
                           variant="outline"
-                          disabled={isAnalyzing || !isAnalyzerEnabled}
-                          className="h-11 rounded-lg border-2 border-green-950 bg-white text-green-950 shadow-sm transition-all duration-200 hover:bg-green-300 hover:border-green-300 hover:text-green-950 hover:shadow-md disabled:opacity-50 disabled:hover:bg-white disabled:hover:text-green-950 disabled:hover:border-green-950"
+                          className="border-green-300 text-green-600 hover:bg-green-50 text-xs h-7 px-2"
                         >
-                          <Upload className="mr-2 size-4" />
+                          <RefreshCw className="size-3 mr-1" />
                           Replace
                         </Button>
                         <Button
-                          onClick={handleRemoveWithConfirmation}
-                          disabled={isAnalyzing || !isAnalyzerEnabled}
-                          className="h-11 rounded-lg bg-white border-2 border-orange-500 text-orange-600 shadow-sm transition-all duration-200 hover:bg-orange-300 hover:border-orange-300 hover:text-orange-600 hover:shadow-md disabled:opacity-50 disabled:hover:bg-white disabled:hover:text-orange-600 disabled:hover:border-orange-500"
+                          onClick={handleRemoveData}
+                          variant="outline"
+                          className="border-green-300 text-green-600 hover:bg-red-50 text-xs h-7 px-2"
                         >
-                          <X className="mr-2 size-4 text-orange-600" />
+                          <X className="size-3 mr-1" />
                           Remove
                         </Button>
+                      </>
+                    ) : (
+                      <>
+                        <Button
+                          onClick={() => csvInputRef.current?.click()}
+                          variant="outline"
+                          className="border-green-300 text-green-600 hover:bg-green-50 text-xs h-7 px-2"
+                        >
+                          <RefreshCw className="size-3 mr-1" />
+                          Replace
+                        </Button>
+                        <Button
+                          onClick={handleClearSavedData}
+                          variant="outline"
+                          className="border-green-300 text-green-600 hover:bg-green-50 text-xs h-7 px-2"
+                        >
+                          <X className="size-3 mr-1" />
+                          Clear
+                        </Button>
+                      </>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {uploadError && (
+                <div className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 p-2 mt-2">
+                  <AlertTriangle className="size-4 flex-shrink-0 text-red-600" />
+                  <p className="text-xs text-red-700">{uploadError}</p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </section>
+
+        {/* Vision Scanner Section */}
+        <section>
+          <Card className={`overflow-hidden rounded-2xl border shadow-[0_12px_32px_rgba(20,83,45,0.06)] ${isAnalyzerEnabled ? 'border-emerald-100 bg-white' : 'border-gray-200 bg-white/60'}`}>
+            <CardHeader className={`border-b ${isAnalyzerEnabled ? 'border-emerald-100 bg-gradient-to-r from-emerald-50/80 via-white to-white' : 'border-gray-200 bg-gray-50'} p-5`}>
+              <div className="flex items-center justify-between w-full">
+                <div className="flex items-center gap-3 flex-1">
+                  <ImageIcon className="size-5 text-emerald-600 flex-shrink-0" />
+                  <div className="flex flex-col">
+                    <CardTitle className="text-base font-semibold text-gray-900 leading-tight">
+                      AI Vision Scanner — Residential Paints Only
+                    </CardTitle>
+                    <p className="text-sm text-gray-500 leading-tight mt-0.5">
+                      {isAnalyzerEnabled 
+                        ? "Upload a residential paint sample. Gemini will detect the color and formulate a mixture using your inventory."
+                        : isDataLoaded 
+                          ? "Please click 'Save & Enable' to activate the paint analyzer."
+                          : "Please upload a CSV or Excel inventory file first to enable paint analysis."}
+                    </p>
+                  </div>
+                </div>
+                <Badge className={`${isAnalyzerEnabled ? "bg-emerald-700 text-white" : "bg-gray-500 text-white"} text-xs font-medium px-3 py-1 flex-shrink-0`}>
+                  {isAnalyzerEnabled 
+                    ? (uploadedImage ? "IMAGE READY" : "AWAITING SAMPLE")
+                    : "LOCKED"}
+                </Badge>
+              </div>
+            </CardHeader>
+
+            <CardContent>
+              {!isAnalyzerEnabled ? (
+                <div className="relative min-h-[300px] rounded-2xl border-2 border-dashed border-gray-300 bg-gray-50/60 p-6">
+                  <div className="flex min-h-[252px] flex-col items-center justify-center text-center">
+                    <div className="relative mb-5">
+                      <div className="flex size-24 items-center justify-center rounded-full border border-gray-300 bg-gray-100 shadow-lg">
+                        {isDataLoaded ? (
+                          <Save className="size-11 text-yellow-500" />
+                        ) : (
+                          <Lock className="size-11 text-gray-400" />
+                        )}
                       </div>
                     </div>
+                    <p className="text-lg font-bold text-gray-500">
+                      {isDataLoaded ? "Save Data to Enable" : "Upload File First"}
+                    </p>
+                    <p className="mt-1 text-sm text-gray-400 max-w-md">
+                      {isDataLoaded 
+                        ? "Click the 'Save & Enable' button above to activate the paint analyzer."
+                        : "Please upload a CSV or Excel inventory file above to unlock the paint analyzer."}
+                    </p>
+                    <div className="mt-6 rounded-full border border-gray-200 bg-gray-100/80 px-4 py-2 text-xs font-medium text-gray-500 shadow-sm">
+                      {isDataLoaded ? "Save Required → Vision AI → Residential Paint Formula" : "File Required → Vision AI → Residential Paint Formula"}
+                    </div>
                   </div>
-                )}
-              </>
-            )}
-          </CardContent>
-        </Card>
-      </section>
+                </div>
+              ) : (
+                <>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*"
+                    onChange={handleFileChange}
+                    className="hidden"
+                  />
 
-      {/* Confirmation Dialog */}
-      {showRemoveDialog && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl animate-in slide-in-from-bottom-4 duration-300">
+                  {!uploadedImage ? (
+                    <div
+                      onClick={() => fileInputRef.current?.click()}
+                      onDragOver={(e) => {
+                        e.preventDefault();
+                        setIsDragging(true);
+                      }}
+                      onDragLeave={() => setIsDragging(false)}
+                      onDrop={handleDrop}
+                      className={`
+                        group relative min-h-[300px] cursor-pointer overflow-hidden rounded-2xl border-2 border-dashed p-6
+                        transition-all duration-300
+                        ${isDragging
+                          ? "border-green-600 bg-green-50 shadow-xl shadow-green-900/10 scale-[1.01]"
+                          : "border-green-300/60 bg-white hover:border-green-600 hover:bg-green-50/60 hover:shadow-xl hover:shadow-green-900/10"
+                        }
+                      `}
+                    >
+                      <div className="flex min-h-[252px] flex-col items-center justify-center text-center">
+                        <div className="relative mb-5">
+                          <div className="relative flex size-24 items-center justify-center rounded-full border border-green-200 bg-white shadow-lg shadow-green-900/10 transition-transform duration-300 group-hover:scale-105">
+                            <Upload className="size-11 text-green-600" />
+                          </div>
+                        </div>
+
+                        <p className="text-lg font-bold text-gray-900">
+                          Drop residential paint sample here
+                        </p>
+                        <p className="mt-1 text-sm text-gray-500">
+                          or click to browse from your device
+                        </p>
+
+                        <div className="mt-5 flex flex-wrap justify-center gap-2">
+                          {['JPG', 'PNG', 'JPEG', 'WEBP'].map((format) => (
+                            <Badge key={format} variant="secondary" className="bg-green-50 text-green-700 border border-green-200">
+                              {format}
+                            </Badge>
+                          ))}
+                        </div>
+
+                        <div className="mt-6 rounded-full border border-green-100 bg-white/80 px-4 py-2 text-xs font-medium text-gray-500 shadow-sm">
+                          Vision AI → Residential Filter → Paint Mixture Formula
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="grid gap-5 lg:grid-cols-[1.3fr_0.7fr]">
+                      <div className="relative inline-block overflow-hidden rounded-2xl border border-green-100 shadow-xl shadow-green-900/10">
+              
+                        
+
+                        <img
+                          src={uploadedImage}
+                          alt="Uploaded color"
+                          className="max-h-[420px] w-full object-contain opacity-95"
+                        />
+
+                        <div className="absolute left-5 top-5 h-12 w-12 border-l-2 border-t-2 border-green-700" />
+                        <div className="absolute right-5 top-5 h-12 w-12 border-r-2 border-t-2 border-green-700" />
+                        <div className="absolute bottom-5 left-5 h-12 w-12 border-b-2 border-l-2 border-green-700" />
+                        <div className="absolute bottom-5 right-5 h-12 w-12 border-b-2 border-r-2 border-green-700" />
+
+                        <div className="absolute left-0 top-0 h-[3px] w-full animate-[scan_2.4s_ease-in-out_infinite] bg-gradient-to-r from-transparent via-green-300 to-transparent shadow-[0_0_18px_rgba(134,239,172,0.9)]" />
+
+                        {isAnalyzing && (
+                          <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-black/70 p-6 text-center backdrop-blur-sm">
+                            <div className="relative flex size-20 items-center justify-center rounded-full border border-green-300/40 bg-green-800/40">
+                              <Loader2 className="size-10 animate-spin text-white" />
+                            </div>
+                            <div>
+                              <p className="text-lg font-bold text-white">Gemini AI is processing the sample</p>
+                              <p className="mt-1 text-sm text-green-100">
+                                {[
+                                  "Initializing Vision Agent...",
+                                  "Detecting dominant paint pigment...",
+                                  "Filtering residential inventory products...",
+                                  "Generating paint mixture formula...",
+                                  "Calculating price and stock impact...",
+                                ][processingStep]}
+                              </p>
+                            </div>
+                            <div className="h-2 w-full max-w-md overflow-hidden rounded-full bg-white/20">
+                              <div
+                                className="h-full rounded-full bg-green-300 transition-all duration-500"
+                                style={{ width: `${(processingStep + 1) * 20}%` }}
+                              />
+                            </div>
+                          </div>
+                        )}
+
+                        {showAnalysisComplete && !isAnalyzing && (
+                          <div className="absolute inset-0 z-40 flex items-center justify-center rounded-2xl bg-black/60 backdrop-blur-sm animate-in fade-in duration-300">
+                            <div className="flex flex-col items-center text-center">
+                              <div className="mb-5 flex h-20 w-20 items-center justify-center rounded-full bg-green-500">
+                                <CheckCircle2 className="h-10 w-10 text-white" />
+                              </div>
+                              <h2 className="text-2xl font-bold text-white">
+                                Analysis Complete
+                              </h2>
+                              <p className="mt-2 max-w-xs text-sm text-green-100">
+                                Residential paint formula successfully generated.
+                              </p>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="space-y-4">
+                        <div className="rounded-2xl border border-emerald-100 bg-gradient-to-br from-green-50 via-white to-white p-5 shadow-sm">
+                          <div className="flex items-center gap-3">
+                            <div className="flex size-12 items-center justify-center rounded-xl bg-[#174d32] text-white shadow-md">
+                              <ImageIcon className="size-6" />
+                            </div>
+                            <div>
+                              <p className="text-sm font-bold text-gray-900">Paint Sample Uploaded</p>
+                              <p className="text-xs text-gray-500">Ready for AI formulation</p>
+                            </div>
+                          </div>
+
+                          <div className="mt-5 space-y-3 text-sm">
+                            <div className="flex items-center justify-between rounded-lg bg-white px-3 py-2 shadow-sm">
+                              <span className="text-gray-500">File</span>
+                              <span className="max-w-[160px] truncate font-semibold text-gray-800">{uploadedFileName || "paint-sample"}</span>
+                            </div>
+                            <div className="flex items-center justify-between rounded-lg bg-white px-3 py-2 shadow-sm">
+                              <span className="text-gray-500">Size</span>
+                              <span className="font-semibold text-gray-800">{uploadedFileSize || "—"}</span>
+                            </div>
+                            <div className="flex items-center justify-between rounded-lg bg-white px-3 py-2 shadow-sm">
+                              <span className="text-gray-500">Status</span>
+                              <Badge className="bg-[#174d32] text-white">AI READY</Badge>
+                            </div>
+                            <div className="flex items-center justify-between rounded-lg bg-white px-3 py-2 shadow-sm">
+                              <span className="text-gray-500">Batch</span>
+                              <span className="font-semibold text-[#174d32]">{(batchSizeLiters * 1000).toFixed(0)} ml</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {analyzeError && (
+                          <div className="flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 p-3">
+                            <AlertTriangle className="mt-0.5 size-5 flex-shrink-0 text-red-600" />
+                            <p className="text-sm text-red-700">{analyzeError}</p>
+                          </div>
+                        )}
+
+                        <Button
+                          onClick={() => analyzeWithGemini(uploadedImage)}
+                          disabled={isAnalyzing || !isAnalyzerEnabled || !!colorAnalysis}
+                          className="h-12 w-full rounded-lg bg-[#174d32] text-white shadow-lg shadow-green-900/15 transition-all duration-200 hover:bg-[#123e28] hover:shadow-xl hover:-translate-y-0.5 disabled:opacity-50"
+                        >
+                          {isAnalyzing ? (
+                            <>
+                              <Loader2 className="mr-2 size-4 animate-spin" />
+                              Analyzing Paint Formula...
+                            </>
+                          ) : colorAnalysis ? (
+                            <>
+                              <CheckCircle2 className="mr-2 size-4" />
+                              Analysis Complete
+                            </>
+                          ) : (
+                            <>
+                              <ImageIcon className="mr-2 size-4" />
+                              Analyze Paint Sample
+                            </>
+                          )}
+                        </Button>
+
+                        <div className="grid grid-cols-2 gap-3">
+                          <Button
+                            onClick={() => fileInputRef.current?.click()}
+                            variant="outline"
+                            disabled={isAnalyzing || !isAnalyzerEnabled}
+                            className="h-11 rounded-lg border-2 border-green-950 bg-white text-green-950 shadow-sm transition-all duration-200 hover:bg-green-300 hover:border-green-300 hover:text-green-950 hover:shadow-md disabled:opacity-50 disabled:hover:bg-white disabled:hover:text-green-950 disabled:hover:border-green-950"
+                          >
+                            <Upload className="mr-2 size-4" />
+                            Replace
+                          </Button>
+                          <Button
+                            onClick={handleRemoveWithConfirmation}
+                            disabled={isAnalyzing || !isAnalyzerEnabled}
+                            className="h-11 rounded-lg bg-white border-2 border-orange-500 text-orange-600 shadow-sm transition-all duration-200 hover:bg-orange-300 hover:border-orange-300 hover:text-orange-600 hover:shadow-md disabled:opacity-50 disabled:hover:bg-white disabled:hover:text-orange-600 disabled:hover:border-orange-500"
+                          >
+                            <X className="mr-2 size-4 text-orange-600" />
+                            Remove
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+            </CardContent>
+          </Card>
+        </section>
+
+        {/* Results from Gemini AI */}
+        {colorAnalysis && (
+          <>
+            {/* Color Overview */}
+            <Card className="border-l-4 border-[#174d32] overflow-hidden rounded-2xl border border-emerald-100 bg-white shadow-[0_12px_32px_rgba(20,83,45,0.06)]">
+              <CardContent className="pt-5">
+                <div className="flex items-center gap-4">
+                  <div
+                    className="size-16 rounded-xl border-2 border-white shadow-lg flex-shrink-0"
+                    style={{ backgroundColor: colorAnalysis.hex }}
+                  />
+                  <div>
+                    <p className="text-2xl font-bold text-gray-900">
+                      {colorAnalysis.hex.toUpperCase()}
+                    </p>
+                    <p className="text-sm text-gray-500">
+                      Dominant:{" "}
+                      <span className="font-medium text-gray-700">
+                        {colorAnalysis.dominantColor}
+                      </span>
+                      &nbsp;·&nbsp;RGB({colorAnalysis.rgb.r},{" "}
+                      {colorAnalysis.rgb.g}, {colorAnalysis.rgb.b})
+                    </p>
+                  </div>
+                  <div className="ml-auto flex items-center gap-2 text-green-700 bg-green-50 px-4 py-2 rounded-lg border border-green-200">
+                    <CheckCircle2 className="size-5" />
+                    <span className="text-sm font-semibold">
+                      Residential AI Analysis Complete
+                    </span>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Paint Mixing Formula + Prices */}
+            <Card className="overflow-hidden rounded-2xl border border-emerald-100 bg-white shadow-[0_12px_32px_rgba(20,83,45,0.06)]">
+              <CardHeader className="border-b border-emerald-100 bg-gradient-to-r from-white to-emerald-50/70">
+                <CardTitle className="flex items-center gap-2">
+                  <Droplet className="size-5 text-[#174d32]" />
+                  Suggested Residential Paint Mixture & Pricing
+                </CardTitle>
+                <CardDescription>
+                  AI-recommended residential paint components for{" "}
+                  {colorAnalysis.hex.toUpperCase()} from your inventory
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {/* Batch Size */}
+                <div className="mb-6 p-4 bg-green-50 rounded-xl border-2 border-[#174d32]">
+                  <Label className="text-sm font-semibold text-gray-700 mb-2 block">
+                    Target Batch Size (Liters)
+                  </Label>
+                  <div className="flex items-center gap-4 flex-wrap">
+                    <input
+                      type="number"
+                      min="0.01"
+                      step="0.1"
+                      value={batchSizeLiters}
+                      onChange={(e) =>
+                        setBatchSizeLiters(
+                          parseFloat(e.target.value) || 0.1,
+                        )
+                      }
+                      className="w-36 px-4 py-2 border-2 border-[#174d32] rounded-lg font-medium focus:outline-none focus:ring-2 focus:ring-[#174d32]"
+                    />
+                    <span className="text-sm text-gray-600">
+                      = {(batchSizeLiters * 1000).toFixed(0)} ml
+                    </span>
+                    <div className="ml-auto flex gap-2">
+                      {[
+                        { label: "100ml", val: 0.1 },
+                        { label: "500ml", val: 0.5 },
+                        { label: "1L", val: 1 },
+                        { label: "5L", val: 5 },
+                      ].map(({ label, val }) => (
+                        <Button
+                          key={val}
+                          onClick={() => setBatchSizeLiters(val)}
+                          className={`text-xs ${batchSizeLiters === val ? "bg-[#2d6b45]" : "bg-[#174d32] hover:bg-[#2d6b45]"}`}
+                        >
+                          {label}
+                        </Button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>No.</TableHead>
+                        <TableHead>Brand</TableHead>
+                        <TableHead>Product</TableHead>
+                        <TableHead>Category</TableHead>
+                        <TableHead>%</TableHead>
+                        <TableHead>
+                          Amount ({batchSizeLiters}L)
+                        </TableHead>
+                        <TableHead>Est. Price/unit</TableHead>
+                        <TableHead>Stock</TableHead>
+                        <TableHead className="text-right">
+                          Subtotal (₱)
+                        </TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {scaledComponents.map((c, i) => (
+                        <TableRow key={i}>
+                          <TableCell className="text-xs text-gray-500">
+                            {c.no ?? "—"}
+                          </TableCell>
+                          <TableCell className="font-medium text-sm">
+                            {c.brand}
+                          </TableCell>
+                          <TableCell className="font-semibold text-sm max-w-[200px]">
+                            {c.product}
+                          </TableCell>
+                          <TableCell>
+                            <Badge
+                              variant="secondary"
+                              className="text-xs whitespace-nowrap"
+                            >
+                              {c.category}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            <Badge className="bg-[#174d32]">
+                              {c.percentage}%
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="font-mono text-sm font-semibold text-[#174d32]">
+                            {c.scaledAmountMl} ml
+                          </TableCell>
+                          <TableCell className="text-sm text-gray-600">
+                            ₱{c.estPricePHP?.toLocaleString() ?? "—"}
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex flex-col gap-1">
+                              <span className="text-xs text-gray-500">
+                                {c.stockLevel} units
+                              </span>
+                              <Badge
+                                variant="secondary"
+                                className={
+                                  c.stockStatus === "adequate"
+                                    ? "bg-green-100 text-green-800 text-xs"
+                                    : c.stockStatus === "low"
+                                      ? "bg-yellow-100 text-yellow-800 text-xs"
+                                      : c.stockStatus === "critical"
+                                        ? "bg-orange-100 text-orange-800 text-xs"
+                                        : "bg-red-100 text-red-800 text-xs"
+                                }
+                              >
+                                {c.stockStatus === "adequate"
+                                  ? "✓ Adequate"
+                                  : c.stockStatus === "low"
+                                    ? "⚠ Low"
+                                    : c.stockStatus === "critical"
+                                      ? "⚠ Critical"
+                                      : "✕ Out"}
+                              </Badge>
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-right font-semibold text-gray-800">
+                            ₱{c.scaledPrice.toFixed(2)}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                      <TableRow className="border-t-2 border-[#174d32] bg-green-50">
+                        <TableCell
+                          colSpan={8}
+                          className="font-bold text-right text-base"
+                        >
+                          Total Price — {batchSizeLiters}L /{" "}
+                          {(batchSizeLiters * 1000).toFixed(0)}ml batch:
+                        </TableCell>
+                        <TableCell className="text-right font-bold text-xl text-[#174d32]">
+                          ₱{totalPrice.toFixed(2)}
+                        </TableCell>
+                      </TableRow>
+                    </TableBody>
+                  </Table>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Consistency */}
+            {colorAnalysis.consistency &&
+              colorAnalysis.consistency.type !== "—" && (
+                <Card className="border-l-4 border-[#174d32] overflow-hidden rounded-2xl border border-emerald-100 bg-white shadow-[0_12px_32px_rgba(20,83,45,0.06)]">
+                  <CardHeader className="border-b border-emerald-100 bg-gradient-to-r from-white to-emerald-50/70">
+                    <CardTitle className="flex items-center gap-2">
+                      <Info className="size-5 text-[#174d32]" />
+                      Recommended Consistency
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-4">
+                      <div className="p-4 bg-gray-50 rounded-lg">
+                        <Label className="text-sm text-gray-500">
+                          Consistency Type
+                        </Label>
+                        <p className="text-xl font-bold text-[#174d32] mt-1">
+                          {colorAnalysis.consistency.type}
+                        </p>
+                      </div>
+                      <div className="p-4 bg-gray-50 rounded-lg">
+                        <Label className="text-sm text-gray-500">
+                          Viscosity Level
+                        </Label>
+                        <p className="text-xl font-bold text-[#174d32] mt-1">
+                          {colorAnalysis.consistency.viscosity}
+                        </p>
+                      </div>
+                    </div>
+                    {colorAnalysis.consistency.description &&
+                      colorAnalysis.consistency.description !==
+                        "—" && (
+                        <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
+                          <p className="text-sm text-gray-700">
+                            <span className="font-semibold">
+                              Note:
+                            </span>{" "}
+                            {
+                              colorAnalysis.consistency
+                                .description
+                            }
+                          </p>
+                        </div>
+                      )}
+                  </CardContent>
+                </Card>
+              )}
+
+            {/* Application Guide */}
+            {colorAnalysis.applicationGuide && (
+              <Card className="border-l-4 border-blue-500 overflow-hidden rounded-2xl border border-blue-100 bg-white shadow-[0_12px_32px_rgba(20,83,45,0.06)]">
+                <CardHeader className="border-b border-blue-100 bg-gradient-to-r from-white to-blue-50/70">
+                  <CardTitle className="flex items-center gap-2">
+                    <BookOpen className="size-5 text-blue-600" />
+                    Application Guide
+                  </CardTitle>
+                  <CardDescription>
+                    AI-generated residential painting instructions from Gemini AI
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {typeof colorAnalysis.applicationGuide ===
+                  "string" ? (
+                    <div className="prose prose-sm max-w-none text-gray-700 whitespace-pre-wrap leading-relaxed">
+                      {colorAnalysis.applicationGuide}
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      {colorAnalysis.applicationGuide.steps && (
+                        <ol className="space-y-3">
+                          {colorAnalysis.applicationGuide.steps.map(
+                            (step, i) => (
+                              <li key={i} className="flex gap-3">
+                                <span className="flex-shrink-0 size-6 rounded-full bg-blue-600 text-white text-xs font-bold flex items-center justify-center">
+                                  {i + 1}
+                                </span>
+                                <span className="text-sm text-gray-700">
+                                  {step}
+                                </span>
+                              </li>
+                            ),
+                          )}
+                        </ol>
+                      )}
+                      {colorAnalysis.applicationGuide.tools && (
+                        <div className="mt-4 p-3 bg-gray-50 rounded-lg">
+                          <p className="text-xs font-semibold text-gray-600 mb-1">
+                            Recommended Tools:
+                          </p>
+                          <p className="text-sm text-gray-700">
+                            {colorAnalysis.applicationGuide.tools}
+                          </p>
+                        </div>
+                      )}
+                      {colorAnalysis.applicationGuide
+                        .dryingTime && (
+                        <div className="p-3 bg-amber-50 rounded-lg border border-amber-200">
+                          <p className="text-xs font-semibold text-amber-700 mb-1">
+                            Drying Time:
+                          </p>
+                          <p className="text-sm text-amber-800">
+                            {
+                              colorAnalysis.applicationGuide
+                                .dryingTime
+                            }
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Stock Warnings */}
+            {colorAnalysis.stockWarnings.length > 0 && (
+              <Card className="border-l-4 border-orange-500 overflow-hidden rounded-2xl border border-orange-100 bg-white shadow-[0_12px_32px_rgba(20,83,45,0.06)]">
+                <CardHeader className="border-b border-orange-100 bg-gradient-to-r from-white to-orange-50/70">
+                  <CardTitle className="flex items-center gap-2">
+                    <AlertTriangle className="size-5 text-orange-500" />
+                    Stock Warnings
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-3">
+                    {colorAnalysis.stockWarnings.map(
+                      (warning, i) => (
+                        <div
+                          key={i}
+                          className="flex gap-3 items-start p-3 bg-orange-50 rounded-lg border border-orange-100"
+                        >
+                          <AlertTriangle className="size-5 text-orange-600 flex-shrink-0 mt-0.5" />
+                          <p className="text-sm text-orange-800 font-medium">
+                            {warning}
+                          </p>
+                        </div>
+                      ),
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+          </>
+        )}
+      </div>
+
+      {/* Confirmation Dialog - Using Portal to render at root level */}
+      {showRemoveDialog && createPortal(
+        <div 
+          className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setShowRemoveDialog(false);
+            }
+          }}
+        >
+          <div className="w-full max-w-md animate-fade-in rounded-2xl bg-white p-6 shadow-2xl">
             <div className="flex items-start gap-4">
               <div className="flex size-12 flex-shrink-0 items-center justify-center rounded-full bg-orange-100">
                 <AlertTriangle className="size-6 text-orange-600" />
@@ -1651,340 +2012,9 @@ Required JSON format:
               </Button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
-
-      {/* Results from Gemini AI */}
-      {colorAnalysis && (
-        <>
-          {/* Color Overview */}
-          <Card className="border-l-4 border-[#174d32] overflow-hidden rounded-2xl border border-emerald-100 bg-white shadow-[0_12px_32px_rgba(20,83,45,0.06)]">
-            <CardContent className="pt-5">
-              <div className="flex items-center gap-4">
-                <div
-                  className="size-16 rounded-xl border-2 border-white shadow-lg flex-shrink-0"
-                  style={{ backgroundColor: colorAnalysis.hex }}
-                />
-                <div>
-                  <p className="text-2xl font-bold text-gray-900">
-                    {colorAnalysis.hex.toUpperCase()}
-                  </p>
-                  <p className="text-sm text-gray-500">
-                    Dominant:{" "}
-                    <span className="font-medium text-gray-700">
-                      {colorAnalysis.dominantColor}
-                    </span>
-                    &nbsp;·&nbsp;RGB({colorAnalysis.rgb.r},{" "}
-                    {colorAnalysis.rgb.g}, {colorAnalysis.rgb.b})
-                  </p>
-                </div>
-                <div className="ml-auto flex items-center gap-2 text-green-700 bg-green-50 px-4 py-2 rounded-lg border border-green-200">
-                  <CheckCircle2 className="size-5" />
-                  <span className="text-sm font-semibold">
-                    Residential AI Analysis Complete
-                  </span>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Paint Mixing Formula + Prices */}
-          <Card className="overflow-hidden rounded-2xl border border-emerald-100 bg-white shadow-[0_12px_32px_rgba(20,83,45,0.06)]">
-            <CardHeader className="border-b border-emerald-100 bg-gradient-to-r from-white to-emerald-50/70">
-              <CardTitle className="flex items-center gap-2">
-                <Droplet className="size-5 text-[#174d32]" />
-                Suggested Residential Paint Mixture & Pricing
-              </CardTitle>
-              <CardDescription>
-                AI-recommended residential paint components for{" "}
-                {colorAnalysis.hex.toUpperCase()} from your inventory
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              {/* Batch Size */}
-              <div className="mb-6 p-4 bg-green-50 rounded-xl border-2 border-[#174d32]">
-                <Label className="text-sm font-semibold text-gray-700 mb-2 block">
-                  Target Batch Size (Liters)
-                </Label>
-                <div className="flex items-center gap-4 flex-wrap">
-                  <input
-                    type="number"
-                    min="0.01"
-                    step="0.1"
-                    value={batchSizeLiters}
-                    onChange={(e) =>
-                      setBatchSizeLiters(
-                        parseFloat(e.target.value) || 0.1,
-                      )
-                    }
-                    className="w-36 px-4 py-2 border-2 border-[#174d32] rounded-lg font-medium focus:outline-none focus:ring-2 focus:ring-[#174d32]"
-                  />
-                  <span className="text-sm text-gray-600">
-                    = {(batchSizeLiters * 1000).toFixed(0)} ml
-                  </span>
-                  <div className="ml-auto flex gap-2">
-                    {[
-                      { label: "100ml", val: 0.1 },
-                      { label: "500ml", val: 0.5 },
-                      { label: "1L", val: 1 },
-                      { label: "5L", val: 5 },
-                    ].map(({ label, val }) => (
-                      <Button
-                        key={val}
-                        onClick={() => setBatchSizeLiters(val)}
-                        className={`text-xs ${batchSizeLiters === val ? "bg-[#2d6b45]" : "bg-[#174d32] hover:bg-[#2d6b45]"}`}
-                      >
-                        {label}
-                      </Button>
-                    ))}
-                  </div>
-                </div>
-              </div>
-
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>No.</TableHead>
-                      <TableHead>Brand</TableHead>
-                      <TableHead>Product</TableHead>
-                      <TableHead>Category</TableHead>
-                      <TableHead>%</TableHead>
-                      <TableHead>
-                        Amount ({batchSizeLiters}L)
-                      </TableHead>
-                      <TableHead>Est. Price/unit</TableHead>
-                      <TableHead>Stock</TableHead>
-                      <TableHead className="text-right">
-                        Subtotal (₱)
-                      </TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {scaledComponents.map((c, i) => (
-                      <TableRow key={i}>
-                        <TableCell className="text-xs text-gray-500">
-                          {c.no ?? "—"}
-                        </TableCell>
-                        <TableCell className="font-medium text-sm">
-                          {c.brand}
-                        </TableCell>
-                        <TableCell className="font-semibold text-sm max-w-[200px]">
-                          {c.product}
-                        </TableCell>
-                        <TableCell>
-                          <Badge
-                            variant="secondary"
-                            className="text-xs whitespace-nowrap"
-                          >
-                            {c.category}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          <Badge className="bg-[#174d32]">
-                            {c.percentage}%
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="font-mono text-sm font-semibold text-[#174d32]">
-                          {c.scaledAmountMl} ml
-                        </TableCell>
-                        <TableCell className="text-sm text-gray-600">
-                          ₱{c.estPricePHP?.toLocaleString() ?? "—"}
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex flex-col gap-1">
-                            <span className="text-xs text-gray-500">
-                              {c.stockLevel} units
-                            </span>
-                            <Badge
-                              variant="secondary"
-                              className={
-                                c.stockStatus === "adequate"
-                                  ? "bg-green-100 text-green-800 text-xs"
-                                  : c.stockStatus === "low"
-                                    ? "bg-yellow-100 text-yellow-800 text-xs"
-                                    : c.stockStatus === "critical"
-                                      ? "bg-orange-100 text-orange-800 text-xs"
-                                      : "bg-red-100 text-red-800 text-xs"
-                              }
-                            >
-                              {c.stockStatus === "adequate"
-                                ? "✓ Adequate"
-                                : c.stockStatus === "low"
-                                  ? "⚠ Low"
-                                  : c.stockStatus === "critical"
-                                    ? "⚠ Critical"
-                                    : "✕ Out"}
-                            </Badge>
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-right font-semibold text-gray-800">
-                          ₱{c.scaledPrice.toFixed(2)}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                    <TableRow className="border-t-2 border-[#174d32] bg-green-50">
-                      <TableCell
-                        colSpan={8}
-                        className="font-bold text-right text-base"
-                      >
-                        Total Price — {batchSizeLiters}L /{" "}
-                        {(batchSizeLiters * 1000).toFixed(0)}ml batch:
-                      </TableCell>
-                      <TableCell className="text-right font-bold text-xl text-[#174d32]">
-                        ₱{totalPrice.toFixed(2)}
-                      </TableCell>
-                    </TableRow>
-                  </TableBody>
-                </Table>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Consistency */}
-          {colorAnalysis.consistency &&
-            colorAnalysis.consistency.type !== "—" && (
-              <Card className="border-l-4 border-[#174d32] overflow-hidden rounded-2xl border border-emerald-100 bg-white shadow-[0_12px_32px_rgba(20,83,45,0.06)]">
-                <CardHeader className="border-b border-emerald-100 bg-gradient-to-r from-white to-emerald-50/70">
-                  <CardTitle className="flex items-center gap-2">
-                    <Info className="size-5 text-[#174d32]" />
-                    Recommended Consistency
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-4">
-                    <div className="p-4 bg-gray-50 rounded-lg">
-                      <Label className="text-sm text-gray-500">
-                        Consistency Type
-                      </Label>
-                      <p className="text-xl font-bold text-[#174d32] mt-1">
-                        {colorAnalysis.consistency.type}
-                      </p>
-                    </div>
-                    <div className="p-4 bg-gray-50 rounded-lg">
-                      <Label className="text-sm text-gray-500">
-                        Viscosity Level
-                      </Label>
-                      <p className="text-xl font-bold text-[#174d32] mt-1">
-                        {colorAnalysis.consistency.viscosity}
-                      </p>
-                    </div>
-                  </div>
-                  {colorAnalysis.consistency.description &&
-                    colorAnalysis.consistency.description !==
-                      "—" && (
-                      <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
-                        <p className="text-sm text-gray-700">
-                          <span className="font-semibold">
-                            Note:
-                          </span>{" "}
-                          {
-                            colorAnalysis.consistency
-                              .description
-                          }
-                        </p>
-                      </div>
-                    )}
-                </CardContent>
-              </Card>
-            )}
-
-          {/* Application Guide */}
-          {colorAnalysis.applicationGuide && (
-            <Card className="border-l-4 border-blue-500 overflow-hidden rounded-2xl border border-blue-100 bg-white shadow-[0_12px_32px_rgba(20,83,45,0.06)]">
-              <CardHeader className="border-b border-blue-100 bg-gradient-to-r from-white to-blue-50/70">
-                <CardTitle className="flex items-center gap-2">
-                  <BookOpen className="size-5 text-blue-600" />
-                  Application Guide
-                </CardTitle>
-                <CardDescription>
-                  AI-generated residential painting instructions from Gemini AI
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                {typeof colorAnalysis.applicationGuide ===
-                "string" ? (
-                  <div className="prose prose-sm max-w-none text-gray-700 whitespace-pre-wrap leading-relaxed">
-                    {colorAnalysis.applicationGuide}
-                  </div>
-                ) : (
-                  <div className="space-y-4">
-                    {colorAnalysis.applicationGuide.steps && (
-                      <ol className="space-y-3">
-                        {colorAnalysis.applicationGuide.steps.map(
-                          (step, i) => (
-                            <li key={i} className="flex gap-3">
-                              <span className="flex-shrink-0 size-6 rounded-full bg-blue-600 text-white text-xs font-bold flex items-center justify-center">
-                                {i + 1}
-                              </span>
-                              <span className="text-sm text-gray-700">
-                                {step}
-                              </span>
-                            </li>
-                          ),
-                        )}
-                      </ol>
-                    )}
-                    {colorAnalysis.applicationGuide.tools && (
-                      <div className="mt-4 p-3 bg-gray-50 rounded-lg">
-                        <p className="text-xs font-semibold text-gray-600 mb-1">
-                          Recommended Tools:
-                        </p>
-                        <p className="text-sm text-gray-700">
-                          {colorAnalysis.applicationGuide.tools}
-                        </p>
-                      </div>
-                    )}
-                    {colorAnalysis.applicationGuide
-                      .dryingTime && (
-                      <div className="p-3 bg-amber-50 rounded-lg border border-amber-200">
-                        <p className="text-xs font-semibold text-amber-700 mb-1">
-                          Drying Time:
-                        </p>
-                        <p className="text-sm text-amber-800">
-                          {
-                            colorAnalysis.applicationGuide
-                              .dryingTime
-                          }
-                        </p>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Stock Warnings */}
-          {colorAnalysis.stockWarnings.length > 0 && (
-            <Card className="border-l-4 border-orange-500 overflow-hidden rounded-2xl border border-orange-100 bg-white shadow-[0_12px_32px_rgba(20,83,45,0.06)]">
-              <CardHeader className="border-b border-orange-100 bg-gradient-to-r from-white to-orange-50/70">
-                <CardTitle className="flex items-center gap-2">
-                  <AlertTriangle className="size-5 text-orange-500" />
-                  Stock Warnings
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-3">
-                  {colorAnalysis.stockWarnings.map(
-                    (warning, i) => (
-                      <div
-                        key={i}
-                        className="flex gap-3 items-start p-3 bg-orange-50 rounded-lg border border-orange-100"
-                      >
-                        <AlertTriangle className="size-5 text-orange-600 flex-shrink-0 mt-0.5" />
-                        <p className="text-sm text-orange-800 font-medium">
-                          {warning}
-                        </p>
-                      </div>
-                    ),
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          )}
-        </>
-      )}
-    </div>
+    </>
   );
 }

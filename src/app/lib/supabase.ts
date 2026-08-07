@@ -607,7 +607,7 @@ export const saveResetToken = async (email: string, token: string) => {
     console.log(`🔵 [${callId}] Email:`, normalizedEmail);
     console.log(`🔵 [${callId}] Token:`, token);
     
-    // Delete any existing unused tokens for this email
+   
     const { error: deleteError } = await supabase
       .from('password_reset_tokens')
       .delete()
@@ -618,14 +618,14 @@ export const saveResetToken = async (email: string, token: string) => {
       console.error(`❌ [${callId}] Delete error:`, deleteError);
     }
 
-    // Calculate expiration - 30 minutes from now
+    
     const expiresAt = new Date();
-    expiresAt.setMinutes(expiresAt.getMinutes() + 30);
+    expiresAt.setMinutes(expiresAt.getMinutes() + 10);
     const expiresAtISO = expiresAt.toISOString();
     
     console.log(`⏰ [${callId}] Expires at:`, expiresAtISO);
 
-    // Insert with ALL fields explicitly set
+    
     const { data, error } = await supabase
       .from('password_reset_tokens')
       .insert({

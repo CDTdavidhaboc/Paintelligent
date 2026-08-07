@@ -1536,48 +1536,56 @@ Return ONLY valid JSON with this structure:
             </Card>
 
             <Card className="border border-green-200 border-l-4 border-l-green-900 bg-green-50/60 shadow-sm">
-              <CardContent className="py-6">
-                <div className="flex justify-between items-center">
-                  <div>
-                    <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-green-700">
-                      <Sun className="size-4" />
-                      Dry Season
-                    </div>
-                    <h2 className="text-2xl font-bold text-green-700">
-                      ₱{drySales.toLocaleString()}
-                    </h2>
-                    <p className="text-xs text-gray-500 mt-1">
-                      {salesData.filter((r) => r.season === "Dry").length} Months
-                    </p>
-                  </div>
-                  <div className="rounded-xl bg-green-100 p-3">
-                    <TrendingUp className="size-7 text-green-700" />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+  <CardContent className="py-6">
+    <div className="flex justify-between items-center">
+      <div>
+        <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-green-700">
+          <Sun className="size-4" />
+          Dry Season
+        </div>
+        <h2 className="text-2xl font-bold text-green-700">
+          ₱{drySales.toLocaleString()}
+        </h2>
+        <p className="text-xs text-gray-500 mt-1">
+          {salesData.filter((r) => r.season === "Dry").length} Months
+        </p>
+      </div>
+      <div className="rounded-xl bg-green-100 p-3">
+        {drySales > rainySales ? (
+          <TrendingUp className="size-7 text-green-700" />
+        ) : (
+          <TrendingDown className="size-7 text-green-700" />
+        )}
+      </div>
+    </div>
+  </CardContent>
+</Card>
 
-            <Card className="border border-blue-200 border-l-4 border-l-blue-600 bg-blue-50/60 shadow-sm">
-              <CardContent className="py-6">
-                <div className="flex justify-between items-center">
-                  <div>
-                    <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-blue-800">
-                      <CloudRain className="size-4" />
-                      Rainy Season
-                    </div>
-                    <h2 className="text-2xl font-bold text-blue-700">
-                      ₱{rainySales.toLocaleString()}
-                    </h2>
-                    <p className="text-xs text-gray-500 mt-1">
-                      {salesData.filter((r) => r.season === "Rainy").length} Months
-                    </p>
-                  </div>
-                  <div className="rounded-xl bg-blue-100 p-3">
-                    <TrendingDown className="size-7 text-blue-700" />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+<Card className="border border-blue-200 border-l-4 border-l-blue-600 bg-blue-50/60 shadow-sm">
+  <CardContent className="py-6">
+    <div className="flex justify-between items-center">
+      <div>
+        <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-blue-800">
+          <CloudRain className="size-4" />
+          Rainy Season
+        </div>
+        <h2 className="text-2xl font-bold text-blue-700">
+          ₱{rainySales.toLocaleString()}
+        </h2>
+        <p className="text-xs text-gray-500 mt-1">
+          {salesData.filter((r) => r.season === "Rainy").length} Months
+        </p>
+      </div>
+      <div className="rounded-xl bg-blue-100 p-3">
+        {rainySales > drySales ? (
+          <TrendingUp className="size-7 text-blue-700" />
+        ) : (
+          <TrendingDown className="size-7 text-blue-500" />
+        )}
+      </div>
+    </div>
+  </CardContent>
+</Card>
           </div>
 
           {/* ============================================================
@@ -1593,7 +1601,7 @@ Return ONLY valid JSON with this structure:
                       : `Weekly Sales Analysis • ${selectedMonth}`}
                   </CardTitle>
                   <CardDescription>
-                    Compare historical sales with AI-generated forecasts.
+                   Visualize sales with AI-generated forecasts.
                   </CardDescription>
                 </div>
                 <div className="flex items-center gap-3 flex-wrap">
@@ -1820,7 +1828,7 @@ Return ONLY valid JSON with this structure:
               <Card className="border border-green-200 border-l-4 border-l-green-900 bg-green-50/50 shadow-sm">
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2 text-green-700">
-                    <TrendingUp className="w-5 h-5" />
+                    <Sun className="w-5 h-5" />
                     Dry Season Analysis
                   </CardTitle>
                   <CardDescription>Based on {computedSeasonalData.dry.monthCount} months</CardDescription>
@@ -1849,18 +1857,15 @@ Return ONLY valid JSON with this structure:
             </div>
           )}
 
-          {/* ============================================================
-              HIGH DEMAND PRODUCTS
-              ============================================================ */}
-          {computedHighDemand && (
+          
+               {computedHighDemand && (
             <Card className="overflow-hidden border border-emerald-100 bg-white shadow-[0_12px_32px_rgba(20,83,45,0.06)]">
               <CardHeader className="border-b border-emerald-100 bg-gradient-to-r from-white to-emerald-50/70">
                 <CardTitle className="flex items-center gap-2 text-xl">
-                  <Target className="w-5 h-5 text-green-700" />
                   High Demand Products Per Season
                 </CardTitle>
                 <CardDescription>
-                  Top-performing categories for each season (calculated from actual sales data)
+                  (calculated from actual sales data)
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -1871,23 +1876,25 @@ Return ONLY valid JSON with this structure:
                   </TabsList>
                   {["dry", "rainy"].map((season) => {
                     const products = computedHighDemand[season] || [];
+                    const isDrySeason = season === "dry";
+                    const headerColorClass = isDrySeason ? "text-green-700" : "text-blue-700";
                     return (
                       <TabsContent key={season} value={season}>
-                        <Card className={`border shadow-sm ${season === "dry" ? "border-green-200 bg-green-50/30" : "border-blue-200 bg-blue-50/30"}`}>
-                          <CardHeader className={season === "dry" ? "border-b border-green-100" : "border-b border-blue-100"}>
+                        <Card className={`border shadow-sm ${isDrySeason ? "border-green-200 bg-green-50/30" : "border-blue-200 bg-blue-50/30"}`}>
+                          <CardHeader className={isDrySeason ? "border-b border-green-100" : "border-b border-blue-100"}>
                             <div className="flex justify-between items-center">
                               <div>
-                                <CardTitle className={`flex items-center gap-2 text-lg ${season === "dry" ? "text-green-800" : "text-blue-800"}`}>
-                                  {season === "dry" ? <Sun className="size-5" /> : <CloudRain className="size-5" />}
-                                  {season === "dry" ? "Dry Season" : "Rainy Season"}
+                                <CardTitle className={`flex items-center gap-2 text-lg ${isDrySeason ? "text-green-800" : "text-blue-800"}`}>
+                                  {isDrySeason ? <Sun className="size-5" /> : <CloudRain className="size-5" />}
+                                  {isDrySeason ? "Dry Season" : "Rainy Season"}
                                 </CardTitle>
                                 <CardDescription>
-                                  {season === "dry" ? "November – May" : "June – October"}
+                                  {isDrySeason ? "November – May" : "June – October"}
                                 </CardDescription>
                               </div>
                               <Badge
                                 className={
-                                  season === "dry"
+                                  isDrySeason
                                     ? "bg-[#174d32] text-white"
                                     : "bg-blue-700 text-white"
                                 }
@@ -1900,20 +1907,20 @@ Return ONLY valid JSON with this structure:
                             {products.length > 0 ? (
                               <Table>
                                 <TableHeader>
-                                  <TableRow>
-                                    <TableHead className="w-20">Rank</TableHead>
-                                    <TableHead>Category</TableHead>
-                                    <TableHead>Units</TableHead>
-                                    <TableHead>Revenue</TableHead>
-                                  </TableRow>
-                                </TableHeader>
+                                <TableRow>
+                                  <TableHead className="w-20" style={{ color: isDrySeason ? '#174d32' : '#1d4ed8' }}>Rank</TableHead>
+                                  <TableHead style={{ color: isDrySeason ? '#174d32' : '#1d4ed8' }}>Category</TableHead>
+                                  <TableHead style={{ color: isDrySeason ? '#174d32' : '#1d4ed8' }}>Units</TableHead>
+                                  <TableHead style={{ color: isDrySeason ? '#174d32' : '#1d4ed8' }}>Revenue</TableHead>
+                                </TableRow>
+                              </TableHeader>
                                 <TableBody>
                                   {products.map((product: any, index: number) => (
                                     <TableRow key={index} className="hover:bg-gray-50 transition-colors">
                                       <TableCell>
                                         <Badge
                                           className={
-                                            season === "dry"
+                                            isDrySeason
                                               ? "bg-[#174d32]"
                                               : "bg-blue-700"
                                           }
@@ -2076,12 +2083,12 @@ Return ONLY valid JSON with this structure:
           {/* ── Stock Recommendation ── */}
           {stockRecs.length > 0 && (
             <Card className="shadow-lg border-0 overflow-hidden">
-              <div className="bg-[#174d32] px-6 py-4">
+              <div className="bg-gradient-to-r from-green-900 to-emerald-600 px-6 py-4">
                 <div className="flex items-center gap-3">
                   <Lightbulb className="w-5 h-5 text-white" />
                   <div>
                     <h3 className="text-lg font-bold text-white">Stock Recommendation</h3>
-                    <p className="text-green-100 text-sm">Inventory recommendations from seasonal analysis</p>
+                    
                   </div>
                 </div>
               </div>
@@ -2186,27 +2193,22 @@ Return ONLY valid JSON with this structure:
                 </div>
                 <div>
                   <h2 className="text-xl font-bold text-gray-900">Product Performance</h2>
-                  <p className="text-sm text-gray-500">AI-generated best and slowest moving products analysis</p>
+                  
                 </div>
               </div>
               <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
                 {bestSelling.length > 0 && (
                   <Card className="shadow-lg border-0 hover:shadow-xl transition-all duration-300">
-                    <CardHeader className="rounded-t-lg bg-gradient-to-r from-green-900 to-emerald-700 border-b border-green-900 py-3.5">
-                      <div className="flex items-center gap-2.5">
-                        <div className="w-7 h-7 rounded-lg bg-green-800 flex items-center justify-center">
-                          <TrendingUp className="size-4 text-white" />
-                        </div>
-                        <div>
-                          <CardTitle className="text-sm font-semibold text-white">
-                            Best-Selling Products
-                          </CardTitle>
-                          <CardDescription className="text-xs text-white">
-                            Top performers by units sold
-                          </CardDescription>
-                        </div>
-                      </div>
-                    </CardHeader>
+                  <CardHeader className="rounded-t-lg bg-gradient-to-r from-green-900 to-emerald-700 border-b border-green-900 !p-2">
+  <div className="flex items-center gap-2">
+    <div className="w-5 h-5 rounded-lg ml-3 mt-1 bg-green-800 flex items-center justify-center flex-shrink-0">
+      <TrendingUp className="size-3 text-white" />
+    </div>
+    <CardTitle className="text-sm mt-1 font-semibold text-white">
+      Best-Selling Products
+    </CardTitle>
+  </div>
+</CardHeader>
                     <CardContent className="space-y-3">
                       {bestSelling.map((product: any, index: number) => (
                         <div key={index} className="border rounded-lg p-3 hover:shadow-md transition">
@@ -2240,21 +2242,16 @@ Return ONLY valid JSON with this structure:
 
                 {slowMoving.length > 0 && (
                   <Card className="shadow-lg border-0 hover:shadow-xl transition-all duration-300">
-                    <CardHeader className="rounded-t-lg bg-gradient-to-r from-orange-700 to-amber-600 border-b border-orange-100 py-3.5">
-                      <div className="flex items-center gap-2.5">
-                        <div className="w-7 h-7 rounded-lg bg-orange-500 flex items-center justify-center">
-                          <TrendingDown className="size-4 text-white" />
-                        </div>
-                        <div>
-                          <CardTitle className="text-sm font-semibold text-white">
-                            Slow-Moving Products
-                          </CardTitle>
-                          <CardDescription className="text-xs text-white">
-                            Products requiring attention
-                          </CardDescription>
-                        </div>
-                      </div>
-                    </CardHeader>
+                    <CardHeader className="rounded-t-lg bg-gradient-to-r from-orange-700 to-amber-600 border-b border-orange-100 !p-2">
+  <div className="flex items-center gap-2">
+    <div className="w-5 h-5 ml-3 mt-1 rounded-lg bg-orange-500 flex items-center justify-center flex-shrink-0">
+      <TrendingDown className="size-3 text-white" />
+    </div>
+    <CardTitle className="text-sm mt-1 font-semibold text-white">
+      Slow-Moving Products
+    </CardTitle>
+  </div>
+</CardHeader>
                     <CardContent className="space-y-3">
                       {slowMoving.map((product: any, index: number) => (
                         <div key={index} className="border rounded-lg p-3 hover:shadow-md transition">
@@ -2304,7 +2301,7 @@ Return ONLY valid JSON with this structure:
                 </div>
                 <div>
                   <h2 className="text-xl font-bold text-gray-900 tracking-tight">Marketing Strategies</h2>
-                  <p className="text-sm text-gray-500">AI-generated promotional strategies for each season</p>
+                
                 </div>
               </div>
               <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
@@ -2345,13 +2342,7 @@ Return ONLY valid JSON with this structure:
                             </div>
                           ))}
                         </div>
-                        {strategy.targetCategories && strategy.targetCategories.length > 0 && (
-                          <div className="mt-3 pt-2 border-t border-gray-100">
-                            <p className="text-xs text-gray-500">
-                              <span className="font-medium">Target Categories:</span> {strategy.targetCategories.join(', ')}
-                            </p>
-                          </div>
-                        )}
+                        
                       </CardContent>
                     </Card>
                   );

@@ -1,5 +1,5 @@
 // src/app/pages/Login.tsx
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { 
@@ -28,6 +28,39 @@ export default function Login() {
   const [isResetLoading, setIsResetLoading] = useState(false);
   const { login, requestPasswordReset } = useAuth();
   const navigate = useNavigate();
+
+  // Auto-dismiss login error after 5 seconds
+  useEffect(() => {
+    if (error) {
+      const timer = setTimeout(() => {
+        setError("");
+      }, 5000);
+
+      return () => clearTimeout(timer);
+    }
+  }, [error]);
+
+  // Auto-dismiss reset error after 5 seconds
+  useEffect(() => {
+    if (error && showForgotPassword) {
+      const timer = setTimeout(() => {
+        setError("");
+      }, 5000);
+
+      return () => clearTimeout(timer);
+    }
+  }, [error, showForgotPassword]);
+
+  // Auto-dismiss reset success message after 5 seconds (but keep the redirect)
+  useEffect(() => {
+    if (resetMessage && resetSuccess) {
+      const timer = setTimeout(() => {
+        setResetMessage("");
+      }, 5000);
+
+      return () => clearTimeout(timer);
+    }
+  }, [resetMessage, resetSuccess]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -140,12 +173,12 @@ export default function Login() {
             <p className="text-sm text-white/70 absolute bottom-3">by Garcia Paint Center</p>
           </div>
 
-          <div className="bg-white/20 backdrop-blur-2xl border border-white/20 rounded-2xl hover:border-y-green-300 hover:duration-600 shadow-2xl px-8 py-6 pt-7">
+          <div className="bg-white/10 backdrop-blur-lg border border-white/20 rounded-2xl shadow-2xl px-8 py-6 pt-7">
             <h1 className="text-center text-white/90 text-3xl font-semibold mb-4">USER LOGIN</h1>
 
             <form onSubmit={handleSubmit} className="space-y-1">
               {error && !showForgotPassword && (
-                <div className="bg-red-500/20 border border-red-300/40 rounded-lg p-3 flex items-start gap-2">
+                <div className="bg-red-500/20 border border-red-300/40 rounded-lg p-3 flex items-start gap-2 animate-in slide-in-from-top-2 fade-in duration-300">
                   <AlertCircle className="size-5 text-red-300 flex-shrink-0 mt-0.5" />
                   <p className="text-sm text-red-200">{error}</p>
                 </div>
@@ -154,13 +187,13 @@ export default function Login() {
               <div>
                 <label htmlFor="email" className="block text-sm font-medium text-white/90 mb-2">Email</label>
                 <div className="relative">
-                  <User className="absolute left-3 top-6/13 -translate-y-1/2 size-5 text-white/50 pointer-events-none" />
+                  <User className="absolute left-3 top-6/13 -translate-y-1/2 size-5 text-white/50  pointer-events-none" />
                   <input
                     id="email"
                     type="email"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    className="w-full pl-10 py-3 mb-2 bg-white/10 border border-white/30 text-white placeholder-white/50 rounded-lg focus:outline-none focus:ring-2 focus:ring-white/50 focus:border-white/50 disabled:opacity-50"
+                    className="w-full pl-10 py-3 mb-2 bg-black/10 border border-white/30 hover:border-x-green-300 text-white placeholder-white/50 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-300 focus:border-green-300 disabled:opacity-50"
                     placeholder="Enter your email"
                     disabled={isLoading}
                     required
@@ -178,7 +211,7 @@ export default function Login() {
                     autoComplete="new-password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    className="w-full pl-10 pr-12 py-3 mb-1 bg-white/10 border border-white/30 text-white placeholder-white/50 rounded-lg focus:outline-none focus:ring-2 focus:ring-white/50 focus:border-white/50 disabled:opacity-50"
+                    className="w-full pl-10 pr-12 py-3 mb-1 bg-black/10 border border-white/30 hover:border-x-green-300 text-white placeholder-white/50 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-300 focus:border-green-300 disabled:opacity-50"
                     placeholder="Enter your password"
                     disabled={isLoading}
                     required
@@ -198,7 +231,7 @@ export default function Login() {
                 <button
                   type="button"
                   onClick={() => setShowForgotPassword(true)}
-                  className="text-sm text-[#4a9d6f] hover:text-[#5db888] font-medium transition-colors"
+                  className="text-sm text-[#4a9d6f] hover:text-[#5db888] hover:underline font-medium transition-colors"
                 >
                   Forgot Password?
                 </button>
@@ -266,14 +299,14 @@ export default function Login() {
               </p>
 
               {error && (
-                <div className="bg-red-500/20 border border-red-300/40 rounded-lg p-3 flex items-start gap-2 mb-4">
+                <div className="bg-red-500/20 border border-red-300/40 rounded-lg p-3 flex items-start gap-2 mb-4 animate-in slide-in-from-top-2 fade-in duration-300">
                   <AlertCircle className="size-5 text-red-300 flex-shrink-0 mt-0.5" />
                   <p className="text-sm text-red-200">{error}</p>
                 </div>
               )}
 
               {resetMessage && resetSuccess && (
-                <div className="bg-green-500/20 border border-green-300/40 rounded-lg p-3 flex items-start gap-2 mb-4">
+                <div className="bg-green-500/20 border border-green-300/40 rounded-lg p-3 flex items-start gap-2 mb-4 animate-in slide-in-from-top-2 fade-in duration-300">
                   <Mail className="size-5 text-green-300 flex-shrink-0 mt-0.5" />
                   <p className="text-sm text-green-200">{resetMessage}</p>
                   <p className="text-sm text-green-200 ml-auto">
@@ -334,22 +367,22 @@ export default function Login() {
                 </button>
 
                 <button
-  type="button"
-  onClick={() => {
-    setShowForgotPassword(false);
-    setResetMessage("");
-    setError("");
-    setResetSuccess(false);
-  }}
-  className="group relative w-full rounded-xl border border-emerald-200/50 bg-white/80 px-4 py-2.5 text-sm font-medium text-emerald-700 shadow-sm backdrop-blur-sm transition-all duration-300 hover:border-emerald-300 hover:bg-emerald-50 hover:shadow-md hover:shadow-emerald-500/10 active:scale-[0.98]"
->
-  <span className="flex items-center justify-center gap-2">
-    <svg className="size-4 transition-transform duration-300 group-hover:-translate-x-1" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-    </svg>
-    Back to Login
-  </span>
-</button>
+                  type="button"
+                  onClick={() => {
+                    setShowForgotPassword(false);
+                    setResetMessage("");
+                    setError("");
+                    setResetSuccess(false);
+                  }}
+                  className="group relative w-full rounded-xl border border-emerald-200/50 bg-white/80 px-4 py-2.5 text-sm font-medium text-emerald-700 shadow-sm backdrop-blur-sm transition-all duration-300 hover:border-emerald-300 hover:bg-emerald-50 hover:shadow-md hover:shadow-emerald-500/10 active:scale-[0.98]"
+                >
+                  <span className="flex items-center justify-center gap-2">
+                    <svg className="size-4 transition-transform duration-300 group-hover:-translate-x-1" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+                    </svg>
+                    Back to Login
+                  </span>
+                </button>
               </form>
             </div>
           </div>

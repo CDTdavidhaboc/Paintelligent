@@ -602,8 +602,8 @@ export default function UserProfile() {
 
   // Editable field component - memoized to prevent unnecessary re-renders
   const EditableField = useMemo(() => {
-    return function EditableField({ label, value, field, type = "text", icon: Icon }: any) {
-      if (isEditing) {
+    return function EditableField({ label, value, field, type = "text", icon: Icon, readOnly = false }: any) {
+      if (isEditing && !readOnly) {
         return (
           <div className="flex items-start gap-4 p-3 rounded-lg hover:bg-gray-50 transition-colors">
             <div className="p-2 bg-blue-50 rounded-lg">
@@ -896,7 +896,7 @@ export default function UserProfile() {
                   )}
                 </div>
 
-                {/* User Info Section */}
+                {/* User Info Section - Email removed from header */}
                 <div className="flex-1 min-w-0 pt-1">
                   {isEditing ? (
                     <div className="relative">
@@ -942,9 +942,10 @@ export default function UserProfile() {
                         {displayData.role}
                       </Badge>
                     )}
+
+                    
                   </div>
-                  
-                  <div className="mt-2">
+                   <div className="mt-2">
                     <div className="flex items-center gap-2 text-gray-600 
                       bg-gray-50/50 px-3 py-1.5 rounded-lg border border-gray-100/50
                       hover:bg-gray-50 transition-colors duration-200">
@@ -979,13 +980,6 @@ export default function UserProfile() {
                     Last login: <span className="text-gray-700">{lastLoginDate}</span>
                   </span>
                 </div>
-                
-                {!isEditing && (
-                  <div className="flex items-center gap-2 text-gray-400 text-xs 
-                    bg-gray-50/50 px-3 py-1.5 rounded-lg border border-gray-100">
-          
-                  </div>
-                )}
               </div>
             </div>
           </CardHeader>
@@ -1020,23 +1014,17 @@ export default function UserProfile() {
         </Card>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Contact Information */}
+          {/* Contact Information - Email field removed */}
           <Card className="overflow-hidden rounded-2xl border border-emerald-100 bg-white shadow-[0_12px_32px_rgba(20,83,45,0.06)]">
             <CardHeader className="border-b border-emerald-100 bg-gradient-to-r from-white to-emerald-50/70 px-6 py-4">
               <CardTitle className="flex items-center gap-2 text-lg font-semibold text-gray-900">
                 <div className="flex size-8 items-center justify-center rounded-lg bg-[#174d32]">
-                  <Mail className="size-4 text-white" />
+                  <Phone className="size-4 text-white" />
                 </div>
                 Contact Information
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4 pt-5">
-              <EditableField
-                label="Email Address"
-                value={displayData.email || userEmail}
-                field="email"
-                icon={Mail}
-              />
               <EditableField
                 label="Phone Number"
                 value={displayData.phone}
