@@ -867,7 +867,8 @@ Important rules:
 6. The mixture must match the target HEX/RGB as closely as possible.
 7. Percentages must total exactly 100 or very close to 100.
 8. amountMl values must total exactly ${batchSizeLiters * 1000} ml or very close.
-9. Return ONLY valid JSON. Do not include markdown.
+9. Calculate amountMl = (percentage / 100) * ${batchSizeLiters * 1000} for each component.
+10. Return ONLY valid JSON. Do not include markdown.
 
 Required JSON format:
 {
@@ -920,6 +921,36 @@ Required JSON format:
 
       const formulationText = formulationResult.text ?? "";
       const geminiData = JSON.parse(extractJson(formulationText));
+
+      // ============================================================
+      // FIX: Normalize amounts to match the target batch size
+      // ============================================================
+      const targetMl = batchSizeLiters * 1000;
+      const components = geminiData.components || geminiData.paintComponents || [];
+      
+      // Calculate total amount from AI response
+      const totalAiAmount = components.reduce((sum: number, c: any) => sum + (c.amountMl || 0), 0);
+      
+      // If the AI amounts don't match the target (within 0.1ml tolerance), scale them
+      if (totalAiAmount > 0 && Math.abs(totalAiAmount - targetMl) > 0.1) {
+        const scaleFactor = targetMl / totalAiAmount;
+        
+        // Scale the components
+        geminiData.components = components.map((c: any) => ({
+          ...c,
+          amountMl: (c.amountMl || 0) * scaleFactor,
+          priceValue: (c.priceValue || 0) * scaleFactor,
+        }));
+        
+        // Scale the total price
+        geminiData.totalPrice = (geminiData.totalPrice || 0) * scaleFactor;
+        
+        console.log(`✅ Normalized amounts: ${totalAiAmount}ml → ${targetMl}ml (scale: ${scaleFactor.toFixed(3)})`);
+      } else {
+        // If amounts already match, use as-is
+        geminiData.components = components;
+        console.log(`✅ Amounts already match target: ${targetMl}ml`);
+      }
 
       const normalizedComponents = (geminiData.components || geminiData.paintComponents || [])
         .map((c: any) => {
@@ -1063,21 +1094,75 @@ Required JSON format:
 
   const scaledComponents = useMemo(() => {
     if (!colorAnalysis) return [];
-    const scaleFactor = batchSizeLiters / 0.1;
-    return colorAnalysis.paintComponents.map((c) => {
-      const baseAmount = typeof c.amountMl === "number" ? c.amountMl : parseFloat(c.amountMl) || 0;
-      const scaledAmount = (baseAmount * scaleFactor).toFixed(1);
-      const scaledPrice = c.priceValue * scaleFactor;
-      return { ...c, scaledAmountMl: scaledAmount, scaledPrice };
-    });
+    
+    const targetMl = batchSizeLiters * 1000;
+    
+    // Check if the AI already gave us the correct amounts for this batch size
+    const totalAiAmount = colorAnalysis.paintComponents.reduce((sum, c) => sum + (c.amountMl || 0), 0);
+    
+    // If the AI amounts already match the target (within 0.1ml tolerance), use them directly
+    if (Math.abs(totalAiAmount - targetMl) < 0.1) {
+      return colorAnalysis.paintComponents.map((c) => {
+        const amountMl = c.amountMl || 0;
+        const priceValue = c.priceValue || 0;
+        
+        return {
+          ...c,
+          scaledAmountMl: amountMl.toFixed(1),
+          scaledPrice: priceValue
+        };
+      });
+    }
+    
+    // Otherwise, calculate based on percentages if available
+    const totalPercentage = colorAnalysis.paintComponents.reduce((sum, c) => sum + (c.percentage || 0), 0);
+    
+    if (totalPercentage > 0) {
+      return colorAnalysis.paintComponents.map((c) => {
+        const percentage = c.percentage || 0;
+        const amountMl = (percentage / totalPercentage) * targetMl;
+        const priceValue = (percentage / totalPercentage) * (colorAnalysis.totalPrice || 0);
+        
+        return {
+          ...c,
+          scaledAmountMl: amountMl.toFixed(1),
+          scaledPrice: priceValue
+        };
+      });
+    }
+    
+    // Fallback: use the original scaling but with the correct ratio
+    const originalTotal = colorAnalysis.paintComponents.reduce((sum, c) => sum + (c.amountMl || 0), 0);
+    if (originalTotal > 0) {
+      const scaleFactor = targetMl / originalTotal;
+      return colorAnalysis.paintComponents.map((c) => {
+        const amountMl = (c.amountMl || 0) * scaleFactor;
+        const priceValue = (c.priceValue || 0) * scaleFactor;
+        
+        return {
+          ...c,
+          scaledAmountMl: amountMl.toFixed(1),
+          scaledPrice: priceValue
+        };
+      });
+    }
+    
+    return colorAnalysis.paintComponents.map((c) => ({
+      ...c,
+      scaledAmountMl: (c.amountMl || 0).toFixed(1),
+      scaledPrice: c.priceValue || 0
+    }));
   }, [colorAnalysis, batchSizeLiters]);
 
   const totalPrice = useMemo(
-    () =>
-      colorAnalysis?.totalPrice != null
-        ? colorAnalysis.totalPrice * (batchSizeLiters / 0.1)
-        : scaledComponents.reduce((sum, c) => sum + (c.scaledPrice || 0), 0),
-    [scaledComponents, colorAnalysis, batchSizeLiters],
+    () => {
+      if (colorAnalysis?.totalPrice != null && colorAnalysis.totalPrice > 0) {
+        // If the AI gave us a total price, use it directly (it's already scaled)
+        return colorAnalysis.totalPrice;
+      }
+      return scaledComponents.reduce((sum, c) => sum + (c.scaledPrice || 0), 0);
+    },
+    [scaledComponents, colorAnalysis],
   );
 
   const isDataLoaded = uploadedData !== null && uploadedData.length > 0;
@@ -1492,9 +1577,6 @@ Required JSON format:
                   ) : (
                     <div className="grid gap-5 lg:grid-cols-[1.3fr_0.7fr]">
                       <div className="relative inline-block overflow-hidden rounded-2xl border border-green-100 shadow-xl shadow-green-900/10">
-              
-                        
-
                         <img
                           src={uploadedImage}
                           alt="Uploaded color"
@@ -1726,6 +1808,7 @@ Required JSON format:
                       ))}
                     </div>
                   </div>
+                  
                 </div>
 
                 <div className="overflow-x-auto">
