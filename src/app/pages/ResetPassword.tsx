@@ -14,7 +14,9 @@ import {
   CheckCircle,
   ArrowLeft,
   ArrowRight,
-  Key
+  Key,
+  Check,
+  XCircle
 } from "lucide-react";
 import paintelligentLogo from "@/assets/logo.png";
 import garciaPaintCenterBg from "@/assets/garciapaintcenter.png";
@@ -47,6 +49,7 @@ export default function ResetPassword() {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [resendCooldown, setResendCooldown] = useState(0);
+  const [passwordStrength, setPasswordStrength] = useState(0);
   
   // Refs to prevent double submission
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
@@ -78,6 +81,40 @@ export default function ResetPassword() {
       inputRefs.current[0].focus();
     }
   }, [showPinForm]);
+
+  const checkPasswordStrength = (pass: string) => {
+    let strength = 0;
+    if (pass.length >= 6) strength++;
+    if (pass.length >= 10) strength++;
+    if (/[A-Z]/.test(pass) && /[a-z]/.test(pass)) strength++;
+    if (/\d/.test(pass)) strength++;
+    if (/[^A-Za-z0-9]/.test(pass)) strength++;
+    setPasswordStrength(strength);
+  };
+
+  const handlePasswordChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setNewPassword(value);
+    checkPasswordStrength(value);
+  };
+
+  const getStrengthColor = () => {
+    if (passwordStrength <= 2) return "bg-red-500";
+    if (passwordStrength <= 3) return "bg-yellow-500";
+    if (passwordStrength <= 4) return "bg-blue-500";
+    return "bg-green-500";
+  };
+
+  const getStrengthText = () => {
+    if (passwordStrength <= 2) return "Weak";
+    if (passwordStrength <= 3) return "Fair";
+    if (passwordStrength <= 4) return "Good";
+    return "Strong";
+  };
+
+  const isPasswordStrongEnough = () => {
+    return passwordStrength >= 4;
+  };
 
   // Handle PIN input change
   const handlePinChange = (index: number, value: string) => {
@@ -240,6 +277,13 @@ export default function ResetPassword() {
       return;
     }
 
+    if (!isPasswordStrongEnough()) {
+      setError("Please choose a stronger password. Try using a mix of uppercase, lowercase, numbers, and special characters.");
+      setIsLoading(false);
+      isSubmittingRef.current = false;
+      return;
+    }
+
     try {
       console.log('🔐 Updating password for:', email);
       
@@ -382,7 +426,7 @@ export default function ResetPassword() {
               {success ? (
                 <div className="flex flex-col items-center justify-center gap-4 py-6">
                   <div className="relative">
-                    <div className="absolute inset-0 animate-ping rounded-full bg-emerald-400/30" />
+                    <div className="absolute rounded-full bg-emerald-400/30" />
                     <div className="relative flex h-20 w-20 items-center justify-center rounded-full bg-gradient-to-br from-emerald-500 to-emerald-600 shadow-lg shadow-emerald-500/30">
                       <CheckCircle className="size-10 animate-[bounce-in_0.6s_ease-out] text-white" strokeWidth={2.5} />
                     </div>
@@ -393,12 +437,12 @@ export default function ResetPassword() {
                   </p>
                   <button
                     onClick={handleBackToLogin}
-                    className="group mt-2 flex w-fit items-center gap-2 rounded-full bg-white/10 px-6 py-2.5 text-sm font-medium text-white/80 backdrop-blur-sm transition-all duration-300 hover:bg-white/20 hover:text-white hover:shadow-lg hover:shadow-emerald-500/20 active:scale-95"
+                    className="group mt-2 flex w-fit items-center gap-2 rounded-lg bg-white/10 px-6 py-2.5 text-sm font-medium text-white/80 backdrop-blur-sm transition-all duration-300 hover:bg-white/20 hover:text-white hover:shadow-lg active:scale-95"
                   >
                     <ArrowLeft className="size-4 transition-transform duration-300 group-hover:-translate-x-1" />
-                    <span className="relative">
+                    <span className="rela tive">
                       Back to Login
-                      <span className="absolute -bottom-0.5 left-0 h-[1.5px] w-0 bg-emerald-400 transition-all duration-300 group-hover:w-full" />
+                      <span className=" bg-emerald-400 transition-all duration-300 group-hover:w-full" />
                     </span>
                   </button>
                 </div>
@@ -407,12 +451,12 @@ export default function ResetPassword() {
                   {/* Back Button */}
                   <button
                     onClick={goBack}
-                    className="group mb-6 flex w-fit items-center gap-2.5 rounded-full bg-white/10 px-4 py-2 text-sm font-medium text-white/80 backdrop-blur-sm transition-all duration-300 hover:bg-white/20 hover:text-white hover:shadow-lg hover:shadow-emerald-500/20 active:scale-95"
+                    className="group mb-6 flex w-fit items-center gap-2.5 rounded-lg bg-white/10 px-4 py-2 text-sm font-medium text-white/80 backdrop-blur-sm transition-all duration-300 hover:bg-white/20 hover:text-white  active:scale-95"
                   >
                     <ArrowLeft className="size-4 transition-transform duration-300 group-hover:-translate-x-1" />
                     <span className="relative">
                       {showPasswordForm ? "Back to PIN" : showPinForm ? "Back to Email" : "Back to Login"}
-                      <span className="absolute -bottom-0.5 left-0 h-[1.5px] w-0 bg-emerald-400 transition-all duration-300 group-hover:w-full" />
+                      <span className="absolute bg-emerald-400 transition-all duration-300 group-hover:w-full" />
                     </span>
                   </button>
 
@@ -529,7 +573,7 @@ export default function ResetPassword() {
                             ))}
                           </div>
                           <p className="text-white/40 text-xs text-center mt-3">
-                            ⏱️ PIN expires in 10 minutes
+                            PIN expires in 10 minutes
                           </p>
                         </div>
 
@@ -570,7 +614,7 @@ export default function ResetPassword() {
                   )}
 
                   {/* ============================================================
-                      NEW PASSWORD FORM
+                      NEW PASSWORD FORM - Clean UI like Register
                       ============================================================ */}
                   {showPasswordForm && !success && (
                     <>
@@ -591,6 +635,7 @@ export default function ResetPassword() {
                       )}
 
                       <form onSubmit={handleResetPassword} className="space-y-4">
+                        {/* New Password */}
                         <div>
                           <label className="block text-sm font-medium text-white/90 mb-1">
                             New Password
@@ -601,9 +646,9 @@ export default function ResetPassword() {
                               type={showPassword ? "text" : "password"}
                               autoComplete="new-password"
                               value={newPassword}
-                              onChange={(e) => setNewPassword(e.target.value)}
+                              onChange={handlePasswordChange}
                               className="w-full pl-10 pr-12 py-3 bg-white/10 border border-white/30 text-white placeholder-white/50 rounded-lg focus:outline-none focus:ring-2 focus:ring-white/50 focus:border-white/50 disabled:opacity-50"
-                              placeholder="Enter new password (min 6 characters)"
+                              placeholder="Create a password (min 6 characters)"
                               disabled={isLoading}
                               required
                               minLength={6}
@@ -616,8 +661,48 @@ export default function ResetPassword() {
                               {showPassword ? <EyeOff className="size-5" /> : <Eye className="size-5" />}
                             </button>
                           </div>
+
+                          {/* Password Strength Indicator - Same as Register */}
+                          {newPassword && !success && (
+                            <div className="mt-2 space-y-1">
+                              <div className="flex gap-1 h-1.5">
+                                {[...Array(5)].map((_, i) => (
+                                  <div
+                                    key={i}
+                                    className={`flex-1 rounded-full transition-all duration-300 ${
+                                      i < passwordStrength ? getStrengthColor() : "bg-white/20"
+                                    }`}
+                                  />
+                                ))}
+                              </div>
+                              <div className="flex justify-between text-xs">
+                                <span className="text-white/50">Password strength:</span>
+                                <span className={`font-medium ${
+                                  passwordStrength <= 2 ? "text-red-300" :
+                                  passwordStrength <= 3 ? "text-yellow-300" :
+                                  passwordStrength <= 4 ? "text-blue-300" :
+                                  "text-green-300"
+                                }`}>
+                                  {getStrengthText()}
+                                </span>
+                                {passwordStrength < 4 && (
+                                  <span className="text-red-300 flex items-center gap-1">
+                                    <XCircle className="size-3" />
+                                    Too weak
+                                  </span>
+                                )}
+                                {passwordStrength >= 4 && (
+                                  <span className="text-green-300 flex items-center gap-1">
+                                    <Check className="size-3" />
+                                    Good
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          )}
                         </div>
 
+                        {/* Confirm Password */}
                         <div>
                           <label className="block text-sm font-medium text-white/90 mb-1">
                             Confirm Password
@@ -642,18 +727,34 @@ export default function ResetPassword() {
                               {showConfirmPassword ? <EyeOff className="size-5" /> : <Eye className="size-5" />}
                             </button>
                           </div>
+                          {newPassword && confirmPassword && newPassword === confirmPassword && !success && (
+                            <div className="mt-1 flex items-center gap-1 text-xs text-green-300">
+                              <Check className="size-3" />
+                              Passwords match
+                            </div>
+                          )}
+                          {newPassword && confirmPassword && newPassword !== confirmPassword && !success && (
+                            <div className="mt-1 flex items-center gap-1 text-xs text-red-300">
+                              <XCircle className="size-3" />
+                              Passwords do not match
+                            </div>
+                          )}
                         </div>
 
                         <button
                           type="submit"
-                          disabled={isLoading}
+                          disabled={isLoading || (newPassword.length > 0 && !isPasswordStrongEnough())}
                           className="w-full text-white py-3 rounded-lg font-semibold transition-all shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                           style={{ backgroundColor: "#4a9d6f" }}
                           onMouseEnter={(e) => {
-                            if (!isLoading) e.currentTarget.style.backgroundColor = "#5db888";
+                            if (!isLoading && isPasswordStrongEnough()) {
+                              e.currentTarget.style.backgroundColor = "#5db888";
+                            }
                           }}
                           onMouseLeave={(e) => {
-                            if (!isLoading) e.currentTarget.style.backgroundColor = "#4a9d6f";
+                            if (!isLoading) {
+                              e.currentTarget.style.backgroundColor = "#4a9d6f";
+                            }
                           }}
                         >
                           {isLoading ? (

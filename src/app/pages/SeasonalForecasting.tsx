@@ -40,7 +40,6 @@ import {
   TrendingUp,
   TrendingDown,
   AlertCircle,
-  CheckCircle,
   CheckCircle2,
   Target,
   Lightbulb,
@@ -49,7 +48,6 @@ import {
   Database,
   RefreshCw,
   FileSpreadsheet,
-  Upload,
   X,
   File,
   Save,
@@ -59,6 +57,8 @@ import {
   CloudRain,
   Paintbrush,
   Sun,
+  ShoppingBag,
+  Zap,
 } from "lucide-react";
 
 import Papa from "papaparse";
@@ -80,13 +80,11 @@ interface SalesRecord {
   unitsSold?: number;
 }
 
-// Constants
 const MONTH_NAMES = [
   "Jan", "Feb", "Mar", "Apr", "May", "Jun",
   "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"
 ];
 
-// Philippine Seasons: Dry = Nov-Apr, Rainy = May-Oct
 const SEASON_FOR_MONTH = (monthIndex: number): string => {
   if (monthIndex >= 10 || monthIndex <= 3) {
     return "Dry";
@@ -95,7 +93,6 @@ const SEASON_FOR_MONTH = (monthIndex: number): string => {
   }
 };
 
-// Map month name to index
 const getMonthIndexFromName = (monthName: string): number => {
   const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 
                      'July', 'August', 'September', 'October', 'November', 'December'];
@@ -104,23 +101,17 @@ const getMonthIndexFromName = (monthName: string): number => {
   
   const trimmed = monthName.trim();
   
-  // Try full name
   const fullIndex = monthNames.findIndex(m => m.toLowerCase() === trimmed.toLowerCase());
   if (fullIndex !== -1) return fullIndex;
   
-  // Try short name
   const shortIndex = shortNames.findIndex(m => m.toLowerCase() === trimmed.toLowerCase());
   if (shortIndex !== -1) return shortIndex;
   
   return -1;
 };
 
-// Required headers for sales data
 const REQUIRED_HEADERS = ['Date', 'Category', 'Total Sales (PHP)', 'Units Sold', 'Season'];
 
-// ============================================================
-// NOTIFICATION HELPER
-// ============================================================
 const showNotification = (message: string, type: 'success' | 'error' | 'info' = 'success') => {
   const colors = {
     success: 'bg-green-900 border-green-400/30',
@@ -171,7 +162,6 @@ export default function SeasonalForecasting() {
   const [syncStatus, setSyncStatus] = useState<"idle" | "syncing" | "success" | "error">("idle");
   const [syncMessage, setSyncMessage] = useState("");
 
-  // File upload states
   const [uploadedData, setUploadedData] = useState<any[] | null>(null);
   const [uploadedDataName, setUploadedDataName] = useState("");
   const [uploadError, setUploadError] = useState("");
@@ -179,37 +169,25 @@ export default function SeasonalForecasting() {
   const [isDataSaved, setIsDataSaved] = useState(false);
   const csvInputRef = useRef<HTMLInputElement | null>(null);
 
-  // Sales Data
   const [salesData, setSalesData] = useState<SalesRecord[]>([]);
   const [originalData, setOriginalData] = useState<SalesRecord[]>([]);
   const [debugInfo, setDebugInfo] = useState<string>("");
 
-  // ----------------------------
-  // AI States
-  // ----------------------------
   const [forecastData, setForecastData] = useState<any>(null);
   const [forecastStatus, setForecastStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
   const [lastGenerated, setLastGenerated] = useState<string | null>(null);
 
-  // ----------------------------
-  // UI States
-  // ----------------------------
   const [viewMode, setViewMode] = useState("monthly");
   const [selectedMonth, setSelectedMonth] = useState("");
   const [timeFilter, setTimeFilter] = useState("all");
   const [chartKey, setChartKey] = useState(0);
   const [isVisible, setIsVisible] = useState(false);
-  // Add state for remove confirmation dialog
   const [showRemoveDialog, setShowRemoveDialog] = useState(false);
 
-  // Cache keys
   const CACHE_KEY = 'sales_forecast_data';
   const CACHE_TIMESTAMP_KEY = 'sales_forecast_timestamp';
   const CACHE_DATA_COUNT_KEY = 'sales_forecast_data_count';
 
-  // ============================================================
-  // COMPUTED SEASONAL DATA (AUTO-CALCULATED FROM DATA)
-  // ============================================================
   const computedSeasonalData = useMemo(() => {
     if (!salesData.length) return null;
 
@@ -236,9 +214,6 @@ export default function SeasonalForecasting() {
     };
   }, [salesData]);
 
-  // ============================================================
-  // COMPUTED HIGH DEMAND DATA (AUTO-CALCULATED FROM DATA)
-  // ============================================================
   const computedHighDemand = useMemo(() => {
     if (!originalData.length || !salesData.length) return null;
 
@@ -268,7 +243,6 @@ export default function SeasonalForecasting() {
       };
     });
 
-    // Get top 4 products for Dry season (by dryTotal)
     const dryProducts = [...categoryDetails]
       .sort((a, b) => b.dryTotal - a.dryTotal)
       .slice(0, 4)
@@ -278,7 +252,6 @@ export default function SeasonalForecasting() {
         revenue: Math.round(c.dryTotal) || 0
       }));
 
-    // Get top 4 products for Rainy season (by rainyTotal)
     const rainyProducts = [...categoryDetails]
       .sort((a, b) => b.rainyTotal - a.rainyTotal)
       .slice(0, 4)
@@ -288,18 +261,12 @@ export default function SeasonalForecasting() {
         revenue: Math.round(c.rainyTotal) || 0
       }));
 
-    const result = {
+    return {
       dry: dryProducts,
       rainy: rainyProducts
     };
-
-    console.log("High Demand Data:", result);
-    return result;
   }, [originalData, salesData]);
 
-  // ============================================================
-  // SUPABASE: Load saved data on mount
-  // ============================================================
   useEffect(() => {
     const loadData = async () => {
       if (!userEmail) {
@@ -345,9 +312,6 @@ export default function SeasonalForecasting() {
     loadData();
   }, [userEmail]);
 
-  // ============================================================
-  // SUPABASE: Save to cloud when data changes (debounced)
-  // ============================================================
   useEffect(() => {
     const saveToCloud = async () => {
       if (!userEmail) return;
@@ -388,10 +352,6 @@ export default function SeasonalForecasting() {
     return () => clearTimeout(timeoutId);
   }, [userEmail, uploadedData, uploadedDataName, forecastData, lastGenerated]);
 
-  // ============================================================
-  // ANIMATION & EFFECTS
-  // ============================================================
-
   useEffect(() => {
     const timer = setTimeout(() => setIsVisible(true), 80);
     return () => clearTimeout(timer);
@@ -407,9 +367,6 @@ export default function SeasonalForecasting() {
     }
   }, [salesData]);
 
-  // ============================================================
-  // VALIDATE HEADERS
-  // ============================================================
   const validateHeaders = (headers: string[]): { valid: boolean; missing: string[] } => {
     const normalizedHeaders = headers.map(h => h.trim());
     const missing = REQUIRED_HEADERS.filter(req => 
@@ -420,10 +377,6 @@ export default function SeasonalForecasting() {
       missing
     };
   };
-
-  // ============================================================
-  // DATA PROCESSING
-  // ============================================================
 
   const aggregateSalesData = (data: SalesRecord[]) => {
     const grouped = data.reduce((acc, item) => {
@@ -455,7 +408,6 @@ export default function SeasonalForecasting() {
       console.log("First row raw data:", data[0]);
       console.log("All headers:", Object.keys(data[0] || {}));
       
-      // Validate headers
       const headers = Object.keys(data[0] || {});
       const validation = validateHeaders(headers);
       if (!validation.valid) {
@@ -465,33 +417,23 @@ export default function SeasonalForecasting() {
       }
       
       const formattedData: SalesRecord[] = data.map((row: any, index: number) => {
-        // ============================================================
-        // EXTRACT MONTH AND YEAR - PRIORITIZE DATE PARSING
-        // ============================================================
         let month = "";
         let year = new Date().getFullYear();
         let monthIndex = -1;
         
-        // Get the date value
         const dateValue = row.Date || row["Date"] || "";
         
         if (dateValue) {
           const dateStr = String(dateValue).trim();
-          
-          // Try multiple date parsing strategies
           let parsedDate: Date | null = null;
-          
-          // Strategy 1: Direct Date constructor
           let d = new Date(dateStr);
           if (!isNaN(d.getTime())) {
             parsedDate = d;
           }
           
-          // Strategy 2: MM/DD/YYYY or DD/MM/YYYY
           if (!parsedDate) {
             const parts = dateStr.split(/[\/\-.]/);
             if (parts.length === 3) {
-              // Try MM/DD/YYYY
               let m = parseInt(parts[0]) - 1;
               let y = parseInt(parts[2]);
               let day = parseInt(parts[1]);
@@ -501,7 +443,6 @@ export default function SeasonalForecasting() {
                   parsedDate = d;
                 }
               }
-              // Try DD/MM/YYYY
               if (!parsedDate) {
                 let m = parseInt(parts[1]) - 1;
                 let y = parseInt(parts[2]);
@@ -516,7 +457,6 @@ export default function SeasonalForecasting() {
             }
           }
           
-          // Strategy 3: Try to extract month name
           if (!parsedDate) {
             const monthMatch = dateStr.match(/(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec|January|February|March|April|May|June|July|August|September|October|November|December)/i);
             if (monthMatch) {
@@ -540,7 +480,6 @@ export default function SeasonalForecasting() {
           }
         }
         
-        // If no date, try Month column
         if (monthIndex === -1) {
           const monthValue = row.Month || row["Month"] || "";
           if (monthValue) {
@@ -556,7 +495,6 @@ export default function SeasonalForecasting() {
           }
         }
         
-        // Last resort: use current month
         if (monthIndex === -1) {
           const now = new Date();
           monthIndex = now.getMonth();
@@ -567,10 +505,6 @@ export default function SeasonalForecasting() {
         const category = row.Category || row["Category"] || "";
         const sales = Number(row["Total Sales (PHP)"] || row["Total Sales"] || row["sales"] || 0);
         const unitsSold = Number(row["Units Sold"] || row["unitsSold"] || 0);
-        
-        // ============================================================
-        // DETERMINE SEASON - ALWAYS FROM MONTH (IGNORE SEASON COLUMN)
-        // ============================================================
         const season = SEASON_FOR_MONTH(monthIndex);
         
         return {
@@ -584,9 +518,6 @@ export default function SeasonalForecasting() {
         };
       });
       
-      // ============================================================
-      // ANALYSIS RESULTS
-      // ============================================================
       const seasonDist = formattedData.reduce((acc, r) => {
         acc[r.season] = (acc[r.season] || 0) + 1;
         return acc;
@@ -607,10 +538,6 @@ export default function SeasonalForecasting() {
       
       setOriginalData(formattedData);
       
-      
-      // ============================================================
-      // AGGREGATE - PRESERVE SEASON CORRECTLY
-      // ============================================================
       const aggregated = aggregateSalesData(formattedData);
       console.log("Aggregated data:", aggregated);
       console.log("Aggregated season distribution:", 
@@ -839,9 +766,6 @@ export default function SeasonalForecasting() {
     clearSupabaseData();
   };
 
-  // ============================================================
-  // CACHE FUNCTIONS
-  // ============================================================
   const saveToCache = (data: any) => {
     try {
       localStorage.setItem(CACHE_KEY, JSON.stringify(data));
@@ -865,9 +789,6 @@ export default function SeasonalForecasting() {
     console.log("Cache cleared");
   };
 
-  // ============================================================
-  // CALCULATE FORECAST
-  // ============================================================
   const calculateForecast = () => {
     if (!salesData.length) return [];
 
@@ -906,9 +827,6 @@ export default function SeasonalForecasting() {
     return forecast;
   };
 
-  // ============================================================
-  // GEMINI FORECAST
-  // ============================================================
   const generateForecast = async () => {
     if (!salesData.length) {
       setUploadError("No sales data available. Please upload data first.");
@@ -1062,10 +980,6 @@ Return ONLY valid JSON with this structure:
     }
   };
 
-  // ============================================================
-  // COMPUTED VALUES
-  // ============================================================
-
   const historicalChartData = useMemo(
     () =>
       salesData.map((row, index) => ({
@@ -1181,8 +1095,6 @@ Return ONLY valid JSON with this structure:
     [salesData]
   );
 
-  const seasonalTrends = computedSeasonalData;
-  const highDemand = computedHighDemand;
   const bestSelling = forecastData?.bestSellingProducts ?? [];
   const slowMoving = forecastData?.slowMovingProducts ?? [];
   const stockRecs = forecastData?.stockRecommendations ?? [];
@@ -1193,15 +1105,8 @@ Return ONLY valid JSON with this structure:
     [salesData]
   );
 
-  const uniqueCategories = useMemo(
-    () => [...new Set(originalData.map(r => r.category).filter(Boolean))],
-    [originalData]
-  );
-
   const isDataLoaded = uploadedData !== null && uploadedData.length > 0;
-  const isAnalyzerEnabled = isDataSaved && isDataLoaded;
 
-  // Handle remove with confirmation
   const handleRemoveWithConfirmation = () => {
     if (uploadedData) {
       setShowRemoveDialog(true);
@@ -1274,7 +1179,6 @@ Return ONLY valid JSON with this structure:
         }
       `}</style>
 
-      {/* Page header */}
       <header className="overflow-hidden rounded-2xl bg-[#174d32] px-5 py-5 text-white shadow-[0_18px_45px_rgba(23,77,50,0.18)] sm:px-7 sm:py-6">
         <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-start gap-4">
@@ -1318,22 +1222,19 @@ Return ONLY valid JSON with this structure:
         </div>
       </header>
 
-      {/* ============================================================
-          DATA UPLOAD SECTION
-          ============================================================ */}
       <section>
         <Card className="overflow-hidden rounded-2xl border border-emerald-100 bg-white shadow-[0_12px_32px_rgba(20,83,45,0.06)]">
-  <CardHeader className="border-b border-emerald-100 bg-[#174d32] h-10 flex items-center px-4">
-    <div className="flex items-center justify-between w-full">
-      <div className="flex items-center gap-1.5">
-        <Database className="size-3.5 text-white" />
-        <CardTitle className="text-md font-medium text-white leading-none">Sales Data</CardTitle>
-      </div>
-      <Badge variant="outline" className="border-emerald-200 bg-emerald-50 text-emerald-700 text-[10px] font-medium px-2 py-0">
-        {isDataSaved ? "SAVED" : isDataLoaded ? "LOADED" : "EMPTY"}
-      </Badge>
-    </div>
-  </CardHeader>
+          <CardHeader className="border-b border-emerald-100 bg-[#174d32] h-10 flex items-center px-4">
+            <div className="flex items-center justify-between w-full">
+              <div className="flex items-center gap-1.5">
+                <Database className="size-3.5 text-white" />
+                <CardTitle className="text-md font-medium text-white leading-none">Sales Data</CardTitle>
+              </div>
+              <Badge variant="outline" className="border-emerald-200 bg-emerald-50 text-emerald-700 text-[10px] font-medium px-2 py-0">
+                {isDataSaved ? "SAVED" : isDataLoaded ? "LOADED" : "EMPTY"}
+              </Badge>
+            </div>
+          </CardHeader>
 
           <CardContent>
             <input
@@ -1478,7 +1379,6 @@ Return ONLY valid JSON with this structure:
         </Card>
       </section>
 
-      {/* Confirmation Dialog */}
       {showRemoveDialog && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
           <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl animate-in slide-in-from-bottom-4 duration-300">
@@ -1512,9 +1412,6 @@ Return ONLY valid JSON with this structure:
         </div>
       )}
 
-      {/* ============================================================
-          SUMMARY CARDS
-          ============================================================ */}
       {salesData.length > 0 && (
         <>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
@@ -1536,61 +1433,58 @@ Return ONLY valid JSON with this structure:
             </Card>
 
             <Card className="border border-green-200 border-l-4 border-l-green-900 bg-green-50/60 shadow-sm">
-  <CardContent className="py-6">
-    <div className="flex justify-between items-center">
-      <div>
-        <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-green-700">
-          <Sun className="size-4" />
-          Dry Season
-        </div>
-        <h2 className="text-2xl font-bold text-green-700">
-          ₱{drySales.toLocaleString()}
-        </h2>
-        <p className="text-xs text-gray-500 mt-1">
-          {salesData.filter((r) => r.season === "Dry").length} Months
-        </p>
-      </div>
-      <div className="rounded-xl bg-green-100 p-3">
-        {drySales > rainySales ? (
-          <TrendingUp className="size-7 text-green-700" />
-        ) : (
-          <TrendingDown className="size-7 text-green-700" />
-        )}
-      </div>
-    </div>
-  </CardContent>
-</Card>
+              <CardContent className="py-6">
+                <div className="flex justify-between items-center">
+                  <div>
+                    <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-green-700">
+                      <Sun className="size-4" />
+                      Dry Season
+                    </div>
+                    <h2 className="text-2xl font-bold text-green-700">
+                      ₱{drySales.toLocaleString()}
+                    </h2>
+                    <p className="text-xs text-gray-500 mt-1">
+                      {salesData.filter((r) => r.season === "Dry").length} Months
+                    </p>
+                  </div>
+                  <div className="rounded-xl bg-green-100 p-3">
+                    {drySales > rainySales ? (
+                      <TrendingUp className="size-7 text-green-700" />
+                    ) : (
+                      <TrendingDown className="size-7 text-green-700" />
+                    )}
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
 
-<Card className="border border-blue-200 border-l-4 border-l-blue-600 bg-blue-50/60 shadow-sm">
-  <CardContent className="py-6">
-    <div className="flex justify-between items-center">
-      <div>
-        <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-blue-800">
-          <CloudRain className="size-4" />
-          Rainy Season
-        </div>
-        <h2 className="text-2xl font-bold text-blue-700">
-          ₱{rainySales.toLocaleString()}
-        </h2>
-        <p className="text-xs text-gray-500 mt-1">
-          {salesData.filter((r) => r.season === "Rainy").length} Months
-        </p>
-      </div>
-      <div className="rounded-xl bg-blue-100 p-3">
-        {rainySales > drySales ? (
-          <TrendingUp className="size-7 text-blue-700" />
-        ) : (
-          <TrendingDown className="size-7 text-blue-500" />
-        )}
-      </div>
-    </div>
-  </CardContent>
-</Card>
+            <Card className="border border-blue-200 border-l-4 border-l-blue-600 bg-blue-50/60 shadow-sm">
+              <CardContent className="py-6">
+                <div className="flex justify-between items-center">
+                  <div>
+                    <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-blue-800">
+                      <CloudRain className="size-4" />
+                      Rainy Season
+                    </div>
+                    <h2 className="text-2xl font-bold text-blue-700">
+                      ₱{rainySales.toLocaleString()}
+                    </h2>
+                    <p className="text-xs text-gray-500 mt-1">
+                      {salesData.filter((r) => r.season === "Rainy").length} Months
+                    </p>
+                  </div>
+                  <div className="rounded-xl bg-blue-100 p-3">
+                    {rainySales > drySales ? (
+                      <TrendingUp className="size-7 text-blue-700" />
+                    ) : (
+                      <TrendingDown className="size-7 text-blue-500" />
+                    )}
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
           </div>
 
-          {/* ============================================================
-              SALES TREND CHART
-              ============================================================ */}
           <Card className="overflow-hidden border border-emerald-100 bg-white shadow-[0_12px_32px_rgba(20,83,45,0.06)]">
             <CardHeader className="border-b border-emerald-100 bg-gradient-to-r from-white to-emerald-50/70">
               <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
@@ -1790,12 +1684,9 @@ Return ONLY valid JSON with this structure:
             </CardContent>
           </Card>
 
-          {/* ============================================================
-              SEASONAL ANALYSIS
-              ============================================================ */}
           {computedSeasonalData && (
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <Card className="border border-blue-200 border-l-4 border-l-blue-600 bg-blue-50/50 shadow-sm">
+              <Card className="border border-blue-200 border-l-4 border-l-blue-600 bg-blue-50/50 shadow-sm">
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2 text-blue-800">
                     <CloudRain className="w-5 h-5" />
@@ -1857,11 +1748,11 @@ Return ONLY valid JSON with this structure:
             </div>
           )}
 
-          
-               {computedHighDemand && (
+          {computedHighDemand && (
             <Card className="overflow-hidden border border-emerald-100 bg-white shadow-[0_12px_32px_rgba(20,83,45,0.06)]">
               <CardHeader className="border-b border-emerald-100 bg-gradient-to-r from-white to-emerald-50/70">
                 <CardTitle className="flex items-center gap-2 text-xl">
+                  <ShoppingBag className="size-5 text-[#174d32]" />
                   High Demand Products Per Season
                 </CardTitle>
                 <CardDescription>
@@ -1877,7 +1768,6 @@ Return ONLY valid JSON with this structure:
                   {["dry", "rainy"].map((season) => {
                     const products = computedHighDemand[season] || [];
                     const isDrySeason = season === "dry";
-                    const headerColorClass = isDrySeason ? "text-green-700" : "text-blue-700";
                     return (
                       <TabsContent key={season} value={season}>
                         <Card className={`border shadow-sm ${isDrySeason ? "border-green-200 bg-green-50/30" : "border-blue-200 bg-blue-50/30"}`}>
@@ -1907,13 +1797,13 @@ Return ONLY valid JSON with this structure:
                             {products.length > 0 ? (
                               <Table>
                                 <TableHeader>
-                                <TableRow>
-                                  <TableHead className="w-20" style={{ color: isDrySeason ? '#174d32' : '#1d4ed8' }}>Rank</TableHead>
-                                  <TableHead style={{ color: isDrySeason ? '#174d32' : '#1d4ed8' }}>Category</TableHead>
-                                  <TableHead style={{ color: isDrySeason ? '#174d32' : '#1d4ed8' }}>Units</TableHead>
-                                  <TableHead style={{ color: isDrySeason ? '#174d32' : '#1d4ed8' }}>Revenue</TableHead>
-                                </TableRow>
-                              </TableHeader>
+                                  <TableRow>
+                                    <TableHead className="w-20" style={{ color: isDrySeason ? '#174d32' : '#1d4ed8' }}>Rank</TableHead>
+                                    <TableHead style={{ color: isDrySeason ? '#174d32' : '#1d4ed8' }}>Category</TableHead>
+                                    <TableHead style={{ color: isDrySeason ? '#174d32' : '#1d4ed8' }}>Units</TableHead>
+                                    <TableHead style={{ color: isDrySeason ? '#174d32' : '#1d4ed8' }}>Revenue</TableHead>
+                                  </TableRow>
+                                </TableHeader>
                                 <TableBody>
                                   {products.map((product: any, index: number) => (
                                     <TableRow key={index} className="hover:bg-gray-50 transition-colors">
@@ -1959,34 +1849,38 @@ Return ONLY valid JSON with this structure:
         </>
       )}
 
-      {/* ============================================================
-          GENERATE REPORT BUTTON
-          ============================================================ */}
       {salesData.length > 0 && forecastStatus !== "success" && isDataSaved && (
-        <div className="flex justify-center rounded-2xl border border-emerald-100 bg-white p-4 shadow-sm">
-          <button
-            onClick={generateForecast}
-            disabled={forecastStatus === "loading"}
-            className="flex items-center gap-3 rounded-xl bg-[#174d32] px-6 py-3.5 text-sm font-semibold text-white shadow-[0_12px_24px_rgba(23,77,50,0.2)] transition-all hover:-translate-y-0.5 hover:bg-[#123e28] disabled:opacity-60"
-          >
-            {forecastStatus === "loading" ? (
-              <>
-                <Loader2 className="size-5 animate-spin" />
-                Generating...
-              </>
-            ) : (
-              <>
-                <Sparkles className="size-5" />
-                Generate AI Forecast Report
-              </>
-            )}
-          </button>
-        </div>
+  <div className="flex justify-center rounded-2xl border border-emerald-100 bg-white p-4 shadow-sm">
+    <button
+      onClick={generateForecast}
+      disabled={forecastStatus === "loading"}
+      className="flex items-center gap-3 rounded-xl bg-[#174d32] px-6 py-3.5 text-sm font-semibold text-white shadow-[0_12px_24px_rgba(23,77,50,0.2)] transition-all hover:-translate-y-0.5 hover:bg-[#123e28] disabled:opacity-60"
+    >
+      {forecastStatus === "loading" ? (
+        <>
+          <div className="flex items-center gap-1">
+            <div className="size-1.5 rounded-full bg-emerald-300 animate-bounce" style={{ animationDelay: '0s' }} />
+            <div className="size-1.5 rounded-full bg-emerald-300 animate-bounce" style={{ animationDelay: '0.15s' }} />
+            <div className="size-1.5 rounded-full bg-emerald-300 animate-bounce" style={{ animationDelay: '0.3s' }} />
+            <div className="size-1.5 rounded-full bg-emerald-300 animate-bounce" style={{ animationDelay: '0.45s' }} />
+            <div className="size-1.5 rounded-full bg-emerald-300 animate-bounce" style={{ animationDelay: '0.6s' }} />
+          </div>
+          
+          {/* ✅ CHANGED: Added animate-text-color class to the text span */}
+          <span className="animate-text-color">
+            Generating Recommendation and Strategies...
+          </span>
+        </>
+      ) : (
+        <>
+          <Zap className="size-5" />
+          Generate AI Forecast Report
+        </>
       )}
+    </button>
+  </div>
+)}
 
-      {/* ============================================================
-          LOCKED STATE
-          ============================================================ */}
       {isDataLoaded && !isDataSaved && salesData.length > 0 && (
         <Card className="border border-emerald-200 bg-emerald-50/70 shadow-sm">
           <CardContent className="py-8">
@@ -2003,9 +1897,6 @@ Return ONLY valid JSON with this structure:
         </Card>
       )}
 
-      {/* ============================================================
-          EMPTY STATE
-          ============================================================ */}
       {!salesData.length && !uploadedData && (
         <Card className="border-2 border-dashed border-emerald-200 bg-white shadow-sm">
           <CardContent className="flex flex-col items-center justify-center py-16 text-center">
@@ -2025,34 +1916,6 @@ Return ONLY valid JSON with this structure:
         </Card>
       )}
 
-      {/* ============================================================
-          LOADING STATE
-          ============================================================ */}
-      {forecastStatus === "loading" && (
-        <Card className="border border-emerald-200 bg-gradient-to-r from-emerald-50 to-white shadow-sm">
-          <CardContent className="py-12">
-            <div className="flex flex-col items-center justify-center text-center">
-              <Loader2 className="size-12 text-green-700 animate-spin mb-4" />
-              <h3 className="text-xl font-semibold text-gray-800">
-                AI is Analyzing Your Data...
-              </h3>
-              <p className="text-gray-600 mt-2">
-                Generating product performance insights, stock recommendations, and marketing strategies.
-              </p>
-              <div className="mt-6 w-64 h-2 bg-gray-200 rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-green-600 rounded-full animate-pulse"
-                  style={{ width: '60%' }}
-                />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* ============================================================
-          ERROR STATE
-          ============================================================ */}
       {forecastStatus === "error" && (
         <Card className="border-2 border-red-200 bg-red-50">
           <CardContent className="py-8">
@@ -2075,12 +1938,8 @@ Return ONLY valid JSON with this structure:
         </Card>
       )}
 
-      {/* ============================================================
-          AI RESULTS CONTAINER
-          ============================================================ */}
       {forecastData && forecastStatus === "success" && (
         <div id="ai-results" className="space-y-6">
-          {/* ── Stock Recommendation ── */}
           {stockRecs.length > 0 && (
             <Card className="shadow-lg border-0 overflow-hidden">
               <div className="bg-gradient-to-r from-green-900 to-emerald-600 px-6 py-4">
@@ -2088,12 +1947,11 @@ Return ONLY valid JSON with this structure:
                   <Lightbulb className="w-5 h-5 text-white" />
                   <div>
                     <h3 className="text-lg font-bold text-white">Stock Recommendation</h3>
-                    
                   </div>
                 </div>
               </div>
 
-              <CardContent className="pt-4 px-6 pb-6">
+              <CardContent className=" px-6 pb-6">
                 {(() => {
                   const groupedByAction = stockRecs.reduce((acc: any, category: any) => {
                     const action = category.items?.[0]?.action || 'Maintain';
@@ -2184,7 +2042,6 @@ Return ONLY valid JSON with this structure:
             </Card>
           )}
 
-          {/* ── Product Performance ── */}
           {(bestSelling.length > 0 || slowMoving.length > 0) && (
             <section className="space-y-4">
               <div className="flex items-center gap-3 ">
@@ -2193,22 +2050,21 @@ Return ONLY valid JSON with this structure:
                 </div>
                 <div>
                   <h2 className="text-xl font-bold text-gray-900">Product Performance</h2>
-                  
                 </div>
               </div>
               <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
                 {bestSelling.length > 0 && (
                   <Card className="shadow-lg border-0 hover:shadow-xl transition-all duration-300">
-                  <CardHeader className="rounded-t-lg bg-gradient-to-r from-green-900 to-emerald-700 border-b border-green-900 !p-2">
-  <div className="flex items-center gap-2">
-    <div className="w-5 h-5 rounded-lg ml-3 mt-1 bg-green-800 flex items-center justify-center flex-shrink-0">
-      <TrendingUp className="size-3 text-white" />
-    </div>
-    <CardTitle className="text-sm mt-1 font-semibold text-white">
-      Best-Selling Products
-    </CardTitle>
-  </div>
-</CardHeader>
+                    <CardHeader className="rounded-t-lg bg-gradient-to-r from-green-900 to-emerald-700 border-b border-green-900 !p-2">
+                      <div className="flex items-center gap-2">
+                        <div className="w-5 h-5 rounded-lg ml-3 mt-1 bg-green-800 flex items-center justify-center flex-shrink-0">
+                          <TrendingUp className="size-3 text-white" />
+                        </div>
+                        <CardTitle className="text-sm mt-1 font-semibold text-white">
+                          Best-Selling Products
+                        </CardTitle>
+                      </div>
+                    </CardHeader>
                     <CardContent className="space-y-3">
                       {bestSelling.map((product: any, index: number) => (
                         <div key={index} className="border rounded-lg p-3 hover:shadow-md transition">
@@ -2243,15 +2099,15 @@ Return ONLY valid JSON with this structure:
                 {slowMoving.length > 0 && (
                   <Card className="shadow-lg border-0 hover:shadow-xl transition-all duration-300">
                     <CardHeader className="rounded-t-lg bg-gradient-to-r from-orange-700 to-amber-600 border-b border-orange-100 !p-2">
-  <div className="flex items-center gap-2">
-    <div className="w-5 h-5 ml-3 mt-1 rounded-lg bg-orange-500 flex items-center justify-center flex-shrink-0">
-      <TrendingDown className="size-3 text-white" />
-    </div>
-    <CardTitle className="text-sm mt-1 font-semibold text-white">
-      Slow-Moving Products
-    </CardTitle>
-  </div>
-</CardHeader>
+                      <div className="flex items-center gap-2">
+                        <div className="w-5 h-5 ml-3 mt-1 rounded-lg bg-orange-500 flex items-center justify-center flex-shrink-0">
+                          <TrendingDown className="size-3 text-white" />
+                        </div>
+                        <CardTitle className="text-sm mt-1 font-semibold text-white">
+                          Slow-Moving Products
+                        </CardTitle>
+                      </div>
+                    </CardHeader>
                     <CardContent className="space-y-3">
                       {slowMoving.map((product: any, index: number) => (
                         <div key={index} className="border rounded-lg p-3 hover:shadow-md transition">
@@ -2292,7 +2148,6 @@ Return ONLY valid JSON with this structure:
             </section>
           )}
 
-          {/* ── Marketing Strategies ── */}
           {marketing.length > 0 && (
             <section className="space-y-4">
               <div className="flex items-center gap-3">
@@ -2301,7 +2156,6 @@ Return ONLY valid JSON with this structure:
                 </div>
                 <div>
                   <h2 className="text-xl font-bold text-gray-900 tracking-tight">Marketing Strategies</h2>
-                
                 </div>
               </div>
               <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
@@ -2342,7 +2196,6 @@ Return ONLY valid JSON with this structure:
                             </div>
                           ))}
                         </div>
-                        
                       </CardContent>
                     </Card>
                   );
@@ -2352,8 +2205,6 @@ Return ONLY valid JSON with this structure:
           )}
         </div>
       )}
-
-
     </div>
   );
 }

@@ -354,7 +354,7 @@ export default function Register() {
               />
             </div>
 
-            <div className="bg-white/20 backdrop-blur-2xl border border-white/20 rounded-2xl shadow-2xl px-8 py-8">
+            <div className="bg-white/10 backdrop-blur-2xl border border-white/20 rounded-2xl shadow-2xl px-8 py-8">
               <div className="lg:hidden text-center mb-4">
                 <h1 className="text-white/90 text-2xl font-semibold">CREATE ACCOUNT</h1>
                 <p className="text-white/60 text-sm">Sign up to get started</p>
@@ -395,7 +395,7 @@ export default function Register() {
                       type="text"
                       value={fullName}
                       onChange={(e) => setFullName(e.target.value)}
-                      className="w-full pl-10 pr-4 py-3 bg-white/10 border border-white/30 text-white placeholder-white/50 rounded-lg focus:outline-none focus:ring-2 focus:ring-white/50 focus:border-white/50 disabled:opacity-50 transition-all"
+                      className="w-full pl-10 pr-4 py-3 bg-black/10 border border-white/30 text-white placeholder-white/50 rounded-lg focus:outline-none hover:border-green-300 focus:ring-2 focus:ring-white/50 focus:border-white/50 disabled:opacity-50 transition-all"
                       placeholder="Enter your full name"
                       disabled={isLoading || success}
                       required
@@ -415,7 +415,7 @@ export default function Register() {
                       type="email"
                       value={email}
                       onChange={handleEmailChange}
-                      className={`w-full pl-10 pr-4 py-3 bg-white/10 border text-white placeholder-white/50 rounded-lg focus:outline-none focus:ring-2 focus:ring-white/50 focus:border-white/50 disabled:opacity-50 transition-all ${
+                      className={`w-full pl-10 pr-4 py-3 bg-black/10 border text-white placeholder-white/50 rounded-lg focus:outline-none focus:ring-2 focus:ring-white/50 hover:border-green-300 focus:border-white/50 disabled:opacity-50 transition-all ${
                         emailError ? 'border-red-400/60' : 'border-white/30'
                       }`}
                       placeholder="Enter your email"
@@ -455,7 +455,7 @@ export default function Register() {
                       autoComplete="new-password"
                       value={password}
                       onChange={handlePasswordChange}
-                      className="w-full pl-10 pr-12 py-3 bg-white/10 border border-white/30 text-white placeholder-white/50 rounded-lg focus:outline-none focus:ring-2 focus:ring-white/50 focus:border-white/50 disabled:opacity-50 transition-all"
+                      className="w-full pl-10 pr-12 py-3 bg-black/10 border border-white/30 text-white placeholder-white/50 rounded-lg hover:border-green-300 focus:outline-none focus:ring-2 focus:ring-white/50 focus:border-white/50 disabled:opacity-50 transition-all"
                       placeholder="Create a password (min 6 characters)"
                       disabled={isLoading || success}
                       required
@@ -523,7 +523,7 @@ export default function Register() {
                       autoComplete="new-password"
                       value={confirmPassword}
                       onChange={(e) => setConfirmPassword(e.target.value)}
-                      className="w-full pl-10 pr-12 py-3 bg-white/10 border border-white/30 text-white placeholder-white/50 rounded-lg focus:outline-none focus:ring-2 focus:ring-white/50 focus:border-white/50 disabled:opacity-50 transition-all"
+                      className="w-full pl-10 pr-12 py-3 bg-black/10 border border-white/30 text-white placeholder-white/50 rounded-lg hover:border-green-300 focus:outline-none focus:ring-2 focus:ring-white/50 focus:border-white/50 disabled:opacity-50 transition-all"
                       placeholder="Confirm your password"
                       disabled={isLoading || success}
                       required
@@ -555,7 +555,7 @@ export default function Register() {
                 <button
                   type="submit"
                   disabled={isLoading || success || (password.length > 0 && !isPasswordStrongEnough()) || !!emailError}
-                  className="w-full mt-2 text-white py-3 rounded-lg font-semibold transition-all shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                  className="w-full mt-2 text-white py-3 rounded-lg font-semibold transition-all shadow-md hover:shadow-lg  disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                   style={{ backgroundColor: "#4a9d6f" }}
                   onMouseEnter={(e) => {
                     if (!isLoading && !success && isPasswordStrongEnough() && !emailError) {

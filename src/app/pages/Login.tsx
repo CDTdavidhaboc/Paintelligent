@@ -193,7 +193,7 @@ export default function Login() {
                     type="email"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    className="w-full pl-10 py-3 mb-2 bg-black/10 border border-white/30 hover:border-x-green-300 text-white placeholder-white/50 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-300 focus:border-green-300 disabled:opacity-50"
+                    className="w-full pl-10 py-3 mb-2 bg-black/10 border border-white/30 hover:border-green-300 text-white placeholder-white/50 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-300 focus:border-green-300 disabled:opacity-50"
                     placeholder="Enter your email"
                     disabled={isLoading}
                     required
@@ -211,7 +211,7 @@ export default function Login() {
                     autoComplete="new-password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    className="w-full pl-10 pr-12 py-3 mb-1 bg-black/10 border border-white/30 hover:border-x-green-300 text-white placeholder-white/50 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-300 focus:border-green-300 disabled:opacity-50"
+                    className="w-full pl-10 pr-12 py-3 mb-1 bg-black/10 border border-white/30 hover:border-green-300 text-white placeholder-white/50 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-300 focus:border-green-300 disabled:opacity-50"
                     placeholder="Enter your password"
                     disabled={isLoading}
                     required
@@ -374,12 +374,10 @@ export default function Login() {
                     setError("");
                     setResetSuccess(false);
                   }}
-                  className="group relative w-full rounded-xl border border-emerald-200/50 bg-white/80 px-4 py-2.5 text-sm font-medium text-emerald-700 shadow-sm backdrop-blur-sm transition-all duration-300 hover:border-emerald-300 hover:bg-emerald-50 hover:shadow-md hover:shadow-emerald-500/10 active:scale-[0.98]"
+                  className="group relative w-full rounded-lg border  bg-white/10 px-4 py-3 text-md font-medium text-white shadow-sm backdrop-blur-sm transition-all duration-300  hover:bg-white/20 hover:shadow-md  active:scale-[0.98]"
                 >
                   <span className="flex items-center justify-center gap-2">
-                    <svg className="size-4 transition-transform duration-300 group-hover:-translate-x-1" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-                    </svg>
+                    
                     Back to Login
                   </span>
                 </button>
