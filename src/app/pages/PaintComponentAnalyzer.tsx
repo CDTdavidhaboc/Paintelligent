@@ -1092,77 +1092,77 @@ Required JSON format:
     showNotification("🗑️ Image removed", "info");
   };
 
+  // ============================================================
+  // FIXED: scaledComponents - properly calculates amounts and prices for current batch size
+  // ============================================================
   const scaledComponents = useMemo(() => {
     if (!colorAnalysis) return [];
     
     const targetMl = batchSizeLiters * 1000;
     
-    // Check if the AI already gave us the correct amounts for this batch size
-    const totalAiAmount = colorAnalysis.paintComponents.reduce((sum, c) => sum + (c.amountMl || 0), 0);
+    // Get the original components
+    const components = colorAnalysis.paintComponents;
     
-    // If the AI amounts already match the target (within 0.1ml tolerance), use them directly
-    if (Math.abs(totalAiAmount - targetMl) < 0.1) {
-      return colorAnalysis.paintComponents.map((c) => {
-        const amountMl = c.amountMl || 0;
-        const priceValue = c.priceValue || 0;
-        
-        return {
-          ...c,
-          scaledAmountMl: amountMl.toFixed(1),
-          scaledPrice: priceValue
-        };
-      });
+    // Calculate the total original amount from AI
+    const totalOriginalAmount = components.reduce((sum, c) => sum + (c.amountMl || 0), 0);
+    
+    // If there are no amounts, return empty
+    if (totalOriginalAmount === 0) {
+      return components.map((c) => ({
+        ...c,
+        scaledAmountMl: "0.0",
+        scaledPrice: 0
+      }));
     }
     
-    // Otherwise, calculate based on percentages if available
-    const totalPercentage = colorAnalysis.paintComponents.reduce((sum, c) => sum + (c.percentage || 0), 0);
+    // Calculate the scaling factor
+    const scaleFactor = targetMl / totalOriginalAmount;
     
-    if (totalPercentage > 0) {
-      return colorAnalysis.paintComponents.map((c) => {
-        const percentage = c.percentage || 0;
-        const amountMl = (percentage / totalPercentage) * targetMl;
-        const priceValue = (percentage / totalPercentage) * (colorAnalysis.totalPrice || 0);
-        
-        return {
-          ...c,
-          scaledAmountMl: amountMl.toFixed(1),
-          scaledPrice: priceValue
-        };
-      });
-    }
+    // Calculate total percentage for fallback pricing
+    const totalPercentage = components.reduce((sum, c) => sum + (c.percentage || 0), 0);
     
-    // Fallback: use the original scaling but with the correct ratio
-    const originalTotal = colorAnalysis.paintComponents.reduce((sum, c) => sum + (c.amountMl || 0), 0);
-    if (originalTotal > 0) {
-      const scaleFactor = targetMl / originalTotal;
-      return colorAnalysis.paintComponents.map((c) => {
-        const amountMl = (c.amountMl || 0) * scaleFactor;
-        const priceValue = (c.priceValue || 0) * scaleFactor;
-        
-        return {
-          ...c,
-          scaledAmountMl: amountMl.toFixed(1),
-          scaledPrice: priceValue
-        };
-      });
-    }
-    
-    return colorAnalysis.paintComponents.map((c) => ({
-      ...c,
-      scaledAmountMl: (c.amountMl || 0).toFixed(1),
-      scaledPrice: c.priceValue || 0
-    }));
+    return components.map((c) => {
+      // Scale the amount
+      const amountMl = (c.amountMl || 0) * scaleFactor;
+      
+      // Calculate price for this component based on the scaled amount
+      let priceValue = 0;
+      
+      // If we have volume info, calculate price based on volume
+      if (c.volumeL && c.volumeL > 0 && c.estPricePHP > 0) {
+        // Price per liter * amount in liters
+        const pricePerLiter = c.estPricePHP / c.volumeL;
+        priceValue = pricePerLiter * (amountMl / 1000);
+      } 
+      // If we have a price value already, scale it proportionally
+      else if (c.priceValue > 0) {
+        priceValue = c.priceValue * scaleFactor;
+      }
+      // If we have percentage, use percentage-based distribution
+      else if (totalPercentage > 0 && c.percentage > 0 && colorAnalysis.totalPrice > 0) {
+        priceValue = (colorAnalysis.totalPrice * (c.percentage / totalPercentage)) * scaleFactor;
+      }
+      // Fallback: use unit price
+      else if (c.estPricePHP > 0) {
+        priceValue = c.estPricePHP * scaleFactor;
+      }
+      
+      return {
+        ...c,
+        scaledAmountMl: amountMl.toFixed(1),
+        scaledPrice: priceValue
+      };
+    });
   }, [colorAnalysis, batchSizeLiters]);
 
+  // ============================================================
+  // FIXED: totalPrice - always calculates from scaled components
+  // ============================================================
   const totalPrice = useMemo(
     () => {
-      if (colorAnalysis?.totalPrice != null && colorAnalysis.totalPrice > 0) {
-        // If the AI gave us a total price, use it directly (it's already scaled)
-        return colorAnalysis.totalPrice;
-      }
       return scaledComponents.reduce((sum, c) => sum + (c.scaledPrice || 0), 0);
     },
-    [scaledComponents, colorAnalysis],
+    [scaledComponents],
   );
 
   const isDataLoaded = uploadedData !== null && uploadedData.length > 0;
@@ -1808,7 +1808,6 @@ Required JSON format:
                       ))}
                     </div>
                   </div>
-                  
                 </div>
 
                 <div className="overflow-x-auto">

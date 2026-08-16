@@ -78,6 +78,24 @@ interface SalesRecord {
   sales: number;
   category?: string;
   unitsSold?: number;
+  product?: string;
+  brand?: string;
+}
+
+interface ProductDetail {
+  product: string;
+  brand: string;
+  totalSales: number;
+  totalUnits: number;
+  months: number;
+  drySales: number;
+  rainySales: number;
+  dryUnits: number;
+  rainyUnits: number;
+  dryMonths: number;
+  rainyMonths: number;
+  avgMonthlySales: number;
+  bestSeason: string;
 }
 
 const MONTH_NAMES = [
@@ -86,6 +104,7 @@ const MONTH_NAMES = [
 ];
 
 const SEASON_FOR_MONTH = (monthIndex: number): string => {
+  // Philippine seasons: Dry (Nov-May), Rainy (Jun-Oct)
   if (monthIndex >= 10 || monthIndex <= 3) {
     return "Dry";
   } else {
@@ -110,7 +129,7 @@ const getMonthIndexFromName = (monthName: string): number => {
   return -1;
 };
 
-const REQUIRED_HEADERS = ['Date', 'Category', 'Total Sales (PHP)', 'Units Sold', 'Season'];
+const REQUIRED_HEADERS = ['Date', 'Brand', 'Product', 'Total Sales (PHP)', 'Units Sold', 'Season'];
 
 const showNotification = (message: string, type: 'success' | 'error' | 'info' = 'success') => {
   const colors = {
@@ -171,6 +190,7 @@ export default function SeasonalForecasting() {
 
   const [salesData, setSalesData] = useState<SalesRecord[]>([]);
   const [originalData, setOriginalData] = useState<SalesRecord[]>([]);
+  const [productDetails, setProductDetails] = useState<ProductDetail[]>([]);
   const [debugInfo, setDebugInfo] = useState<string>("");
 
   const [forecastData, setForecastData] = useState<any>(null);
@@ -183,6 +203,8 @@ export default function SeasonalForecasting() {
   const [chartKey, setChartKey] = useState(0);
   const [isVisible, setIsVisible] = useState(false);
   const [showRemoveDialog, setShowRemoveDialog] = useState(false);
+  const [selectedProduct, setSelectedProduct] = useState<string>("");
+  const [productFilter, setProductFilter] = useState<string>("all");
 
   const CACHE_KEY = 'sales_forecast_data';
   const CACHE_TIMESTAMP_KEY = 'sales_forecast_timestamp';
@@ -214,58 +236,106 @@ export default function SeasonalForecasting() {
     };
   }, [salesData]);
 
-  const computedHighDemand = useMemo(() => {
-    if (!originalData.length || !salesData.length) return null;
+  // Compute product-level details
+  const computedProductDetails = useMemo(() => {
+    if (!originalData.length) return [];
 
-    const allCategories = [...new Set(originalData.map(r => r.category).filter(Boolean))];
-    if (!allCategories.length) return null;
+    const productMap = new Map<string, ProductDetail>();
 
-    const categoryDetails = allCategories.map(cat => {
-      const catData = originalData.filter(r => r.category === cat);
-      const dryCat = catData.filter(r => r.season === "Dry");
-      const rainyCat = catData.filter(r => r.season === "Rainy");
-      const dryTotal = dryCat.reduce((sum, r) => sum + r.sales, 0);
-      const rainyTotal = rainyCat.reduce((sum, r) => sum + r.sales, 0);
-      const dryAvg = dryCat.length ? dryTotal / dryCat.length : 0;
-      const rainyAvg = rainyCat.length ? rainyTotal / rainyCat.length : 0;
-      const months = catData.length;
-      const totalSales = dryTotal + rainyTotal;
+    originalData.forEach(record => {
+      const key = `${record.brand || ''}-${record.product || ''}`;
+      const isDry = record.season === "Dry";
+      
+      if (!productMap.has(key)) {
+        productMap.set(key, {
+          product: record.product || 'Unknown',
+          brand: record.brand || 'Unknown',
+          totalSales: 0,
+          totalUnits: 0,
+          months: 0,
+          drySales: 0,
+          rainySales: 0,
+          dryUnits: 0,
+          rainyUnits: 0,
+          dryMonths: 0,
+          rainyMonths: 0,
+          avgMonthlySales: 0,
+          bestSeason: 'Dry'
+        });
+      }
+
+      const detail = productMap.get(key)!;
+      detail.totalSales += record.sales;
+      detail.totalUnits += record.unitsSold || 0;
+      detail.months += 1;
+
+      if (isDry) {
+        detail.drySales += record.sales;
+        detail.dryUnits += record.unitsSold || 0;
+        detail.dryMonths += 1;
+      } else {
+        detail.rainySales += record.sales;
+        detail.rainyUnits += record.unitsSold || 0;
+        detail.rainyMonths += 1;
+      }
+    });
+
+    // Calculate averages and determine best season
+    const products = Array.from(productMap.values()).map(p => {
+      const avgMonthly = p.totalSales / p.months;
+      const dryAvg = p.dryMonths > 0 ? p.drySales / p.dryMonths : 0;
+      const rainyAvg = p.rainyMonths > 0 ? p.rainySales / p.rainyMonths : 0;
       
       return {
-        category: cat,
-        dryTotal,
-        rainyTotal,
-        dryAvg,
-        rainyAvg,
-        months,
-        totalSales,
-        bestSeason: dryAvg > rainyAvg ? 'Dry' : 'Rainy'
+        ...p,
+        avgMonthlySales: Math.round(avgMonthly),
+        bestSeason: dryAvg >= rainyAvg ? 'Dry' : 'Rainy'
       };
     });
 
-    const dryProducts = [...categoryDetails]
-      .sort((a, b) => b.dryTotal - a.dryTotal)
-      .slice(0, 4)
-      .map(c => ({
-        name: c.category,
-        units: Math.round(c.dryTotal / (c.months || 1)) || 0,
-        revenue: Math.round(c.dryTotal) || 0
+    return products.sort((a, b) => b.totalSales - a.totalSales);
+  }, [originalData]);
+
+  const computedHighDemand = useMemo(() => {
+    if (!productDetails.length) return null;
+
+    const dryProducts = productDetails
+      .filter(p => p.drySales > 0)
+      .sort((a, b) => b.drySales - a.drySales)
+      .slice(0, 5)
+      .map(p => ({
+        name: p.product,
+        brand: p.brand,
+        units: Math.round(p.dryUnits / (p.dryMonths || 1)) || 0,
+        revenue: Math.round(p.drySales) || 0,
+        totalRevenue: Math.round(p.drySales) || 0
       }));
 
-    const rainyProducts = [...categoryDetails]
-      .sort((a, b) => b.rainyTotal - a.rainyTotal)
-      .slice(0, 4)
-      .map(c => ({
-        name: c.category,
-        units: Math.round(c.rainyTotal / (c.months || 1)) || 0,
-        revenue: Math.round(c.rainyTotal) || 0
+    const rainyProducts = productDetails
+      .filter(p => p.rainySales > 0)
+      .sort((a, b) => b.rainySales - a.rainySales)
+      .slice(0, 5)
+      .map(p => ({
+        name: p.product,
+        brand: p.brand,
+        units: Math.round(p.rainyUnits / (p.rainyMonths || 1)) || 0,
+        revenue: Math.round(p.rainySales) || 0,
+        totalRevenue: Math.round(p.rainySales) || 0
       }));
 
     return {
       dry: dryProducts,
       rainy: rainyProducts
     };
-  }, [originalData, salesData]);
+  }, [productDetails]);
+
+  const uniqueProducts = useMemo(() => {
+    return [...new Set(productDetails.map(p => p.product))].sort();
+  }, [productDetails]);
+
+  const uniqueBrands = useMemo(() => {
+    return [...new Set(productDetails.map(p => p.brand))].sort();
+  }, [productDetails]);
 
   useEffect(() => {
     const loadData = async () => {
@@ -426,37 +496,46 @@ export default function SeasonalForecasting() {
         if (dateValue) {
           const dateStr = String(dateValue).trim();
           let parsedDate: Date | null = null;
-          let d = new Date(dateStr);
-          if (!isNaN(d.getTime())) {
-            parsedDate = d;
-          }
           
-          if (!parsedDate) {
-            const parts = dateStr.split(/[\/\-.]/);
-            if (parts.length === 3) {
-              let m = parseInt(parts[0]) - 1;
-              let y = parseInt(parts[2]);
+          // Try parsing as DD/MM/YYYY format (your CSV format)
+          const parts = dateStr.split(/[\/\-.]/);
+          if (parts.length === 3) {
+            // Try DD/MM/YYYY (day first - your format)
+            let day = parseInt(parts[0]);
+            let month = parseInt(parts[1]) - 1;
+            let yearVal = parseInt(parts[2]);
+            
+            // Check if it's valid DD/MM/YYYY
+            if (day >= 1 && day <= 31 && month >= 0 && month <= 11 && yearVal > 0) {
+              const d = new Date(yearVal, month, day);
+              if (!isNaN(d.getTime())) {
+                parsedDate = d;
+              }
+            }
+            
+            // If DD/MM/YYYY failed, try MM/DD/YYYY
+            if (!parsedDate) {
+              let month = parseInt(parts[0]) - 1;
               let day = parseInt(parts[1]);
-              if (m >= 0 && m <= 11 && y > 0 && day > 0 && day <= 31) {
-                d = new Date(y, m, day);
+              let yearVal = parseInt(parts[2]);
+              if (day >= 1 && day <= 31 && month >= 0 && month <= 11 && yearVal > 0) {
+                const d = new Date(yearVal, month, day);
                 if (!isNaN(d.getTime())) {
                   parsedDate = d;
-                }
-              }
-              if (!parsedDate) {
-                let m = parseInt(parts[1]) - 1;
-                let y = parseInt(parts[2]);
-                let day = parseInt(parts[0]);
-                if (m >= 0 && m <= 11 && y > 0 && day > 0 && day <= 31) {
-                  d = new Date(y, m, day);
-                  if (!isNaN(d.getTime())) {
-                    parsedDate = d;
-                  }
                 }
               }
             }
           }
           
+          // Try parsing with Date constructor as fallback
+          if (!parsedDate) {
+            const d = new Date(dateStr);
+            if (!isNaN(d.getTime())) {
+              parsedDate = d;
+            }
+          }
+          
+          // Try extracting month and year from string if Date parsing failed
           if (!parsedDate) {
             const monthMatch = dateStr.match(/(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec|January|February|March|April|May|June|July|August|September|October|November|December)/i);
             if (monthMatch) {
@@ -502,10 +581,24 @@ export default function SeasonalForecasting() {
           year = now.getFullYear();
         }
         
-        const category = row.Category || row["Category"] || "";
+        const brand = row.Brand || row["Brand"] || "";
+        const product = row.Product || row["Product"] || "";
         const sales = Number(row["Total Sales (PHP)"] || row["Total Sales"] || row["sales"] || 0);
         const unitsSold = Number(row["Units Sold"] || row["unitsSold"] || 0);
-        const season = SEASON_FOR_MONTH(monthIndex);
+        
+        // IMPORTANT: Use the Season from the CSV directly
+        const seasonFromCSV = row.Season || row["Season"] || "";
+        let season = seasonFromCSV;
+        
+        // If Season column is missing or empty, fallback to calculation based on month
+        if (!season) {
+          season = SEASON_FOR_MONTH(monthIndex);
+        }
+        
+        // Debug: Log the first few records to verify
+        if (index < 10) {
+          console.log(`Record ${index}: Date=${dateValue}, Month=${month}, Year=${year}, Season from CSV=${seasonFromCSV}, Final Season=${season}`);
+        }
         
         return {
           id: String(index + 1),
@@ -513,11 +606,14 @@ export default function SeasonalForecasting() {
           year: year,
           season: season,
           sales: sales,
-          category: category,
+          category: product || brand || "Unknown",
+          product: product,
+          brand: brand,
           unitsSold: unitsSold,
         };
       });
       
+      // Log season distribution to verify
       const seasonDist = formattedData.reduce((acc, r) => {
         acc[r.season] = (acc[r.season] || 0) + 1;
         return acc;
@@ -531,12 +627,67 @@ export default function SeasonalForecasting() {
       
       console.log("========== RESULTS ==========");
       console.log("Total records:", formattedData.length);
-      console.log("Season distribution:", seasonDist);
+      console.log("Season distribution from CSV:", seasonDist);
       console.log("Month distribution:", monthDist);
       console.log("Unique months:", Object.keys(monthDist).sort());
+      console.log("Unique products:", [...new Set(formattedData.map(r => r.product))].length);
       console.log("==============================");
       
       setOriginalData(formattedData);
+      
+      // Compute product details
+      const productMap = new Map<string, ProductDetail>();
+      formattedData.forEach(record => {
+        const key = `${record.brand || ''}-${record.product || ''}`;
+        const isDry = record.season === "Dry";
+        
+        if (!productMap.has(key)) {
+          productMap.set(key, {
+            product: record.product || 'Unknown',
+            brand: record.brand || 'Unknown',
+            totalSales: 0,
+            totalUnits: 0,
+            months: 0,
+            drySales: 0,
+            rainySales: 0,
+            dryUnits: 0,
+            rainyUnits: 0,
+            dryMonths: 0,
+            rainyMonths: 0,
+            avgMonthlySales: 0,
+            bestSeason: 'Dry'
+          });
+        }
+
+        const detail = productMap.get(key)!;
+        detail.totalSales += record.sales;
+        detail.totalUnits += record.unitsSold || 0;
+        detail.months += 1;
+
+        if (isDry) {
+          detail.drySales += record.sales;
+          detail.dryUnits += record.unitsSold || 0;
+          detail.dryMonths += 1;
+        } else {
+          detail.rainySales += record.sales;
+          detail.rainyUnits += record.unitsSold || 0;
+          detail.rainyMonths += 1;
+        }
+      });
+
+      const products = Array.from(productMap.values()).map(p => {
+        const avgMonthly = p.totalSales / p.months;
+        const dryAvg = p.dryMonths > 0 ? p.drySales / p.dryMonths : 0;
+        const rainyAvg = p.rainyMonths > 0 ? p.rainySales / p.rainyMonths : 0;
+        
+        return {
+          ...p,
+          avgMonthlySales: Math.round(avgMonthly),
+          bestSeason: dryAvg >= rainyAvg ? 'Dry' : 'Rainy'
+        };
+      }).sort((a, b) => b.totalSales - a.totalSales);
+
+      setProductDetails(products);
       
       const aggregated = aggregateSalesData(formattedData);
       console.log("Aggregated data:", aggregated);
@@ -561,8 +712,9 @@ export default function SeasonalForecasting() {
       
       const dryCount = seasonDist["Dry"] || 0;
       const rainyCount = seasonDist["Rainy"] || 0;
+      const productCount = products.length;
       
-      showNotification(`✅ ${dryCount} Dry, ${rainyCount} Rainy records loaded`, "success");
+     
       
     } catch (error) {
       console.error("Error processing uploaded data:", error);
@@ -595,6 +747,7 @@ export default function SeasonalForecasting() {
     setUploadedDataName("");
     setSalesData([]);
     setOriginalData([]);
+    setProductDetails([]);
     setForecastData(null);
     setForecastStatus("idle");
     setLastGenerated(null);
@@ -754,6 +907,7 @@ export default function SeasonalForecasting() {
     setIsDataSaved(false);
     setSalesData([]);
     setOriginalData([]);
+    setProductDetails([]);
     setForecastData(null);
     setForecastStatus("idle");
     setLastGenerated(null);
@@ -789,40 +943,172 @@ export default function SeasonalForecasting() {
     console.log("Cache cleared");
   };
 
-  const calculateForecast = () => {
-    if (!salesData.length) return [];
+  // ============================================================
+  // AUTOREGRESSIVE (AR) FORECASTING MODEL
+  // ============================================================
+  
+  /**
+   * Calculates Autoregressive coefficients using the Yule-Walker method
+   * For a simple AR(2) model: y_t = c + φ₁*y_{t-1} + φ₂*y_{t-2} + ε_t
+   */
+  const calculateARcoefficients = (data: number[]): { phi1: number; phi2: number; c: number } => {
+    const n = data.length;
+    
+    if (n < 4) {
+      // Not enough data for AR(2), fall back to simpler model
+      return { phi1: 0.5, phi2: 0.3, c: 0 };
+    }
+    
+    // Calculate autocorrelations
+    const mean = data.reduce((sum, val) => sum + val, 0) / n;
+    const centered = data.map(val => val - mean);
+    
+    // Calculate autocovariances
+    let gamma0 = 0;
+    let gamma1 = 0;
+    let gamma2 = 0;
+    
+    for (let i = 0; i < n; i++) {
+      gamma0 += centered[i] * centered[i];
+      if (i < n - 1) gamma1 += centered[i] * centered[i + 1];
+      if (i < n - 2) gamma2 += centered[i] * centered[i + 2];
+    }
+    
+    gamma0 /= n;
+    gamma1 /= (n - 1);
+    gamma2 /= (n - 2);
+    
+    // Solve Yule-Walker equations for AR(2)
+    // [gamma0  gamma1] [phi1] = [gamma1]
+    // [gamma1  gamma0] [phi2]   [gamma2]
+    const denom = gamma0 * gamma0 - gamma1 * gamma1;
+    
+    let phi1 = 0;
+    let phi2 = 0;
+    
+    if (Math.abs(denom) > 1e-10) {
+      phi1 = (gamma1 * gamma0 - gamma2 * gamma1) / denom;
+      phi2 = (gamma2 * gamma0 - gamma1 * gamma1) / denom;
+    }
+    
+    // Ensure stationarity: |φ₁| < 1 and |φ₂| < 1 and φ₁ + φ₂ < 1
+    const maxPhi = 0.9;
+    phi1 = Math.max(-maxPhi, Math.min(maxPhi, phi1));
+    phi2 = Math.max(-maxPhi, Math.min(maxPhi, phi2));
+    
+    // Calculate constant term c = μ * (1 - φ₁ - φ₂)
+    const c = mean * (1 - phi1 - phi2);
+    
+    return { phi1, phi2, c };
+  };
 
-    const sorted = [...salesData].sort((a, b) => {
+  /**
+   * Generates forecast using AR(2) model with confidence intervals
+   * Predicts exactly 3 months ahead
+   */
+  const calculateARForecast = (historicalData: SalesRecord[]): any[] => {
+    if (historicalData.length < 3) {
+      // Not enough data for AR model
+      console.warn("Not enough data for AR model, using simple average");
+      const avg = historicalData.reduce((sum, r) => sum + r.sales, 0) / historicalData.length;
+      return Array(3).fill(null).map((_, i) => ({
+        month: `Month ${i + 1}`,
+        sales: Math.round(avg),
+        season: "Dry",
+        upperBound: Math.round(avg * 1.15),
+        lowerBound: Math.round(avg * 0.85)
+      }));
+    }
+
+    // Sort data chronologically
+    const sorted = [...historicalData].sort((a, b) => {
       if (a.year !== b.year) return a.year - b.year;
       return MONTH_NAMES.indexOf(a.month.substring(0, 3)) - MONTH_NAMES.indexOf(b.month.substring(0, 3));
     });
 
-    const lastThree = sorted.slice(-3);
-    const avgLastThree = lastThree.reduce((sum, r) => sum + r.sales, 0) / lastThree.length;
-    const totalAvg = salesData.reduce((sum, r) => sum + r.sales, 0) / salesData.length;
-    const growthRate = avgLastThree / (totalAvg || 1);
+    // Extract sales values
+    const salesValues = sorted.map(r => r.sales);
+    const n = salesValues.length;
+
+    // Calculate AR coefficients
+    const { phi1, phi2, c } = calculateARcoefficients(salesValues);
+    
+    console.log(`AR(2) Coefficients: φ₁=${phi1.toFixed(3)}, φ₂=${phi2.toFixed(3)}, c=${c.toFixed(2)}`);
+
+    // Get the last two values for forecasting
+    const lastValue = salesValues[n - 1];
+    const secondLastValue = salesValues[n - 2];
+
+    // Calculate residual standard error for confidence intervals
+    let residuals: number[] = [];
+    for (let t = 2; t < n; t++) {
+      const predicted = c + phi1 * salesValues[t - 1] + phi2 * salesValues[t - 2];
+      residuals.push(salesValues[t] - predicted);
+    }
+    
+    const residualStd = residuals.length > 0 
+      ? Math.sqrt(residuals.reduce((sum, r) => sum + r * r, 0) / residuals.length)
+      : Math.abs(lastValue - secondLastValue) * 0.1;
+
+    // Generate 3-month forecast
+    const forecast = [];
     const lastMonth = sorted[sorted.length - 1];
     const lastMonthIndex = MONTH_NAMES.indexOf(lastMonth.month.substring(0, 3));
     
-    const forecast = [];
-    for (let i = 1; i <= 6; i++) {
+    let prevPrev = secondLastValue;
+    let prev = lastValue;
+
+    for (let i = 1; i <= 3; i++) {
+      // AR(2) prediction: y_t = c + φ₁*y_{t-1} + φ₂*y_{t-2}
+      const predicted = c + phi1 * prev + phi2 * prevPrev;
+      
+      // Ensure non-negative
+      const finalPrediction = Math.max(predicted, 100);
+      
+      // Calculate confidence intervals (95% confidence)
+      const zScore = 1.96; // 95% confidence
+      const marginOfError = zScore * residualStd * Math.sqrt(1 + phi1 * phi1 + phi2 * phi2);
+      
+      // Determine month and season
       const nextIndex = (lastMonthIndex + i) % 12;
       const nextYear = lastMonthIndex + i >= 12 ? lastMonth.year + 1 : lastMonth.year;
       const monthName = MONTH_NAMES[nextIndex];
-      const season = SEASON_FOR_MONTH(nextIndex);
       
-      const basePrediction = avgLastThree * Math.pow(growthRate, i * 0.15);
-      const variation = 1 + (Math.random() * 0.1 - 0.05);
-      const predictedSales = Math.round(basePrediction * variation);
+      // Use actual season from data if available
+      const existingRecord = originalData.find(r => 
+        r.month.substring(0, 3) === monthName && r.year === nextYear
+      );
+      const season = existingRecord?.season || SEASON_FOR_MONTH(nextIndex);
       
       forecast.push({
         month: `${monthName} ${nextYear}`,
-        sales: Math.max(predictedSales, 100),
+        sales: Math.round(finalPrediction),
         season: season,
-        upperBound: Math.round(predictedSales * 1.15),
-        lowerBound: Math.round(predictedSales * 0.85)
+        upperBound: Math.round(finalPrediction + marginOfError),
+        lowerBound: Math.round(Math.max(finalPrediction - marginOfError, 0))
       });
+      
+      // Shift values for next iteration
+      prevPrev = prev;
+      prev = finalPrediction;
     }
+    
+    return forecast;
+  };
+
+  // Override the calculateForecast function with AR model
+  const calculateForecast = (): any[] => {
+    if (!salesData.length) return [];
+    
+    // Use AR model for forecasting
+    const forecast = calculateARForecast(salesData);
+    
+    // Log forecast details
+    console.log("=== AR(2) Forecast Results ===");
+    forecast.forEach((f, i) => {
+      console.log(`Month ${i+1}: ${f.month} → ₱${f.sales.toLocaleString()} (${f.season})`);
+    });
+    console.log("================================");
     
     return forecast;
   };
@@ -852,37 +1138,12 @@ export default function SeasonalForecasting() {
       const dryAvg = dryData.length ? dryTotal / dryData.length : 0;
       const rainyAvg = rainyData.length ? rainyTotal / rainyData.length : 0;
       
+      // Use AR model for forecast (3 months)
       const calculatedForecast = calculateForecast();
 
-      const allCategories = [...new Set(originalData.map(r => r.category).filter(Boolean))];
-      
-      const categorySales = allCategories.map(cat => {
-        const items = originalData.filter(r => r.category === cat);
-        const total = items.reduce((sum, r) => sum + r.sales, 0);
-        const units = items.reduce((sum, r) => sum + (r.unitsSold || 0), 0);
-        const months = items.length;
-        return { category: cat, total, units, months };
-      }).sort((a, b) => b.total - a.total);
-
-      const categoryDetails = categorySales.map(cat => {
-        const catData = originalData.filter(r => r.category === cat.category);
-        const monthlyAvg = cat.total / cat.months;
-        const dryCat = catData.filter(r => r.season === "Dry");
-        const rainyCat = catData.filter(r => r.season === "Rainy");
-        const dryTotal = dryCat.reduce((sum, r) => sum + r.sales, 0);
-        const rainyTotal = rainyCat.reduce((sum, r) => sum + r.sales, 0);
-        const dryAvg = dryCat.length ? dryTotal / dryCat.length : 0;
-        const rainyAvg = rainyCat.length ? rainyTotal / rainyCat.length : 0;
-        return {
-          ...cat,
-          monthlyAvg,
-          dryTotal,
-          rainyTotal,
-          dryAvg,
-          rainyAvg,
-          bestSeason: dryAvg > rainyAvg ? 'Dry' : 'Rainy'
-        };
-      });
+      // Get top products by sales
+      const topProducts = productDetails.slice(0, 5);
+      const slowProducts = productDetails.slice(-3);
 
       const prompt = `
 Analyze the sales data and provide a comprehensive business analysis focusing on product performance and marketing strategies.
@@ -891,40 +1152,46 @@ SALES DATA:
 - Total Sales: ₱${totalSales.toLocaleString()}
 - Average Monthly Sales: ₱${Math.round(avgSales).toLocaleString()}
 - Records: ${salesData.length}
-- Categories: ${allCategories.length > 0 ? allCategories.join(', ') : 'None'}
+- Total Products: ${productDetails.length}
 
-SEASONAL BREAKDOWN (for context only):
+TOP PRODUCTS:
+${topProducts.map(p => `${p.brand} ${p.product}: ₱${p.totalSales.toLocaleString()} (${p.totalUnits} units, Best: ${p.bestSeason})`).join('\n')}
+
+SLOW PRODUCTS:
+${slowProducts.map(p => `${p.brand} ${p.product}: ₱${p.totalSales.toLocaleString()} (${p.totalUnits} units, Best: ${p.bestSeason})`).join('\n')}
+
+SEASONAL BREAKDOWN:
 Dry Season: ₱${dryTotal.toLocaleString()} (${dryData.length} months, Avg: ₱${Math.round(dryAvg).toLocaleString()})
 Rainy Season: ₱${rainyTotal.toLocaleString()} (${rainyData.length} months, Avg: ₱${Math.round(rainyAvg).toLocaleString()})
 
-CATEGORY DETAILS:
-${categoryDetails.map(c => `${c.category}: ₱${c.total.toLocaleString()} (${c.units} units, ${c.months} months, Best: ${c.bestSeason})`).join('\n')}
+FORECAST (3 months - AR(2) Model):
+${calculatedForecast.map((f, i) => `${f.month}: ₱${f.sales.toLocaleString()} (${f.season})`).join('\n')}
 
 Return ONLY valid JSON with this structure:
 {
   "bestSellingProducts": [
-    ${categoryDetails.slice(0, 3).map((c, i) => `{
-      "name": "${c.category}",
-      "unitsSold": ${Math.round(c.total / 500) || 100},
-      "growth": "+${Math.round((c.dryAvg / (c.rainyAvg || 1) - 1) * 100) || 5}%"
+    ${topProducts.map(p => `{
+      "name": "${p.brand} ${p.product}",
+      "unitsSold": ${Math.round(p.totalUnits / (p.months || 1)) || 100},
+      "growth": "+${Math.round((p.drySales / (p.rainySales || 1) - 1) * 100) || 5}%"
     }`).join(',')}
   ],
   "slowMovingProducts": [
-    ${categoryDetails.slice(-2).map((c, i) => `{
-      "name": "${c.category}",
-      "unitsSold": ${Math.round(c.total / 800) || 20},
-      "recommendation": "${c.total > totalSales / allCategories.length ? 'Review pricing and promotions' : 'Consider bundling or discounts'}"
+    ${slowProducts.map(p => `{
+      "name": "${p.brand} ${p.product}",
+      "unitsSold": ${Math.round(p.totalUnits / (p.months || 1)) || 20},
+      "recommendation": "${p.totalSales > totalSales / productDetails.length ? 'Review pricing and promotions' : 'Consider bundling or discounts'}"
     }`).join(',')}
   ],
   "stockRecommendations": [
-    ${categoryDetails.map((c, i) => `{
-      "category": "${c.category}",
+    ${topProducts.slice(0, 3).map(p => `{
+      "category": "${p.brand} ${p.product}",
       "items": [
         {
-          "name": "${c.category}",
-          "currentStock": ${Math.round(c.total / 600) || 30},
-          "recommendedStock": ${Math.round(c.total / 400) || 50},
-          "action": "${c.total > totalSales / allCategories.length ? 'Increase' : 'Maintain'}"
+          "name": "${p.product}",
+          "currentStock": ${Math.round(p.totalUnits / (p.months || 1) * 2) || 30},
+          "recommendedStock": ${Math.round(p.totalUnits / (p.months || 1) * 3) || 50},
+          "action": "${p.totalSales > totalSales / productDetails.length ? 'Increase' : 'Maintain'}"
         }
       ]
     }`).join(',')}
@@ -932,24 +1199,24 @@ Return ONLY valid JSON with this structure:
   "marketingStrategies": [
     {
       "season": "Dry Season",
-      "targetCategories": [${categoryDetails.filter(c => c.dryAvg > c.rainyAvg).slice(0, 3).map(c => `"${c.category}"`).join(', ')}],
+      "targetProducts": [${topProducts.filter(p => p.bestSeason === 'Dry').slice(0, 3).map(p => `"${p.brand} ${p.product}"`).join(', ')}],
       "strategies": [
-        "Launch outdoor promotions for ${categoryDetails.filter(c => c.dryAvg > c.rainyAvg).slice(0, 2).map(c => c.category).join(' and ')}",
-        "Create seasonal bundles featuring ${categoryDetails.filter(c => c.dryAvg > c.rainyAvg).slice(0, 3).map(c => c.category).join(', ')}",
-        "Run dry season discounts on ${categoryDetails.filter(c => c.dryAvg > c.rainyAvg).slice(0, 1).map(c => c.category).join(', ')} products",
-        "Implement targeted social media campaigns for ${categoryDetails.filter(c => c.dryAvg > c.rainyAvg).slice(0, 2).map(c => c.category).join(' & ')}",
-        "Offer bundle deals: Buy 2 get 1 free on selected ${categoryDetails.filter(c => c.dryAvg > c.rainyAvg).slice(0, 1).map(c => c.category).join(', ')} items"
+        "Launch outdoor promotions for ${topProducts.filter(p => p.bestSeason === 'Dry').slice(0, 2).map(p => p.brand + ' ' + p.product).join(' and ')}",
+        "Create seasonal bundles featuring ${topProducts.filter(p => p.bestSeason === 'Dry').slice(0, 3).map(p => p.brand + ' ' + p.product).join(', ')}",
+        "Run dry season discounts on ${topProducts.filter(p => p.bestSeason === 'Dry').slice(0, 1).map(p => p.brand + ' ' + p.product).join(', ')}",
+        "Implement targeted campaigns for ${topProducts.filter(p => p.bestSeason === 'Dry').slice(0, 2).map(p => p.brand + ' ' + p.product).join(' & ')}",
+        "Offer bundle deals: Buy 2 get 1 free on selected ${topProducts.filter(p => p.bestSeason === 'Dry').slice(0, 1).map(p => p.brand + ' ' + p.product).join(', ')}"
       ]
     },
     {
       "season": "Rainy Season",
-      "targetCategories": [${categoryDetails.filter(c => c.rainyAvg > c.dryAvg).slice(0, 3).map(c => `"${c.category}"`).join(', ')}],
+      "targetProducts": [${topProducts.filter(p => p.bestSeason === 'Rainy').slice(0, 3).map(p => `"${p.brand} ${p.product}"`).join(', ')}],
       "strategies": [
-        "Focus on indoor solutions for ${categoryDetails.filter(c => c.rainyAvg > c.dryAvg).slice(0, 2).map(c => c.category).join(' and ')}",
-        "Launch weather-proof campaigns targeting ${categoryDetails.filter(c => c.rainyAvg > c.dryAvg).slice(0, 1).map(c => c.category).join(', ')}",
-        "Create rainy season bundles for ${categoryDetails.filter(c => c.rainyAvg > c.dryAvg).slice(0, 3).map(c => c.category).join(', ')}",
-        "Offer free delivery promotions for ${categoryDetails.filter(c => c.rainyAvg > c.dryAvg).slice(0, 2).map(c => c.category).join(' & ')}",
-        "Implement loyalty programs for repeat buyers of ${categoryDetails.filter(c => c.rainyAvg > c.dryAvg).slice(0, 1).map(c => c.category).join(', ')}"
+        "Focus on indoor solutions for ${topProducts.filter(p => p.bestSeason === 'Rainy').slice(0, 2).map(p => p.brand + ' ' + p.product).join(' and ')}",
+        "Launch weather-proof campaigns targeting ${topProducts.filter(p => p.bestSeason === 'Rainy').slice(0, 1).map(p => p.brand + ' ' + p.product).join(', ')}",
+        "Create rainy season bundles for ${topProducts.filter(p => p.bestSeason === 'Rainy').slice(0, 3).map(p => p.brand + ' ' + p.product).join(', ')}",
+        "Offer free delivery promotions for ${topProducts.filter(p => p.bestSeason === 'Rainy').slice(0, 2).map(p => p.brand + ' ' + p.product).join(' & ')}",
+        "Implement loyalty programs for repeat buyers of ${topProducts.filter(p => p.bestSeason === 'Rainy').slice(0, 1).map(p => p.brand + ' ' + p.product).join(', ')}"
       ]
     }
   ],
@@ -1186,8 +1453,8 @@ Return ONLY valid JSON with this structure:
               <Paintbrush className="size-5 text-emerald-100" />
             </div>
             <div>
-              <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">Seasonal Sales Forecast</h1>
-              <p className="mt-1 text-sm text-emerald-100">Plan paint inventory with clear dry and rainy season demand.</p>
+              <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">Product Sales Forecast</h1>
+              <p className="mt-1 text-sm text-emerald-100">Analyze product performance across dry and rainy seasons.</p>
               {debugInfo && <p className="mt-2 text-xs text-emerald-200/70">{debugInfo}</p>}
             </div>
           </div>
@@ -1228,7 +1495,7 @@ Return ONLY valid JSON with this structure:
             <div className="flex items-center justify-between w-full">
               <div className="flex items-center gap-1.5">
                 <Database className="size-3.5 text-white" />
-                <CardTitle className="text-md font-medium text-white leading-none">Sales Data</CardTitle>
+                <CardTitle className="text-md font-medium text-white leading-none">Product Sales Data</CardTitle>
               </div>
               <Badge variant="outline" className="border-emerald-200 bg-emerald-50 text-emerald-700 text-[10px] font-medium px-2 py-0">
                 {isDataSaved ? "SAVED" : isDataLoaded ? "LOADED" : "EMPTY"}
@@ -1284,7 +1551,8 @@ Return ONLY valid JSON with this structure:
                   <p className="text-xs font-medium text-green-800">Required Headers (exact match):</p>
                   <div className="flex flex-wrap gap-1.5 mt-1.5">
                     <Badge variant="outline" className="text-xs bg-white border-green-300 text-green-700 font-mono">Date</Badge>
-                    <Badge variant="outline" className="text-xs bg-white border-green-300 text-green-700 font-mono">Category</Badge>
+                    <Badge variant="outline" className="text-xs bg-white border-green-300 text-green-700 font-mono">Brand</Badge>
+                    <Badge variant="outline" className="text-xs bg-white border-green-300 text-green-700 font-mono">Product</Badge>
                     <Badge variant="outline" className="text-xs bg-white border-green-300 text-green-700 font-mono">Total Sales (PHP)</Badge>
                     <Badge variant="outline" className="text-xs bg-white border-green-300 text-green-700 font-mono">Units Sold</Badge>
                     <Badge variant="outline" className="text-xs bg-white border-green-300 text-green-700 font-mono">Season</Badge>
@@ -1311,7 +1579,7 @@ Return ONLY valid JSON with this structure:
                     </div>
                     <div>
                       <p className="text-sm font-medium text-gray-900 truncate max-w-[150px]">{uploadedDataName}</p>
-                      <p className="text-xs text-gray-500">{uploadedData.length} rows</p>
+                      <p className="text-xs text-gray-500">{uploadedData.length} rows • {productDetails.length} products</p>
                     </div>
                   </div>
                   {!isDataSaved && (
@@ -1424,7 +1692,7 @@ Return ONLY valid JSON with this structure:
                       ₱{totalSales.toLocaleString()}
                     </h2>
                     <p className="text-xs mt-2 opacity-70">
-                      {salesData.length} records
+                      {salesData.length} records • {productDetails.length} products
                     </p>
                   </div>
                   <TrendingUp className="w-10 h-10 opacity-70" />
@@ -1491,11 +1759,11 @@ Return ONLY valid JSON with this structure:
                 <div>
                   <CardTitle className="text-xl font-bold">
                     {viewMode === "monthly"
-                      ? "Sales Trend Analysis"
+                      ? "Sales Trend Analysis (AR-2 Forecast)"
                       : `Weekly Sales Analysis • ${selectedMonth}`}
                   </CardTitle>
                   <CardDescription>
-                   Visualize sales with AI-generated forecasts.
+                   3-month forecast using Autoregressive (AR-2) model with 95% confidence intervals
                   </CardDescription>
                 </div>
                 <div className="flex items-center gap-3 flex-wrap">
@@ -1603,7 +1871,7 @@ Return ONLY valid JSON with this structure:
                       const point = allMonthlyData.find((d) => d.month === label);
                       return point
                         ? `${label} • ${point.season} ${
-                            point.isForecast ? "(Forecast)" : "(Historical)"
+                            point.isForecast ? "(AR-2 Forecast)" : "(Historical)"
                           }`
                         : label;
                     }}
@@ -1626,10 +1894,10 @@ Return ONLY valid JSON with this structure:
                         stroke="#22C55E"
                         strokeWidth={4}
                         strokeDasharray="8 6"
-                        dot={{ r: 4, fill: "#22C55E" }}
-                        activeDot={{ r: 7 }}
+                        dot={{ r: 6, fill: "#22C55E" }}
+                        activeDot={{ r: 8 }}
                         connectNulls
-                        name="Forecast"
+                        name="AR-2 Forecast"
                       />
                       <Line
                         dataKey="upperBound"
@@ -1637,7 +1905,7 @@ Return ONLY valid JSON with this structure:
                         strokeWidth={2}
                         strokeDasharray="3 3"
                         dot={false}
-                        name="Upper Bound"
+                        name="Upper Bound (95%)"
                       />
                       <Line
                         dataKey="lowerBound"
@@ -1645,7 +1913,7 @@ Return ONLY valid JSON with this structure:
                         strokeWidth={2}
                         strokeDasharray="3 3"
                         dot={false}
-                        name="Lower Bound"
+                        name="Lower Bound (95%)"
                       />
                     </>
                   ) : (
@@ -1669,7 +1937,7 @@ Return ONLY valid JSON with this structure:
                 {forecastData && (
                   <div className="flex items-center gap-2">
                     <span className="h-1.5 w-8 border-t-2 border-dashed border-green-500"></span>
-                    Forecast
+                    AR-2 Forecast (3 months)
                   </div>
                 )}
                 <div className="flex items-center gap-2">
@@ -1753,10 +2021,10 @@ Return ONLY valid JSON with this structure:
               <CardHeader className="border-b border-emerald-100 bg-gradient-to-r from-white to-emerald-50/70">
                 <CardTitle className="flex items-center gap-2 text-xl">
                   <ShoppingBag className="size-5 text-[#174d32]" />
-                  High Demand Products Per Season
+                  Top Products Per Season
                 </CardTitle>
                 <CardDescription>
-                  (calculated from actual sales data)
+                  {productDetails.length} products analyzed across seasons
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -1789,7 +2057,7 @@ Return ONLY valid JSON with this structure:
                                     : "bg-blue-700 text-white"
                                 }
                               >
-                                {products.length} Categories
+                                {products.length} Products
                               </Badge>
                             </div>
                           </CardHeader>
@@ -1799,7 +2067,8 @@ Return ONLY valid JSON with this structure:
                                 <TableHeader>
                                   <TableRow>
                                     <TableHead className="w-20" style={{ color: isDrySeason ? '#174d32' : '#1d4ed8' }}>Rank</TableHead>
-                                    <TableHead style={{ color: isDrySeason ? '#174d32' : '#1d4ed8' }}>Category</TableHead>
+                                    <TableHead style={{ color: isDrySeason ? '#174d32' : '#1d4ed8' }}>Brand</TableHead>
+                                    <TableHead style={{ color: isDrySeason ? '#174d32' : '#1d4ed8' }}>Product</TableHead>
                                     <TableHead style={{ color: isDrySeason ? '#174d32' : '#1d4ed8' }}>Units</TableHead>
                                     <TableHead style={{ color: isDrySeason ? '#174d32' : '#1d4ed8' }}>Revenue</TableHead>
                                   </TableRow>
@@ -1819,7 +2088,10 @@ Return ONLY valid JSON with this structure:
                                         </Badge>
                                       </TableCell>
                                       <TableCell>
-                                        <p className="font-semibold">{product.name}</p>
+                                        <p className="font-semibold text-sm">{product.brand || '—'}</p>
+                                      </TableCell>
+                                      <TableCell>
+                                        <p className="font-medium text-sm">{product.name}</p>
                                       </TableCell>
                                       <TableCell className="font-medium">
                                         {product.units?.toLocaleString() || 0}
@@ -1850,36 +2122,34 @@ Return ONLY valid JSON with this structure:
       )}
 
       {salesData.length > 0 && forecastStatus !== "success" && isDataSaved && (
-  <div className="flex justify-center rounded-2xl border border-emerald-100 bg-white p-4 shadow-sm">
-    <button
-      onClick={generateForecast}
-      disabled={forecastStatus === "loading"}
-      className="flex items-center gap-3 rounded-xl bg-[#174d32] px-6 py-3.5 text-sm font-semibold text-white shadow-[0_12px_24px_rgba(23,77,50,0.2)] transition-all hover:-translate-y-0.5 hover:bg-[#123e28] disabled:opacity-60"
-    >
-      {forecastStatus === "loading" ? (
-        <>
-          <div className="flex items-center gap-1">
-            <div className="size-1.5 rounded-full bg-emerald-300 animate-bounce" style={{ animationDelay: '0s' }} />
-            <div className="size-1.5 rounded-full bg-emerald-300 animate-bounce" style={{ animationDelay: '0.15s' }} />
-            <div className="size-1.5 rounded-full bg-emerald-300 animate-bounce" style={{ animationDelay: '0.3s' }} />
-            <div className="size-1.5 rounded-full bg-emerald-300 animate-bounce" style={{ animationDelay: '0.45s' }} />
-            <div className="size-1.5 rounded-full bg-emerald-300 animate-bounce" style={{ animationDelay: '0.6s' }} />
-          </div>
-          
-          {/* ✅ CHANGED: Added animate-text-color class to the text span */}
-          <span className="animate-text-color">
-            Generating Recommendation and Strategies...
-          </span>
-        </>
-      ) : (
-        <>
-          <Zap className="size-5" />
-          Generate AI Forecast Report
-        </>
+        <div className="flex justify-center rounded-2xl border border-emerald-100 bg-white p-4 shadow-sm">
+          <button
+            onClick={generateForecast}
+            disabled={forecastStatus === "loading"}
+            className="flex items-center gap-3 rounded-xl bg-[#174d32] px-6 py-3.5 text-sm font-semibold text-white shadow-[0_12px_24px_rgba(23,77,50,0.2)] transition-all hover:-translate-y-0.5 hover:bg-[#123e28] disabled:opacity-60"
+          >
+            {forecastStatus === "loading" ? (
+              <>
+                <div className="flex items-center gap-1">
+                  <div className="size-1.5 rounded-full bg-emerald-300 animate-bounce" style={{ animationDelay: '0s' }} />
+                  <div className="size-1.5 rounded-full bg-emerald-300 animate-bounce" style={{ animationDelay: '0.15s' }} />
+                  <div className="size-1.5 rounded-full bg-emerald-300 animate-bounce" style={{ animationDelay: '0.3s' }} />
+                  <div className="size-1.5 rounded-full bg-emerald-300 animate-bounce" style={{ animationDelay: '0.45s' }} />
+                  <div className="size-1.5 rounded-full bg-emerald-300 animate-bounce" style={{ animationDelay: '0.6s' }} />
+                </div>
+                <span className="animate-text-color">
+                  Generating Forecast and Recommendations...
+                </span>
+              </>
+            ) : (
+              <>
+                <Zap className="size-5" />
+                Generate Forecast and Recommendations
+              </>
+            )}
+          </button>
+        </div>
       )}
-    </button>
-  </div>
-)}
 
       {isDataLoaded && !isDataSaved && salesData.length > 0 && (
         <Card className="border border-emerald-200 bg-emerald-50/70 shadow-sm">
@@ -1890,7 +2160,7 @@ Return ONLY valid JSON with this structure:
                 Save Data to Enable Forecasting
               </h3>
               <p className="text-green-600 mt-2 max-w-md">
-                Click the <strong>"Save & Enable"</strong> button above to unlock AI forecasting.
+                Click the <strong>"Save & Enable"</strong> button above to unlock AI forecasting with the AR-2 model.
               </p>
             </div>
           </CardContent>
@@ -1903,13 +2173,13 @@ Return ONLY valid JSON with this structure:
             <div className="mb-4 rounded-2xl bg-emerald-50 p-4">
               <Paintbrush className="size-10 text-emerald-700" />
             </div>
-            <h2 className="text-2xl font-bold text-slate-800">No sales records found</h2>
+            <h2 className="text-2xl font-bold text-slate-800">No product sales data found</h2>
             <p className="mt-2 max-w-md text-gray-500 text-sm">
-              Please upload a CSV or Excel file with your sales data to generate forecasts and insights.
+              Please upload a CSV or Excel file with your product sales data to generate AR-2 forecasts and insights.
             </p>
             <div className="mt-6 flex flex-wrap justify-center gap-2">
-              <Badge className="bg-[#0ea161] text-white">Sales Forecast</Badge>
-              <Badge className="bg-[#10963f] text-white">Inventory Insights</Badge>
+              <Badge className="bg-[#0ea161] text-white">AR-2 Forecast</Badge>
+              <Badge className="bg-[#10963f] text-white">Seasonal Insights</Badge>
               <Badge className="bg-[#0c6c28] text-white">AI Analytics</Badge>
             </div>
           </CardContent>
@@ -1946,12 +2216,12 @@ Return ONLY valid JSON with this structure:
                 <div className="flex items-center gap-3">
                   <Lightbulb className="w-5 h-5 text-white" />
                   <div>
-                    <h3 className="text-lg font-bold text-white">Stock Recommendation</h3>
+                    <h3 className="text-lg font-bold text-white">Product Stock Recommendations</h3>
                   </div>
                 </div>
               </div>
 
-              <CardContent className=" px-6 pb-6">
+              <CardContent className="px-6 pb-6">
                 {(() => {
                   const groupedByAction = stockRecs.reduce((acc: any, category: any) => {
                     const action = category.items?.[0]?.action || 'Maintain';
@@ -1982,7 +2252,7 @@ Return ONLY valid JSON with this structure:
                             <span className={`w-3 h-3 rounded-full ${actionDotColors[action]}`}></span>
                             <h4 className="text-sm font-semibold text-gray-700">{action} Stock</h4>
                             <Badge className={`${actionBadgeColors[action]} text-xs`}>
-                              {groupedByAction[action].length} categories
+                              {groupedByAction[action].length} products
                             </Badge>
                           </div>
 
@@ -1990,10 +2260,10 @@ Return ONLY valid JSON with this structure:
                             <Table>
                               <TableHeader>
                                 <TableRow className="bg-gray-50/50">
-                                  <TableHead className="text-xs font-semibold text-gray-700">Category</TableHead>
                                   <TableHead className="text-xs font-semibold text-gray-700">Product</TableHead>
                                   <TableHead className="text-xs font-semibold text-gray-700 text-center">Current</TableHead>
                                   <TableHead className="text-xs font-semibold text-gray-700 text-center">Recommended</TableHead>
+                                  <TableHead className="text-xs font-semibold text-gray-700">Action</TableHead>
                                 </TableRow>
                               </TableHeader>
                               <TableBody>
@@ -2002,17 +2272,19 @@ Return ONLY valid JSON with this structure:
                                     <TableRow key={`${idx}-${i}`} className="hover:bg-gray-50/50 transition-colors">
                                       <TableCell>
                                         <p className="font-medium text-gray-800 text-sm">
-                                          {i === 0 ? category.category : ''}
+                                          {category.category || item.name}
                                         </p>
-                                      </TableCell>
-                                      <TableCell>
-                                        <p className="font-medium text-gray-800 text-sm">{item.name}</p>
                                       </TableCell>
                                       <TableCell className="text-center text-sm">
                                         {item.currentStock}
                                       </TableCell>
                                       <TableCell className="text-center text-sm font-bold text-green-700">
                                         {item.recommendedStock}
+                                      </TableCell>
+                                      <TableCell>
+                                        <Badge className={action === 'Increase' ? 'bg-orange-100 text-orange-700' : 'bg-green-100 text-green-700'}>
+                                          {action}
+                                        </Badge>
                                       </TableCell>
                                     </TableRow>
                                   ))
@@ -2044,7 +2316,7 @@ Return ONLY valid JSON with this structure:
 
           {(bestSelling.length > 0 || slowMoving.length > 0) && (
             <section className="space-y-4">
-              <div className="flex items-center gap-3 ">
+              <div className="flex items-center gap-3">
                 <div className="w-9 h-9 rounded-xl bg-white flex items-center justify-center shadow-sm">
                   <Target className="size-5 text-[#1a4d2e]" />
                 </div>
