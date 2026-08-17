@@ -1796,22 +1796,22 @@ Return ONLY valid JSON with this structure:
                     Required Headers (exact match):
                   </p>
                   <div className="flex flex-wrap gap-1.5 mt-1.5">
-                    <Badge variant="outline" className="text-xs bg-white border-green-300 text-green-700 font-mono">
+                    <Badge variant="outline" className="text-xs bg-white border-green-300 text-green-700">
                       Date
                     </Badge>
-                    <Badge variant="outline" className="text-xs bg-white border-green-300 text-green-700 font-mono">
+                    <Badge variant="outline" className="text-xs bg-white border-green-300 text-green-700">
                       Brand
                     </Badge>
-                    <Badge variant="outline" className="text-xs bg-white border-green-300 text-green-700 font-mono">
+                    <Badge variant="outline" className="text-xs bg-white border-green-300 text-green-700">
                       Product
                     </Badge>
-                    <Badge variant="outline" className="text-xs bg-white border-green-300 text-green-700 font-mono">
+                    <Badge variant="outline" className="text-xs bg-white border-green-300 text-green-700">
                       Total Sales (PHP)
                     </Badge>
-                    <Badge variant="outline" className="text-xs bg-white border-green-300 text-green-700 font-mono">
+                    <Badge variant="outline" className="text-xs bg-white border-green-300 text-green-700">
                       Units Sold
                     </Badge>
-                    <Badge variant="outline" className="text-xs bg-white border-green-300 text-green-700 font-mono">
+                    <Badge variant="outline" className="text-xs bg-white border-green-300 text-green-700">
                       Season
                     </Badge>
                   </div>
@@ -2091,7 +2091,7 @@ Return ONLY valid JSON with this structure:
                 </div>
               </div>
             </CardHeader>
-            <CardContent className="pt-6">
+            <CardContent>
               <ResponsiveContainer width="100%" height={420}>
                 <LineChart
                   data={viewMode === "monthly" ? filteredMonthlyData : weeklyChartData}
@@ -2203,10 +2203,10 @@ Return ONLY valid JSON with this structure:
                   )}
                 </LineChart>
               </ResponsiveContainer>
-              <div className="mt-6 flex flex-wrap items-center justify-center gap-5 rounded-xl border border-emerald-100 bg-emerald-50/50 p-4 text-sm text-slate-700">
+              <div className="flex items-center justify-center gap-5 rounded-xl border border-emerald-100 bg-emerald-50/50 p-4 text-sm text-slate-700">
                 <div className="flex items-center gap-2">
                   <span className="h-1.5 w-8 rounded bg-green-900"></span>
-                  Historical Sales
+                 Sales
                 </div>
                 {forecastData && (
                   <div className="flex items-center gap-2">
@@ -2297,18 +2297,19 @@ Return ONLY valid JSON with this structure:
 
           {/* TOP PRODUCTS PER SEASON */}
           {topProductsBySeason && (
-            <Card className="overflow-hidden border border-emerald-100 bg-white shadow-[0_12px_32px_rgba(20,83,45,0.06)]">
-              <CardHeader className="border-b border-emerald-100 bg-gradient-to-r from-white to-emerald-50/70">
-                <CardTitle className="flex items-center gap-2 text-xl">
-                  <ShoppingBag className="size-5 text-[#174d32]" />
-                  Top Products Per Season
-                </CardTitle>
-                <CardDescription>
-                  {computedProductDetails.length} unique products analyzed across seasons
-                </CardDescription>
-              </CardHeader>
+            <Card className="shadow-lg border-0 overflow-hidden">
+              <div className="bg-gradient-to-r from-green-900 to-emerald-600 px-6 py-4">
+                <div className="flex items-center gap-3">
+                  <Lightbulb className="w-5 h-5 text-white" />
+                  <div>
+                    <h3 className="text-lg font-bold text-white">Top Product Per Season</h3>
+                  
+                  </div>
+                </div>
+              </div>
               <CardContent>
                 <Tabs defaultValue="dry" className="w-full">
+                  <div className="items-center justify-between ml-125">  
                   <TabsList className="grid w-full max-w-sm grid-cols-2 mb-6">
                     <TabsTrigger value="dry" className="data-[state=active]:bg-[#174d32] data-[state=active]:text-white">
                       Dry Season
@@ -2317,6 +2318,7 @@ Return ONLY valid JSON with this structure:
                       Rainy Season
                     </TabsTrigger>
                   </TabsList>
+                  </div>
 
                   <TabsContent value="dry">
                     <Card className="border border-green-200 bg-green-50/30 shadow-sm">
@@ -2454,7 +2456,7 @@ Return ONLY valid JSON with this structure:
                   <Lightbulb className="w-5 h-5 text-white" />
                   <div>
                     <h3 className="text-lg font-bold text-white">Product Stock Recommendations</h3>
-                    <p className="text-xs text-emerald-100">Based on sales performance data</p>
+                  
                   </div>
                 </div>
               </div>
@@ -2590,7 +2592,7 @@ Return ONLY valid JSON with this structure:
                 </div>
                 <div>
                   <h2 className="text-xl font-bold text-gray-900">Product Performance</h2>
-                  <p className="text-sm text-gray-500">Top 5 best sellers and bottom 3 slow movers</p>
+                 
                 </div>
               </div>
               <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
@@ -2795,7 +2797,7 @@ Return ONLY valid JSON with this structure:
                   <h2 className="text-xl font-bold text-gray-900 tracking-tight">
                     AI-Generated Marketing Strategies
                   </h2>
-                  <p className="text-sm text-gray-500">Creative strategies generated by AI based on your sales data</p>
+                 
                 </div>
               </div>
               <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">

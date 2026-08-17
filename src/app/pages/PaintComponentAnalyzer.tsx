@@ -1368,12 +1368,12 @@ Required JSON format:
                   <div className="mt-3 p-3 bg-green-50 rounded-lg border border-green-200">
                     <p className="text-xs font-medium text-green-800">Required Headers:</p>
                     <div className="flex flex-wrap gap-1.5 mt-1.5">
-                      <Badge variant="outline" className="text-xs bg-white border-green-300 text-green-700 font-mono">Product</Badge>
-                      <Badge variant="outline" className="text-xs bg-white border-green-300 text-green-700 font-mono">Brand</Badge>
-                      <Badge variant="outline" className="text-xs bg-white border-green-300 text-green-700 font-mono">Category</Badge>
-                      <Badge variant="outline" className="text-xs bg-white border-green-300 text-green-700 font-mono">Stocks</Badge>
-                      <Badge variant="outline" className="text-xs bg-white border-green-300 text-green-700 font-mono">Est. Price (PHP)</Badge>
-                      <Badge variant="outline" className="text-xs bg-white border-green-300 text-green-700 font-mono">Unit Purchase Price</Badge>
+                      <Badge variant="outline" className="text-xs bg-white border-green-300 text-green-700 ">Product</Badge>
+                      <Badge variant="outline" className="text-xs bg-white border-green-300 text-green-700 ">Brand</Badge>
+                      <Badge variant="outline" className="text-xs bg-white border-green-300 text-green-700 ">Category</Badge>
+                      <Badge variant="outline" className="text-xs bg-white border-green-300 text-green-700 ">Stocks</Badge>
+                      <Badge variant="outline" className="text-xs bg-white border-green-300 text-green-700 ">Est. Price (PHP)</Badge>
+                      <Badge variant="outline" className="text-xs bg-white border-green-300 text-green-700 ">Unit Purchase Price</Badge>
                     </div>
                     <p className="text-[11px] text-green-600 mt-1.5">Headers are case-sensitive (match exactly)</p>
                   </div>
