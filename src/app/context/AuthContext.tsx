@@ -1,4 +1,5 @@
 // src/app/context/AuthContext.tsx
+
 import {
   createContext,
   useContext,
@@ -14,11 +15,15 @@ import {
   generatePIN,
   saveResetToken,
   verifyResetToken,
-  updateUserPassword,
   sendPasswordResetEmailWithPIN,
-  confirmUserEmail, // ✅ ADDED
+  confirmUserEmail,
+  completePasswordReset as completePasswordResetService,
   supabase,
   supabaseAdmin,
+  checkUserExistsInData,
+  checkAuthUserExists,
+  forceSyncUser,
+  deleteUserPermanently,
 } from "../lib/supabase";
 
 interface AuthContextType {
@@ -26,7 +31,7 @@ interface AuthContextType {
   loading: boolean;
   userEmail: string | null;
   userId: string | null;
-  login: (email: string, password: string) => Promise<boolean>;
+  login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
   logout: () => void;
   register: (email: string, password: string, fullName: string) => Promise<{ success: boolean; error?: string; message?: string }>;
   syncUserData: (data: any) => Promise<boolean>;
@@ -35,10 +40,20 @@ interface AuthContextType {
   requestPasswordReset: (email: string) => Promise<{ success: boolean; error?: string; message?: string }>;
   verifyPIN: (email: string, pin: string) => Promise<{ success: boolean; error?: string }>;
   resetPasswordWithPIN: (email: string, pin: string, newPassword: string) => Promise<{ success: boolean; error?: string }>;
-  // ✅ NEW: Direct password update (no PIN verification)
-  updatePasswordDirectly: (email: string, newPassword: string) => Promise<{ success: boolean; error?: string }>;
-  // ✅ NEW: Confirm email manually
+  // ✅ Complete password reset (recommended)
+  completePasswordReset: (email: string, newPassword: string) => Promise<{ success: boolean; error?: string; message?: string }>;
+  // Confirm email
   confirmEmail: (email: string) => Promise<{ success: boolean; error?: string; message?: string }>;
+  // ✅ User management
+  checkUserStatus: (email: string) => Promise<{ 
+    existsInAuth: boolean; 
+    existsInData: boolean; 
+    status: string;
+    authUser: any;
+    dataUser: any;
+  }>;
+  forceSyncUser: (email: string) => Promise<{ success: boolean; error?: string; message?: string }>;
+  deleteUser: (email: string) => Promise<{ success: boolean; error?: string; message?: string }>;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -87,46 +102,94 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  const login = async (email: string, password: string): Promise<boolean> => {
+  // ============================================================
+  // LOGIN - FIXED with proper error handling
+  // ============================================================
+  const login = async (email: string, password: string) => {
     try {
       console.log("🔑 Logging in user:", email);
       
-      const result = await loginUser(email, password);
+      // Trim inputs
+      const trimmedEmail = email.trim();
+      const trimmedPassword = password.trim();
+      
+      // Validate empty fields (additional client-side validation)
+      if (!trimmedEmail) {
+        return { success: false, error: 'Please enter your email address.' };
+      }
+      
+      if (!trimmedPassword) {
+        return { success: false, error: 'Please enter your password.' };
+      }
+      
+      const result = await loginUser(trimmedEmail, trimmedPassword);
       
       if (!result.success) {
         console.error("Login failed:", result.error);
-        return false;
+        return { success: false, error: result.error };
       }
 
       localStorage.setItem("isAuthenticated", "true");
-      localStorage.setItem("userEmail", email);
-      localStorage.setItem("userId", email);
+      localStorage.setItem("userEmail", trimmedEmail);
+      localStorage.setItem("userId", result.user?.auth_user_id || trimmedEmail);
       localStorage.setItem("authToken", result.token || "");
       
       setIsAuthenticated(true);
-      setUserEmail(email);
-      setUserId(email);
+      setUserEmail(trimmedEmail);
+      setUserId(result.user?.auth_user_id || trimmedEmail);
       
       window.dispatchEvent(new Event('storage'));
       
-      console.log("✅ Login successful for:", email);
-      return true;
-    } catch (error) {
+      console.log("✅ Login successful for:", trimmedEmail);
+      return { success: true };
+    } catch (error: any) {
       console.error("Login error:", error);
-      return false;
+      return { 
+        success: false, 
+        error: error.message || 'An unexpected error occurred. Please try again.' 
+      };
     }
   };
 
-  // ✅ UPDATED: Register with auto-confirm
+  // ============================================================
+  // REGISTER - FIXED with proper error handling
+  // ============================================================
   const register = async (email: string, password: string, fullName: string) => {
     try {
       console.log("📝 Registering user:", email);
-      const result = await registerUser(email, password, fullName);
       
-      // ✅ AUTO-CONFIRM IN DEVELOPMENT
+      // Trim inputs
+      const trimmedEmail = email.trim();
+      const trimmedPassword = password.trim();
+      const trimmedFullName = fullName.trim();
+      
+      // Client-side validation
+      if (!trimmedEmail) {
+        return { success: false, error: 'Please enter your email address.' };
+      }
+      
+      if (!trimmedEmail.includes('@') || !trimmedEmail.includes('.')) {
+        return { success: false, error: 'Please enter a valid email address.' };
+      }
+      
+      if (!trimmedPassword) {
+        return { success: false, error: 'Please enter a password.' };
+      }
+      
+      if (trimmedPassword.length < 6) {
+        return { success: false, error: 'Password must be at least 6 characters.' };
+      }
+      
+      if (!trimmedFullName) {
+        return { success: false, error: 'Please enter your full name.' };
+      }
+      
+      const result = await registerUser(trimmedEmail, trimmedPassword, trimmedFullName);
+      
+      // Auto-confirm in development
       if (result.success && import.meta.env.MODE === 'development') {
         console.log('📧 Auto-confirming email in development...');
-        const confirmResult = await confirmUserEmail(email);
+        const confirmResult = await confirmUserEmail(trimmedEmail);
         if (confirmResult.success) {
           console.log('✅ Email auto-confirmed!');
         } else {
@@ -137,10 +200,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return result;
     } catch (error: any) {
       console.error("Registration error:", error);
-      return { success: false, error: error.message };
+      return { success: false, error: error.message || 'Registration failed. Please try again.' };
     }
   };
 
+  // ============================================================
+  // LOGOUT
+  // ============================================================
   const logout = () => {
     console.log("🚪 Logging out user:", userEmail);
     
@@ -167,6 +233,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     console.log("✅ Logout successful");
   };
 
+  // ============================================================
+  // USER DATA OPERATIONS
+  // ============================================================
   const syncUserData = async (data: any) => {
     if (!userEmail) return false;
     return await saveUserData(userEmail, data);
@@ -178,30 +247,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   // ============================================================
-  // PIN-BASED PASSWORD RESET FUNCTIONS - UPDATED WITH BETTER FLOW
+  // PIN-BASED PASSWORD RESET FUNCTIONS
   // ============================================================
-
   const requestPasswordReset = async (email: string) => {
     try {
       const normalizedEmail = email.toLowerCase().trim();
       console.log("🔐 Requesting password reset for:", normalizedEmail);
       
-      // Direct check using Supabase
-      const { data: user, error } = await supabase
-        .from('user_data')
-        .select('email')
-        .eq('email', normalizedEmail)
-        .maybeSingle();
-
-      if (error) {
-        console.error("❌ Error checking user:", error);
+      if (!normalizedEmail) {
+        return { 
+          success: false, 
+          error: 'Please enter your email address.' 
+        };
+      }
+      
+      // Check if user exists in Auth (source of truth)
+      const authCheck = await checkAuthUserExists(normalizedEmail);
+      
+      if (!authCheck.success) {
         return { 
           success: false, 
           error: 'Error checking user. Please try again.' 
         };
       }
 
-      if (!user) {
+      if (!authCheck.exists) {
         console.log("❌ No user found with email:", normalizedEmail);
         return { 
           success: false, 
@@ -209,7 +279,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         };
       }
 
-      console.log("✅ User found:", user.email);
+      console.log("✅ User found in Auth:", authCheck.user.email);
 
       // Generate a 6-digit PIN
       const pin = generatePIN();
@@ -249,7 +319,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const normalizedEmail = email.toLowerCase().trim();
       console.log('🔍 verifyPIN called for:', normalizedEmail);
       
-      // Call verifyResetToken - this marks PIN as used if valid
+      if (!normalizedEmail) {
+        return { success: false, error: 'Email is required.' };
+      }
+      
+      if (!pin || pin.length !== 6) {
+        return { success: false, error: 'Please enter a valid 6-digit PIN.' };
+      }
+      
       const result = await verifyResetToken(normalizedEmail, pin);
       console.log('🔍 verifyPIN result:', result);
       return result;
@@ -259,27 +336,115 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  // ✅ NEW: Direct password update without PIN verification
-  const updatePasswordDirectly = async (email: string, newPassword: string) => {
+  // ============================================================
+  // ✅ COMPLETE PASSWORD RESET - RECOMMENDED
+  // ============================================================
+  const completePasswordReset = async (email: string, newPassword: string) => {
     try {
       const normalizedEmail = email.toLowerCase().trim();
-      console.log('🔐 Updating password directly for:', normalizedEmail);
+      console.log('🔄 Complete password reset for:', normalizedEmail);
       
-      const result = await updateUserPassword(normalizedEmail, newPassword);
-      if (!result.success) {
-        console.log('❌ Password update failed:', result.error);
-        return { success: false, error: result.error };
+      // Validate inputs
+      if (!normalizedEmail) {
+        return { 
+          success: false, 
+          error: 'Email is required.' 
+        };
+      }
+      
+      if (!newPassword || newPassword.length === 0) {
+        return { 
+          success: false, 
+          error: 'Please enter a new password.' 
+        };
+      }
+      
+      if (newPassword.length < 6) {
+        return { 
+          success: false, 
+          error: 'Password must be at least 6 characters.' 
+        };
+      }
+
+      const result = await completePasswordResetService(normalizedEmail, newPassword);
+      
+      if (result.success) {
+        console.log('✅ Password reset completed successfully!');
+        
+        // Clear any cached user data to force re-login
+        localStorage.removeItem("isAuthenticated");
+        localStorage.removeItem("userEmail");
+        localStorage.removeItem("userId");
+        localStorage.removeItem("authToken");
+        
+        setIsAuthenticated(false);
+        setUserEmail(null);
+        setUserId(null);
+      } else {
+        console.error('❌ Password reset failed:', result.error);
+      }
+      
+      return result;
+    } catch (error: any) {
+      console.error('❌ Complete password reset error:', error);
+      return { 
+        success: false, 
+        error: error.message || 'An error occurred during password reset.' 
+      };
+    }
+  };
+
+  // ============================================================
+  // DEPRECATED: resetPasswordWithPIN - Use completePasswordReset
+  // ============================================================
+  const resetPasswordWithPIN = async (email: string, pin: string, newPassword: string) => {
+    console.warn('⚠️ resetPasswordWithPIN is deprecated. Use completePasswordReset instead.');
+    
+    try {
+      const normalizedEmail = email.toLowerCase().trim();
+      
+      if (!normalizedEmail) {
+        return { success: false, error: 'Email is required.' };
+      }
+      
+      if (!pin || pin.length !== 6) {
+        return { success: false, error: 'Please enter a valid 6-digit PIN.' };
+      }
+      
+      if (!newPassword || newPassword.length < 6) {
+        return { success: false, error: 'Password must be at least 6 characters.' };
+      }
+      
+      // STEP 1: Verify the PIN
+      const verifyResult = await verifyResetToken(normalizedEmail, pin);
+      if (!verifyResult.success) {
+        console.log('❌ PIN verification failed:', verifyResult.error);
+        return { success: false, error: verifyResult.error };
+      }
+      
+      console.log('✅ PIN verified successfully!');
+      
+      // STEP 2: Update the password
+      const updateResult = await completePasswordReset(normalizedEmail, newPassword);
+      if (!updateResult.success) {
+        console.log('❌ Password update failed:', updateResult.error);
+        return { 
+          success: false, 
+          error: 'Password update failed. Please request a new PIN.' 
+        };
       }
       
       console.log('✅ Password updated successfully!');
       return { success: true, message: 'Password updated successfully!' };
     } catch (error: any) {
-      console.error('❌ Update password error:', error);
+      console.error('❌ Reset password error:', error);
       return { success: false, error: error.message };
     }
   };
 
-  // ✅ NEW: Confirm email manually
+  // ============================================================
+  // CONFIRM EMAIL
+  // ============================================================
   const confirmEmail = async (email: string) => {
     try {
       console.log('📧 Confirming email:', email);
@@ -291,41 +456,90 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  // ⚠️ DEPRECATED: Use verifyPIN + updatePasswordDirectly instead
-  // Kept for backward compatibility
-  const resetPasswordWithPIN = async (email: string, pin: string, newPassword: string) => {
+  // ============================================================
+  // ✅ USER MANAGEMENT
+  // ============================================================
+  const checkUserStatus = async (email: string) => {
     try {
       const normalizedEmail = email.toLowerCase().trim();
       
-      console.log('🔐 Starting password reset with PIN...');
-      console.log('📧 Email:', normalizedEmail);
-      console.log('🔑 PIN:', pin);
-      
-      // STEP 1: Verify the PIN (this marks it as used)
-      const verifyResult = await verifyResetToken(normalizedEmail, pin);
-      if (!verifyResult.success) {
-        console.log('❌ PIN verification failed:', verifyResult.error);
-        return { success: false, error: verifyResult.error };
-      }
-      
-      console.log('✅ PIN verified successfully!');
-      
-      // STEP 2: Update the password
-      console.log('📝 Updating password...');
-      const updateResult = await updateUserPassword(normalizedEmail, newPassword);
-      if (!updateResult.success) {
-        console.log('❌ Password update failed:', updateResult.error);
-        // PIN is already marked as used, but password update failed
-        return { 
-          success: false, 
-          error: 'Password update failed. Please request a new PIN.' 
+      if (!normalizedEmail) {
+        return {
+          existsInAuth: false,
+          existsInData: false,
+          status: 'Email is required',
+          authUser: null,
+          dataUser: null,
         };
       }
       
-      console.log('✅ Password updated successfully!');
-      return { success: true, message: 'Password updated successfully!' };
+      const authCheck = await checkAuthUserExists(normalizedEmail);
+      const dataCheck = await checkUserExistsInData(normalizedEmail);
+      
+      let status = '';
+      if (authCheck.exists && dataCheck.exists) {
+        status = '✅ Complete - User exists in both Auth and user_data';
+      } else if (authCheck.exists && !dataCheck.exists) {
+        status = '⚠️ Auth only - user_data missing (will be auto-created on login)';
+      } else if (!authCheck.exists && dataCheck.exists) {
+        status = '⚠️ Orphaned user_data - Auth user missing (run forceSyncUser)';
+      } else {
+        status = '❌ User not found in either system';
+      }
+      
+      return {
+        existsInAuth: authCheck.exists || false,
+        existsInData: dataCheck.exists || false,
+        status,
+        authUser: authCheck.user || null,
+        dataUser: dataCheck.user || null,
+      };
     } catch (error: any) {
-      console.error('❌ Reset password error:', error);
+      console.error('❌ Error checking user status:', error);
+      return {
+        existsInAuth: false,
+        existsInData: false,
+        status: 'Error checking user status',
+        authUser: null,
+        dataUser: null,
+      };
+    }
+  };
+
+  const forceSyncUser = async (email: string) => {
+    try {
+      const normalizedEmail = email.toLowerCase().trim();
+      
+      if (!normalizedEmail) {
+        return { success: false, error: 'Email is required.' };
+      }
+      
+      const result = await forceSyncUser(normalizedEmail);
+      return result;
+    } catch (error: any) {
+      console.error('❌ Error syncing user:', error);
+      return { success: false, error: error.message };
+    }
+  };
+
+  const deleteUser = async (email: string) => {
+    try {
+      const normalizedEmail = email.toLowerCase().trim();
+      
+      if (!normalizedEmail) {
+        return { success: false, error: 'Email is required.' };
+      }
+      
+      const result = await deleteUserPermanently(normalizedEmail);
+      if (result.success) {
+        // If user is currently logged in, log them out
+        if (userEmail === normalizedEmail) {
+          logout();
+        }
+      }
+      return result;
+    } catch (error: any) {
+      console.error('❌ Error deleting user:', error);
       return { success: false, error: error.message };
     }
   };
@@ -343,11 +557,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     register,
     syncUserData,
     loadUserData,
+    // Password reset functions
     requestPasswordReset,
     verifyPIN,
-    resetPasswordWithPIN,
-    updatePasswordDirectly,
-    confirmEmail, // ✅ NEW
+    resetPasswordWithPIN, // Deprecated - kept for backward compatibility
+    completePasswordReset, // ✅ Recommended
+    confirmEmail,
+    // User management
+    checkUserStatus,
+    forceSyncUser,
+    deleteUser,
   };
 
   return (
@@ -363,4 +582,4 @@ export function useAuth() {
     throw new Error("useAuth must be used within an AuthProvider");
   }
   return context;
-} 
+}

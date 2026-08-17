@@ -29,7 +29,8 @@ export default function ResetPassword() {
   const { 
     requestPasswordReset, 
     verifyPIN,
-    updatePasswordDirectly
+    completePasswordReset,
+    logout // ✅ Added - to force logout after password reset
   } = useAuth();
 
   // Form data
@@ -243,69 +244,88 @@ export default function ResetPassword() {
     }
   };
 
-  // Step 3: Reset Password
+  // ============================================================
+  // STEP 3: Reset Password - UPDATED to use completePasswordReset
+  // ============================================================
   const handleResetPassword = async (e: React.FormEvent) => {
-    e.preventDefault();
+  e.preventDefault();
+  
+  if (isSubmittingRef.current || isLoading) {
+    console.log('⏳ Already resetting password, please wait...');
+    return;
+  }
+  
+  setError("");
+  setIsLoading(true);
+  isSubmittingRef.current = true;
+
+  // Validate password
+  if (!newPassword || !confirmPassword) {
+    setError("Please fill in all fields.");
+    setIsLoading(false);
+    isSubmittingRef.current = false;
+    return;
+  }
+
+  if (newPassword.length < 6) {
+    setError("Password must be at least 6 characters long.");
+    setIsLoading(false);
+    isSubmittingRef.current = false;
+    return;
+  }
+
+  if (newPassword !== confirmPassword) {
+    setError("Passwords do not match.");
+    setIsLoading(false);
+    isSubmittingRef.current = false;
+    return;
+  }
+
+  if (!isPasswordStrongEnough()) {
+    setError("Please choose a stronger password. Try using a mix of uppercase, lowercase, numbers, and special characters.");
+    setIsLoading(false);
+    isSubmittingRef.current = false;
+    return;
+  }
+
+  try {
+    console.log('🔐 Resetting password for:', email);
+    console.log('🔑 New password length:', newPassword.length);
     
-    if (isSubmittingRef.current || isLoading) {
-      console.log('⏳ Already resetting password, please wait...');
-      return;
-    }
+    const result = await completePasswordReset(email, newPassword);
     
-    setError("");
-    setIsLoading(true);
-    isSubmittingRef.current = true;
-
-    if (!newPassword || !confirmPassword) {
-      setError("Please fill in all fields.");
-      setIsLoading(false);
-      isSubmittingRef.current = false;
-      return;
-    }
-
-    if (newPassword.length < 6) {
-      setError("Password must be at least 6 characters long.");
-      setIsLoading(false);
-      isSubmittingRef.current = false;
-      return;
-    }
-
-    if (newPassword !== confirmPassword) {
-      setError("Passwords do not match.");
-      setIsLoading(false);
-      isSubmittingRef.current = false;
-      return;
-    }
-
-    if (!isPasswordStrongEnough()) {
-      setError("Please choose a stronger password. Try using a mix of uppercase, lowercase, numbers, and special characters.");
-      setIsLoading(false);
-      isSubmittingRef.current = false;
-      return;
-    }
-
-    try {
-      console.log('🔐 Updating password for:', email);
+    console.log('📊 Reset result:', result);
+    
+    if (result.success) {
+      // ✅ FORCE LOGOUT
+      logout();
       
-      const result = await updatePasswordDirectly(email, newPassword);
+      // ✅ Clear ALL storage again (double-check)
+      localStorage.clear();
+      sessionStorage.clear();
       
-      if (result.success) {
-        setSuccess(true);
-        setError("");
-        setShowPasswordForm(false);
-        console.log("✅ Password reset successful");
-      } else {
-        setError(result.error || "Failed to reset password. Please try again.");
-      }
-    } catch (err) {
-      console.error("Reset error:", err);
-      setError("An error occurred. Please try again.");
-    } finally {
-      setIsLoading(false);
-      isSubmittingRef.current = false;
+      setSuccess(true);
+      setError("");
+      setShowPasswordForm(false);
+      console.log("✅ Password reset successful!");
+      console.log("ℹ️ Old password is now invalid. Only the new password works.");
+      
+      // ✅ Force a hard reload after 2 seconds to clear all cached state
+      setTimeout(() => {
+        // Use window.location.href to force a full page reload
+        window.location.href = "/login";
+      }, 2500);
+    } else {
+      setError(result.error || "Failed to reset password. Please try again.");
     }
-  };
-
+  } catch (err: any) {
+    console.error("Reset error:", err);
+    setError(err.message || "An error occurred. Please try again.");
+  } finally {
+    setIsLoading(false);
+    isSubmittingRef.current = false;
+  }
+};
   // Resend PIN
   const handleResendPIN = async () => {
     if (resendCooldown > 0) return;
@@ -434,13 +454,18 @@ export default function ResetPassword() {
                   <h3 className="text-xl font-semibold text-white">Password Changed!</h3>
                   <p className="text-center text-sm text-white/70">
                     Your password has been successfully updated.
+                    <br />
+                    <br />
+                    <span className="text-white/50 text-xs">
+                      Redirecting to login...
+                    </span>
                   </p>
                   <button
                     onClick={handleBackToLogin}
                     className="group mt-2 flex w-fit items-center gap-2 rounded-lg bg-white/10 px-6 py-2.5 text-sm font-medium text-white/80 backdrop-blur-sm transition-all duration-300 hover:bg-white/20 hover:text-white hover:shadow-lg active:scale-95"
                   >
                     <ArrowLeft className="size-4 transition-transform duration-300 group-hover:-translate-x-1" />
-                    <span className="rela tive">
+                    <span className="relative">
                       Back to Login
                       <span className=" bg-emerald-400 transition-all duration-300 group-hover:w-full" />
                     </span>

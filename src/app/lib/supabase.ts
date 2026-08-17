@@ -32,382 +32,7 @@ const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 const isDevelopment = import.meta.env.MODE === 'development';
 
 // ============================================================
-// FIX: Create Auth user for existing user_data
-// ============================================================
-
-export const createAuthUserForExisting = async (email: string, password: string) => {
-  console.log('🔧 Creating Auth user for existing user_data:', email);
-  
-  if (!supabaseAdmin) {
-    console.error('❌ Admin client not available');
-    return { success: false, error: 'Admin client not available' };
-  }
-
-  try {
-    // Check if user exists in user_data
-    const { data: userData, error: userDataError } = await supabase
-      .from('user_data')
-      .select('*')
-      .eq('email', email)
-      .maybeSingle();
-
-    if (userDataError) {
-      console.error('❌ Error checking user_data:', userDataError);
-      return { success: false, error: userDataError.message };
-    }
-
-    if (!userData) {
-      return { success: false, error: 'User not found in user_data' };
-    }
-
-    console.log('✅ User found in user_data:', userData);
-
-    // Check if already exists in Auth
-    const { data: userList } = await supabaseAdmin.auth.admin.listUsers();
-    const existingAuthUser = userList?.users?.find((u: any) => u.email === email);
-
-    if (existingAuthUser) {
-      console.log('✅ User already exists in Auth:', existingAuthUser.id);
-      
-      // Update password if needed
-      console.log('🔄 Updating Auth password...');
-      const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(
-        existingAuthUser.id,
-        { password: password }
-      );
-      
-      if (updateError) {
-        console.error('❌ Failed to update password:', updateError);
-        return { success: false, error: updateError.message };
-      }
-      
-      console.log('✅ Password updated in Auth');
-      
-      return { 
-        success: true, 
-        user: existingAuthUser,
-        message: 'User already exists in Auth. Password updated.'
-      };
-    }
-
-    // Create user in Auth
-    console.log('📝 Creating Auth user...');
-    const { data, error: createError } = await supabaseAdmin.auth.admin.createUser({
-      email: email,
-      password: password,
-      email_confirm: true,
-      user_metadata: {
-        full_name: userData.full_name || email,
-      },
-    });
-
-    if (createError) {
-      console.error('❌ Failed to create Auth user:', createError);
-      return { success: false, error: createError.message };
-    }
-
-    console.log('✅ Auth user created:', data.user.id);
-
-    // Update user_data with auth_user_id
-    const { error: updateDataError } = await supabase
-      .from('user_data')
-      .update({ 
-        auth_user_id: data.user.id,
-        updated_at: new Date().toISOString()
-      })
-      .eq('email', email);
-
-    if (updateDataError) {
-      console.error('❌ Failed to update user_data:', updateDataError);
-    } else {
-      console.log('✅ user_data updated with auth_user_id');
-    }
-
-    // Test login
-    console.log('🔑 Testing login...');
-    try {
-      const testLogin = await supabase.auth.signInWithPassword({
-        email: email,
-        password: password,
-      });
-      
-      if (testLogin.error) {
-        console.log('⚠️ Test login failed:', testLogin.error.message);
-      } else {
-        console.log('✅ Test login successful!');
-      }
-    } catch (err) {
-      console.log('⚠️ Test login error:', err);
-    }
-
-    return { 
-      success: true, 
-      user: data.user,
-      message: 'Auth user created successfully'
-    };
-  } catch (error: any) {
-    console.error('❌ Error creating Auth user:', error);
-    return { success: false, error: error.message };
-  }
-};
-
-// ============================================================
-// FIX: Force create user with both Auth and user_data
-// ============================================================
-
-export const forceCreateUser = async (email: string, password: string, fullName: string) => {
-  console.log('💪 Force creating user:', email);
-  
-  if (!supabaseAdmin) {
-    console.error('❌ Admin client not available');
-    return { success: false, error: 'Admin client not available' };
-  }
-
-  try {
-    // First, delete any existing user_data
-    console.log('🗑️ Cleaning up existing user_data...');
-    await supabase
-      .from('user_data')
-      .delete()
-      .eq('email', email);
-
-    // Check if user exists in Auth and delete if exists
-    const { data: userList } = await supabaseAdmin.auth.admin.listUsers();
-    const existingAuthUser = userList?.users?.find((u: any) => u.email === email);
-    
-    if (existingAuthUser) {
-      console.log('🗑️ Deleting existing Auth user:', existingAuthUser.id);
-      const { error: deleteError } = await supabaseAdmin.auth.admin.deleteUser(
-        existingAuthUser.id
-      );
-      
-      if (deleteError) {
-        console.error('❌ Failed to delete Auth user:', deleteError);
-        // Continue anyway
-      } else {
-        console.log('✅ Auth user deleted');
-      }
-    }
-
-    // Wait for deletion to propagate
-    await wait(1000);
-
-    // Create new Auth user
-    console.log('📝 Creating new Auth user...');
-    const { data, error: createError } = await supabaseAdmin.auth.admin.createUser({
-      email: email,
-      password: password,
-      email_confirm: true,
-      user_metadata: {
-        full_name: fullName,
-      },
-    });
-
-    if (createError) {
-      console.error('❌ Failed to create Auth user:', createError);
-      return { success: false, error: createError.message };
-    }
-
-    console.log('✅ Auth user created:', data.user.id);
-
-    // Create user_data
-    console.log('📝 Creating user_data...');
-    const payload = {
-      email: email,
-      password: null,
-      full_name: fullName,
-      auth_user_id: data.user.id,
-      phone: null,
-      role: 'User',
-      location: null,
-      address: null,
-      join_date: null,
-      employee_id: null,
-      permissions: ['Seasonal Forecast', 'Paint Analyzer'],
-      contacts: [],
-      profile_picture: null,
-      inventory_data: null,
-      inventory_data_name: null,
-      color_analysis: null,
-      uploaded_image: null,
-      uploaded_file_name: null,
-      uploaded_file_size: null,
-      batch_size: 0.1,
-      sales_data: null,
-      sales_data_name: null,
-      forecast_data: null,
-      last_fetched: null,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    };
-
-    const { error: insertError } = await supabaseAdmin
-      .from('user_data')
-      .insert(payload);
-
-    if (insertError) {
-      console.error('❌ Failed to create user_data:', insertError);
-      return { 
-        success: true, 
-        user: data.user,
-        warning: 'User created but user_data insertion failed'
-      };
-    }
-
-    console.log('✅ user_data created');
-
-    // Test login
-    console.log('🔑 Testing login...');
-    try {
-      const testLogin = await supabase.auth.signInWithPassword({
-        email: email,
-        password: password,
-      });
-      
-      if (testLogin.error) {
-        console.log('⚠️ Test login failed:', testLogin.error.message);
-      } else {
-        console.log('✅ Test login successful!');
-      }
-    } catch (err) {
-      console.log('⚠️ Test login error:', err);
-    }
-
-    return { 
-      success: true, 
-      user: data.user,
-      message: 'User created successfully'
-    };
-  } catch (error: any) {
-    console.error('❌ Error force creating user:', error);
-    return { success: false, error: error.message };
-  }
-};
-
-// ============================================================
-// FIX: Sync existing user_data with Auth
-// ============================================================
-
-export const syncUserWithAuth = async (email: string, password: string) => {
-  console.log('🔄 Syncing user_data with Auth for:', email);
-  
-  if (!supabaseAdmin) {
-    console.error('❌ Admin client not available');
-    return { success: false, error: 'Admin client not available' };
-  }
-
-  try {
-    // Check if user exists in user_data
-    const { data: userData, error: userDataError } = await supabase
-      .from('user_data')
-      .select('*')
-      .eq('email', email)
-      .maybeSingle();
-
-    if (userDataError) {
-      console.error('❌ Error checking user_data:', userDataError);
-      return { success: false, error: userDataError.message };
-    }
-
-    if (!userData) {
-      return { success: false, error: 'User not found in user_data' };
-    }
-
-    console.log('✅ User found in user_data:', userData);
-
-    // Check if user exists in Auth
-    const { data: userList } = await supabaseAdmin.auth.admin.listUsers();
-    const existingAuthUser = userList?.users?.find((u: any) => u.email === email);
-
-    let authUser = null;
-
-    if (existingAuthUser) {
-      console.log('✅ User already exists in Auth:', existingAuthUser.id);
-      authUser = existingAuthUser;
-      
-      // Update password if needed
-      if (password) {
-        console.log('🔄 Updating Auth password...');
-        const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(
-          existingAuthUser.id,
-          { password: password }
-        );
-        
-        if (updateError) {
-          console.error('❌ Failed to update password:', updateError);
-        } else {
-          console.log('✅ Password updated in Auth');
-        }
-      }
-    } else {
-      console.log('📝 User not found in Auth. Creating now...');
-      
-      // Create user in Auth
-      const { data, error: createError } = await supabaseAdmin.auth.admin.createUser({
-        email: email,
-        password: password || 'Temp123!',
-        email_confirm: true,
-        user_metadata: {
-          full_name: userData.full_name || email,
-        },
-      });
-
-      if (createError) {
-        console.error('❌ Failed to create Auth user:', createError);
-        return { success: false, error: createError.message };
-      }
-
-      authUser = data.user;
-      console.log('✅ Auth user created:', authUser.id);
-
-      // Update user_data with auth_user_id
-      const { error: updateDataError } = await supabase
-        .from('user_data')
-        .update({ 
-          auth_user_id: authUser.id,
-          updated_at: new Date().toISOString()
-        })
-        .eq('email', email);
-
-      if (updateDataError) {
-        console.error('❌ Failed to update user_data with auth_user_id:', updateDataError);
-      } else {
-        console.log('✅ user_data updated with auth_user_id');
-      }
-    }
-
-    // Test login
-    if (password) {
-      console.log('🔑 Testing login...');
-      try {
-        const testLogin = await supabase.auth.signInWithPassword({
-          email: email,
-          password: password,
-        });
-        
-        if (testLogin.error) {
-          console.log('⚠️ Test login failed:', testLogin.error.message);
-        } else {
-          console.log('✅ Test login successful!');
-        }
-      } catch (err) {
-        console.log('⚠️ Test login error:', err);
-      }
-    }
-
-    return { 
-      success: true, 
-      user: authUser,
-      message: 'User synced with Auth successfully'
-    };
-  } catch (error: any) {
-    console.error('❌ Error syncing user:', error);
-    return { success: false, error: error.message };
-  }
-};
-
-// ============================================================
-// DEBUG: Check if user exists in Auth
+// CHECK IF USER EXISTS IN AUTH
 // ============================================================
 
 export const checkAuthUserExists = async (email: string) => {
@@ -416,25 +41,20 @@ export const checkAuthUserExists = async (email: string) => {
   try {
     if (!supabaseAdmin) {
       console.log('❌ Admin client not available');
-      return { success: false, error: 'Admin client not available' };
+      return { success: false, error: 'Admin client not available', exists: false };
     }
 
     const { data: userList, error: listError } = await supabaseAdmin.auth.admin.listUsers();
     
     if (listError) {
       console.error('❌ Error listing users:', listError);
-      return { success: false, error: listError.message };
+      return { success: false, error: listError.message, exists: false };
     }
 
-    const user = userList?.users?.find((u: any) => u.email === email);
+    const user = userList?.users?.find((u: any) => u.email === email.toLowerCase().trim());
     
     if (user) {
-      console.log('✅ User found in Auth:');
-      console.log('  - ID:', user.id);
-      console.log('  - Email:', user.email);
-      console.log('  - Confirmed:', user.email_confirmed_at !== null);
-      console.log('  - Created:', user.created_at);
-      console.log('  - Last sign in:', user.last_sign_in_at);
+      console.log('✅ User found in Auth:', user.id);
       return { success: true, user, exists: true };
     } else {
       console.log('❌ User NOT found in Auth');
@@ -442,800 +62,133 @@ export const checkAuthUserExists = async (email: string) => {
     }
   } catch (error) {
     console.error('❌ Error checking auth user:', error);
-    return { success: false, error: String(error) };
+    return { success: false, error: String(error), exists: false };
   }
 };
 
 // ============================================================
-// DEBUG: Create user directly using Admin API
+// CHECK IF USER EXISTS IN user_data
 // ============================================================
 
-export const createUserDirectly = async (email: string, password: string, fullName: string) => {
-  console.log('🔧 Creating user directly with Admin API...');
-  console.log('  - Email:', email);
-  console.log('  - Password length:', password?.length || 0);
-  console.log('  - Full name:', fullName);
+export const checkUserExistsInData = async (email: string) => {
+  console.log('🔍 Checking if user exists in user_data:', email);
   
-  if (!supabaseAdmin) {
-    console.error('❌ Admin client not available');
-    return { success: false, error: 'Admin client not available' };
-  }
-
   try {
-    // First check if user already exists
-    const { data: userList } = await supabaseAdmin.auth.admin.listUsers();
-    const existingUser = userList?.users?.find((u: any) => u.email === email);
-    
-    if (existingUser) {
-      console.log('⚠️ User already exists:', existingUser.id);
-      
-      // Check if email is confirmed
-      if (!existingUser.email_confirmed_at) {
-        console.log('🔄 Email not confirmed, confirming now...');
-        const { error: confirmError } = await supabaseAdmin.auth.admin.updateUserById(
-          existingUser.id,
-          { email_confirm: true }
-        );
-        
-        if (confirmError) {
-          console.error('❌ Failed to confirm email:', confirmError);
-        } else {
-          console.log('✅ Email confirmed successfully');
-        }
-      }
-      
-      return { 
-        success: true, 
-        user: existingUser, 
-        exists: true,
-        message: 'User already exists. Email confirmation updated.'
-      };
-    }
-
-    // Create new user
-    console.log('📝 Creating new user...');
-    const { data, error } = await supabaseAdmin.auth.admin.createUser({
-      email: email,
-      password: password,
-      email_confirm: true,
-      user_metadata: {
-        full_name: fullName,
-      },
-    });
+    const { data, error } = await supabase
+      .from('user_data')
+      .select('id, email, auth_user_id, full_name')
+      .eq('email', email.toLowerCase().trim())
+      .maybeSingle();
 
     if (error) {
-      console.error('❌ Error creating user:', error);
-      return { success: false, error: error.message };
+      console.error('❌ Error checking user_data:', error);
+      return { success: false, error: error.message, exists: false };
     }
 
-    console.log('✅ User created successfully!');
-    console.log('  - ID:', data.user.id);
-    console.log('  - Email:', data.user.email);
-    console.log('  - Confirmed:', data.user.email_confirmed_at !== null);
-    
-    // Create user_data record
-    console.log('📝 Creating user_data record...');
-    const payload = {
-      email: email,
-      password: null,
-      full_name: fullName,
-      auth_user_id: data.user.id,
-      phone: null,
-      role: 'User',
-      location: null,
-      address: null,
-      join_date: null,
-      employee_id: null,
-      permissions: ['Seasonal Forecast', 'Paint Analyzer'],
-      contacts: [],
-      profile_picture: null,
-      inventory_data: null,
-      inventory_data_name: null,
-      color_analysis: null,
-      uploaded_image: null,
-      uploaded_file_name: null,
-      uploaded_file_size: null,
-      batch_size: 0.1,
-      sales_data: null,
-      sales_data_name: null,
-      forecast_data: null,
-      last_fetched: null,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    };
-
-    const { error: insertError } = await supabaseAdmin
-      .from('user_data')
-      .insert(payload);
-
-    if (insertError) {
-      console.error('❌ Error creating user_data:', insertError);
-      // Still return success since Auth user was created
-      return { 
-        success: true, 
-        user: data.user, 
-        warning: 'User created but user_data insertion failed' 
-      };
+    if (data) {
+      console.log('✅ User found in user_data:', data.id);
+      return { success: true, user: data, exists: true };
+    } else {
+      console.log('❌ User NOT found in user_data');
+      return { success: true, exists: false };
     }
-
-    console.log('✅ user_data created successfully');
-    
-    // Test login
-    console.log('🔑 Testing login...');
-    try {
-      const testLogin = await supabase.auth.signInWithPassword({
-        email: email,
-        password: password,
-      });
-      
-      if (testLogin.error) {
-        console.log('⚠️ Test login failed:', testLogin.error.message);
-      } else {
-        console.log('✅ Test login successful!');
-      }
-    } catch (err) {
-      console.log('⚠️ Test login error:', err);
-    }
-
-    return { success: true, user: data.user };
   } catch (error: any) {
-    console.error('❌ Error in createUserDirectly:', error);
-    return { success: false, error: error.message };
+    console.error('❌ Error checking user_data:', error);
+    return { success: false, error: error.message, exists: false };
   }
 };
 
 // ============================================================
-// DEBUG: Reset user password (force reset)
+// LOGIN USER - COMPLETELY FIXED with proper validation
 // ============================================================
 
-export const resetUserPassword = async (email: string, newPassword: string) => {
-  console.log('🔑 Resetting password for:', email);
-  
-  if (!supabaseAdmin) {
-    console.error('❌ Admin client not available');
-    return { success: false, error: 'Admin client not available' };
-  }
-
-  try {
-    // Find user
-    const { data: userList } = await supabaseAdmin.auth.admin.listUsers();
-    const user = userList?.users?.find((u: any) => u.email === email);
-    
-    if (!user) {
-      console.error('❌ User not found');
-      return { success: false, error: 'User not found' };
-    }
-
-    console.log('✅ User found:', user.id);
-    
-    // Update password
-    const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(
-      user.id,
-      { password: newPassword }
-    );
-
-    if (updateError) {
-      console.error('❌ Error updating password:', updateError);
-      return { success: false, error: updateError.message };
-    }
-
-    console.log('✅ Password updated successfully');
-    
-    // Test login
-    try {
-      const testLogin = await supabase.auth.signInWithPassword({
-        email: email,
-        password: newPassword,
-      });
-      
-      if (testLogin.error) {
-        console.log('⚠️ Test login failed:', testLogin.error.message);
-      } else {
-        console.log('✅ Test login successful!');
-      }
-    } catch (err) {
-      console.log('⚠️ Test login error:', err);
-    }
-
-    return { success: true, message: 'Password reset successfully' };
-  } catch (error: any) {
-    console.error('❌ Error resetting password:', error);
-    return { success: false, error: error.message };
-  }
-};
-
-// ============================================================
-// USER AUTHENTICATION
-// ============================================================
-
-// Register new user - AUTOMATICALLY FIXES AUTH USER ISSUE
-export const registerUser = async (email: string, password: string, fullName: string) => {
-  console.log('📝 Registering user:', email);
-  console.log('📝 Password length:', password?.length || 0);
-  console.log(`🔧 Mode: ${isDevelopment ? 'DEVELOPMENT' : 'PRODUCTION'}`);
+export const loginUser = async (email: string, password: string) => {
+  console.log('🔑 Logging in user:', email);
   
   try {
-    // Validate inputs
-    if (!email || !password || !fullName) {
-      return { success: false, error: 'All fields are required' };
+    const normalizedEmail = email.toLowerCase().trim();
+    
+    // ============================================================
+    // STEP 1: Validate inputs with clear error messages
+    // ============================================================
+    if (!normalizedEmail) {
+      return { success: false, error: 'Please enter your email address.' };
+    }
+    
+    if (!password || password.length === 0) {
+      return { success: false, error: 'Please enter your password.' };
     }
     
     if (password.length < 6) {
-      return { success: false, error: 'Password must be at least 6 characters' };
+      return { success: false, error: 'Password must be at least 6 characters.' };
     }
 
     // ============================================================
-    // STEP 1: Check if user already exists in user_data
+    // STEP 2: Check if email exists in Auth
     // ============================================================
-    const { data: existingUser, error: checkError } = await supabase
-      .from('user_data')
-      .select('*')
-      .eq('email', email)
-      .maybeSingle();
-
-    if (checkError && checkError.code !== 'PGRST116') {
-      console.error('❌ Error checking user:', checkError);
-      return { success: false, error: checkError.message };
-    }
-
-    // ============================================================
-    // STEP 2: If user exists in user_data, check Auth and fix if needed
-    // ============================================================
-    if (existingUser) {
-      console.log('ℹ️ User exists in user_data. Checking Auth...');
-      
-      // Check if user exists in Auth
-      const authCheck = await checkAuthUserExists(email);
-      
-      if (authCheck.exists) {
-        console.log('✅ User exists in Auth. Checking password...');
-        
-        // Try to login with the provided password
-        const testLogin = await supabase.auth.signInWithPassword({
-          email: email,
-          password: password,
-        });
-        
-        if (testLogin.error) {
-          console.log('⚠️ Password is incorrect or user needs repair.');
-          
-          // If login fails, update the password
-          if (supabaseAdmin) {
-            console.log('🔄 Updating Auth password...');
-            const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(
-              authCheck.user.id,
-              { password: password }
-            );
-            
-            if (updateError) {
-              console.error('❌ Failed to update password:', updateError);
-              return {
-                success: false,
-                error: 'User exists but password update failed. Please try again.'
-              };
-            }
-            
-            console.log('✅ Password updated successfully!');
-            return {
-              success: true,
-              message: 'Password updated successfully! You can now login.',
-              data: existingUser
-            };
-          }
-        } else {
-          return {
-            success: false,
-            error: 'User already exists. Please login instead.',
-            data: existingUser
-          };
-        }
-      } else {
-        // User exists in user_data but not in Auth - AUTO-FIX
-        console.log('🔄 User exists in user_data but not in Auth. Auto-creating Auth user...');
-        const result = await createAuthUserForExisting(email, password);
-        if (result.success) {
-          return {
-            success: true,
-            message: 'Account restored! You can now login.',
-            data: existingUser
-          };
-        } else {
-          return {
-            success: false,
-            error: 'Failed to restore account. Please contact support.'
-          };
-        }
-      }
-    }
-
-    // ============================================================
-    // STEP 3: Create new user (user doesn't exist in user_data)
-    // ============================================================
-    let authData = null;
-    let authError = null;
-
-    // Check if admin client is available - use it directly in development
-    if (isDevelopment && supabaseAdmin) {
-      console.log('🚀 Using Admin API for registration (development mode)');
-      
-      try {
-        // Check if user already exists in Auth
-        const { data: userList } = await supabaseAdmin.auth.admin.listUsers();
-        const existingAuthUser = userList?.users?.find((u: any) => u.email === email);
-        
-        if (existingAuthUser) {
-          console.log('⚠️ User already exists in Auth:', existingAuthUser.id);
-          
-          // Check if email is confirmed
-          if (!existingAuthUser.email_confirmed_at) {
-            console.log('🔄 Confirming existing user...');
-            await supabaseAdmin.auth.admin.updateUserById(
-              existingAuthUser.id,
-              { email_confirm: true }
-            );
-          }
-          
-          authData = { user: existingAuthUser };
-          console.log('✅ Using existing Auth user');
-        } else {
-          // Create user directly with Admin API
-          console.log('📝 Creating new user with Admin API...');
-          const { data, error } = await supabaseAdmin.auth.admin.createUser({
-            email: email,
-            password: password,
-            email_confirm: true,
-            user_metadata: {
-              full_name: fullName,
-            },
-          });
-          
-          if (error) {
-            console.error('❌ Admin API error:', error);
-            authError = error;
-          } else {
-            authData = { user: data.user };
-            console.log('✅ User created with Admin API:', data.user.id);
-            console.log('  - Confirmed:', data.user.email_confirmed_at !== null);
-          }
-        }
-      } catch (adminErr) {
-        console.error('❌ Admin API exception:', adminErr);
-        authError = adminErr as any;
-      }
-    }
-
-    // Fallback to regular signup (production or if admin fails)
-    if (!authData) {
-      console.log('📡 Using regular signup...');
-      try {
-        const result = await supabase.auth.signUp({
-          email: email,
-          password: password,
-          options: {
-            data: {
-              full_name: fullName,
-            },
-          },
-        });
-
-        if (result.error) {
-          console.error('❌ Signup error:', result.error);
-          authError = result.error;
-          
-          // Check if user already exists in Auth
-          if (result.error.message.includes('already registered')) {
-            // Try to get the existing user
-            if (supabaseAdmin) {
-              try {
-                const { data: userList } = await supabaseAdmin.auth.admin.listUsers();
-                const foundUser = userList?.users?.find((u: any) => u.email === email);
-                if (foundUser) {
-                  authData = { user: foundUser };
-                  console.log('✅ Found existing Auth user:', foundUser.id);
-                }
-              } catch (err) {
-                console.error('❌ Could not find existing user:', err);
-              }
-            }
-            
-            if (!authData) {
-              return {
-                success: false,
-                error: 'This email is already registered. Please login instead.'
-              };
-            }
-          } else if (result.error.message.includes('rate limit')) {
-            return {
-              success: false,
-              error: 'Too many registration attempts. Please wait a few minutes and try again.'
-            };
-          } else {
-            return {
-              success: false,
-              error: result.error.message || 'Failed to create account. Please try again.'
-            };
-          }
-        } else {
-          authData = result.data;
-          console.log('✅ Regular signup successful!');
-          console.log('  - User ID:', result.data.user?.id);
-          console.log('  - Email confirmed:', result.data.user?.email_confirmed_at !== null);
-        }
-      } catch (err) {
-        console.error('❌ Signup exception:', err);
-        authError = err as any;
-      }
-    }
-
-    if (!authData?.user) {
-      console.error('❌ No auth data returned');
+    console.log('🔍 Checking if email exists in Auth...');
+    const authCheck = await checkAuthUserExists(normalizedEmail);
+    
+    if (!authCheck.success) {
+      console.error('❌ Auth check failed:', authCheck.error);
       return { 
         success: false, 
-        error: authError?.message || 'Failed to create user account.' 
+        error: 'Authentication system error. Please try again.' 
       };
     }
 
-    console.log('✅ User authenticated with ID:', authData.user.id);
-
-    // Wait a moment for Auth to propagate
-    console.log('⏳ Waiting for Auth to propagate...');
-    await wait(1000);
-
-    // Check if Auth user exists and is confirmed
-    const isEmailConfirmed = authData.user.email_confirmed_at !== null;
-    console.log(`📧 Email confirmed: ${isEmailConfirmed}`);
-
-    // For development, auto-confirm if not confirmed
-    if (isDevelopment && !isEmailConfirmed && supabaseAdmin) {
-      console.log('🔄 Auto-confirming email in development...');
-      try {
-        const { error: confirmError } = await supabaseAdmin.auth.admin.updateUserById(
-          authData.user.id,
-          { email_confirm: true }
-        );
-        
-        if (!confirmError) {
-          console.log('✅ Email auto-confirmed');
-          authData.user.email_confirmed_at = new Date().toISOString();
-        } else {
-          console.error('❌ Failed to auto-confirm:', confirmError);
-        }
-      } catch (err) {
-        console.error('❌ Auto-confirm error:', err);
-      }
-    }
-
-    // In production, user needs to confirm email
-    if (!isEmailConfirmed && !isDevelopment) {
-      return {
-        success: true,
-        message: 'Registration successful! Please check your email to confirm your account before logging in.',
-        data: null,
-        requiresConfirmation: true
-      };
-    }
-
-    // Create user_data record
-    console.log('📝 Creating user_data record...');
-    
-    const payload = {
-      email: email,
-      password: null,
-      full_name: fullName,
-      auth_user_id: authData.user.id,
-      phone: null,
-      role: 'User',
-      location: null,
-      address: null,
-      join_date: null,
-      employee_id: null,
-      permissions: ['Seasonal Forecast', 'Paint Analyzer'],
-      contacts: [],
-      profile_picture: null,
-      inventory_data: null,
-      inventory_data_name: null,
-      color_analysis: null,
-      uploaded_image: null,
-      uploaded_file_name: null,
-      uploaded_file_size: null,
-      batch_size: 0.1,
-      sales_data: null,
-      sales_data_name: null,
-      forecast_data: null,
-      last_fetched: null,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    };
-
-    let newData = null;
-    let insertError = null;
-
-    // Try using Admin client first (bypasses RLS)
-    if (supabaseAdmin) {
-      try {
-        const { data, error } = await supabaseAdmin
-          .from('user_data')
-          .insert(payload)
-          .select();
-
-        if (error) {
-          console.error('❌ Admin client insert error:', error);
-          insertError = error;
-        } else {
-          newData = data;
-          console.log('✅ User_data created using Admin client');
-        }
-      } catch (err) {
-        console.error('❌ Admin client exception:', err);
-        insertError = err as any;
-      }
-    }
-
-    // Fallback to regular client
-    if (!newData) {
-      console.log('📝 Falling back to regular client...');
+    if (!authCheck.exists) {
+      console.log('❌ Email not found in Auth:', normalizedEmail);
       
-      try {
-        const { data, error } = await supabase
-          .from('user_data')
-          .insert(payload)
-          .select();
-
-        if (error) {
-          console.error('❌ Regular client insert error:', error);
-          insertError = error;
-        } else {
-          newData = data;
-          console.log('✅ User_data created using regular client');
-        }
-      } catch (err) {
-        console.error('❌ Regular client exception:', err);
-        insertError = err as any;
-      }
-    }
-
-    if (insertError || !newData) {
-      console.error('❌ Error creating user_data:', insertError);
+      // Check if user_data has orphaned record
+      const { data: userData } = await supabase
+        .from('user_data')
+        .select('email')
+        .eq('email', normalizedEmail)
+        .maybeSingle();
       
-      // Auth user was created but user_data failed
-      // User can still log in - the login function will create user_data
+      if (userData) {
+        console.log('⚠️ Orphaned user_data found for:', normalizedEmail);
+        return { 
+          success: false, 
+          error: 'This account needs to be re-activated. Please contact support.' 
+        };
+      }
+      
+      // Clear message - email doesn't exist
       return { 
-        success: true, 
-        message: 'Account created but profile setup incomplete. Please login to complete your profile.',
-        data: null,
-        warning: 'Please login to complete your profile setup.'
+        success: false, 
+        error: 'No account found with this email address. Please check your email or register.' 
       };
     }
 
-    console.log('✅ Registration complete!');
-    
-    // Verify the user can login immediately (development only)
-    if (isDevelopment) {
-      console.log('🔑 Testing login with the new credentials...');
-      try {
-        const testLogin = await supabase.auth.signInWithPassword({
-          email: email,
-          password: password,
-        });
-        
-        if (testLogin.error) {
-          console.error('⚠️ Immediate login test failed:', testLogin.error.message);
-          console.log('💡 This might be due to Auth propagation delay. The user should be able to login shortly.');
-        } else {
-          console.log('✅ Immediate login test successful!');
-        }
-      } catch (err) {
-        console.error('⚠️ Login test error:', err);
-      }
-    }
-    
-    return { 
-      success: true, 
-      data: newData[0] || null,
-      message: isDevelopment 
-        ? 'Registration successful! You can now login.' 
-        : 'Registration successful! Please check your email to confirm your account.'
-    };
-    
-  } catch (error: any) {
-    console.error('❌ Error registering user:', error);
-    return { success: false, error: error.message || 'Registration failed. Please try again.' };
-  }
-};
+    console.log('✅ Email found in Auth');
 
-// ============================================================
-// AUTO-CONFIRM EMAIL IN DEVELOPMENT
-// ============================================================
-
-export const confirmUserEmail = async (email: string) => {
-  if (!isDevelopment) {
-    return { success: false, error: 'Only available in development' };
-  }
-
-  if (!supabaseAdmin) {
-    console.warn('⚠️ Admin client not available, skipping auto-confirm');
-    return { success: false, error: 'Admin client not available' };
-  }
-
-  try {
-    console.log('📧 Auto-confirming email for:', email);
-    
-    // Get user by email
-    const { data: userList, error: listError } = await supabaseAdmin.auth.admin.listUsers();
-    
-    if (listError) {
-      console.error('❌ Error listing users:', listError);
-      return { success: false, error: listError.message };
-    }
-
-    const user = userList?.users?.find((u: any) => u.email === email);
-    
-    if (!user) {
-      return { success: false, error: 'User not found' };
-    }
-
-    // Update user to confirmed
-    const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(
-      user.id,
-      { email_confirm: true }
-    );
-
-    if (updateError) {
-      console.error('❌ Error confirming email:', updateError);
-      return { success: false, error: updateError.message };
-    }
-
-    console.log('✅ Email confirmed for:', email);
-    return { success: true, message: 'Email confirmed successfully!' };
-  } catch (error: any) {
-    console.error('❌ Error confirming email:', error);
-    return { success: false, error: error.message };
-  }
-};
-
-// For manually confirming existing users
-export const confirmExistingUser = async (email: string) => {
-  console.log('📧 Manually confirming existing user:', email);
-  return await confirmUserEmail(email);
-};
-
-// ============================================================
-// DEBUG: Check user status
-// ============================================================
-
-export const checkUserStatus = async (email: string) => {
-  console.log('🔍 Checking user status for:', email);
-  
-  try {
-    // Check auth.users
-    if (supabaseAdmin) {
-      const { data: userList, error: listError } = await supabaseAdmin.auth.admin.listUsers();
-      
-      if (!listError && userList?.users) {
-        const user = userList.users.find((u: any) => u.email === email);
-        
-        if (user) {
-          console.log('✅ Auth user found:');
-          console.log('  - ID:', user.id);
-          console.log('  - Email:', user.email);
-          console.log('  - Confirmed:', user.email_confirmed_at !== null);
-          console.log('  - Created:', user.created_at);
-          console.log('  - Last sign in:', user.last_sign_in_at);
-        } else {
-          console.log('❌ User not found in auth.users');
-        }
-      }
-    }
-    
-    // Check user_data
-    const { data, error } = await supabase
-      .from('user_data')
-      .select('email, auth_user_id, full_name, created_at')
-      .eq('email', email)
-      .maybeSingle();
-    
-    if (error) {
-      console.error('❌ Error checking user_data:', error);
-    } else if (data) {
-      console.log('✅ user_data found:', data);
-    } else {
-      console.log('❌ user_data not found');
-    }
-  } catch (error) {
-    console.error('❌ Error checking user status:', error);
-  }
-};
-
-// ============================================================
-// DEBUG: Check Auth user status
-// ============================================================
-
-export const debugAuthUser = async (email: string) => {
-  console.log('🔍 Debugging Auth user:', email);
-  
-  try {
-    if (!supabaseAdmin) {
-      console.log('❌ Admin client not available');
-      return;
-    }
-
-    // List all users
-    const { data: userList, error: listError } = await supabaseAdmin.auth.admin.listUsers();
-    
-    if (listError) {
-      console.error('❌ Error listing users:', listError);
-      return;
-    }
-
-    const user = userList?.users?.find((u: any) => u.email === email);
-    
-    if (!user) {
-      console.log('❌ User not found in Auth');
-      return;
-    }
-
-    console.log('✅ Auth user found:');
-    console.log('  - ID:', user.id);
-    console.log('  - Email:', user.email);
-    console.log('  - Created:', user.created_at);
-    console.log('  - Confirmed:', user.email_confirmed_at !== null);
-    console.log('  - Confirmed at:', user.email_confirmed_at);
-    console.log('  - Last sign in:', user.last_sign_in_at);
-    console.log('  - User metadata:', user.user_metadata);
-    
-    // Check if user_data exists
-    const { data: userData, error: dataError } = await supabase
-      .from('user_data')
-      .select('*')
-      .eq('email', email)
-      .maybeSingle();
-    
-    if (dataError) {
-      console.error('❌ Error checking user_data:', dataError);
-    } else if (userData) {
-      console.log('✅ user_data found:');
-      console.log('  - ID:', userData.id);
-      console.log('  - auth_user_id:', userData.auth_user_id);
-      console.log('  - full_name:', userData.full_name);
-    } else {
-      console.log('❌ user_data not found');
-    }
-  } catch (error) {
-    console.error('❌ Error debugging:', error);
-  }
-};
-
-// Login user with Supabase Auth - AUTO-FIXES missing Auth users
-export const loginUser = async (email: string, password: string) => {
-  console.log('🔑 Logging in user:', email);
-  console.log('🔑 Password length:', password?.length || 0);
-  
-  try {
-    // Validate inputs
-    if (!email || !password) {
-      return { success: false, error: 'Email and password are required' };
-    }
-    
+    // ============================================================
+    // STEP 3: Attempt login with Auth ONLY
+    // ============================================================
+    console.log('📡 Attempting login with Auth...');
     let authData = null;
     let authError = null;
     let retries = 3;
     
     while (retries > 0) {
       try {
-        console.log(`📡 Attempting login (${retries} retries left)...`);
         const result = await supabase.auth.signInWithPassword({
-          email: email,
+          email: normalizedEmail,
           password: password,
         });
         
         if (result.error) {
           console.log('❌ Login attempt failed:', result.error.message);
+          
           if (result.error.message.includes('rate limit')) {
             console.log(`⚠️ Rate limit hit, waiting 2 seconds... (${retries} retries left)`);
             await wait(2000);
             retries--;
             continue;
           }
+          
           authError = result.error;
           break;
         }
@@ -1255,98 +208,53 @@ export const loginUser = async (email: string, password: string) => {
       }
     }
 
-    if (authError) {
+    if (authError || !authData) {
       console.error('❌ Auth login error:', authError);
       
-      let errorMessage = authError.message || 'Invalid email or password.';
+      let errorMessage = '';
       
-      if (errorMessage.includes('rate limit')) {
+      // Handle specific error cases with user-friendly messages
+      if (authError?.message?.includes('Invalid login credentials')) {
+        errorMessage = 'Incorrect password. Please try again.';
+      } else if (authError?.message?.includes('Email not confirmed')) {
+        errorMessage = 'Please verify your email address before logging in. Check your inbox for the confirmation link.';
+      } else if (authError?.message?.includes('rate limit')) {
         errorMessage = 'Too many login attempts. Please wait a few minutes and try again.';
-      } else if (errorMessage.includes('Invalid login credentials')) {
-        // Check if user exists in user_data but not in Auth
-        const { data: userData } = await supabase
-          .from('user_data')
-          .select('*')
-          .eq('email', email)
-          .maybeSingle();
-        
-        if (userData) {
-          console.log('ℹ️ User exists in user_data but not in Auth. Auto-fixing...');
-          
-          // AUTO-FIX: Create Auth user
-          if (supabaseAdmin) {
-            const fixResult = await createAuthUserForExisting(email, password);
-            if (fixResult.success) {
-              console.log('✅ Auth user created! Retrying login...');
-              
-              // Retry login
-              const retryResult = await supabase.auth.signInWithPassword({
-                email: email,
-                password: password,
-              });
-              
-              if (!retryResult.error) {
-                authData = retryResult.data;
-                console.log('✅ Login successful after auto-fix!');
-                // Continue to the success flow below
-              } else {
-                errorMessage = 'Account was repaired but login failed. Please try again.';
-              }
-            } else {
-              errorMessage = 'Account needs repair. Please contact support.';
-            }
-          } else {
-            errorMessage = 'Account needs repair. Please contact support.';
-          }
-        } else {
-          errorMessage = 'Invalid email or password. Please try again.';
-        }
-      } else if (errorMessage.includes('Email not confirmed')) {
-        errorMessage = 'Please verify your email address before logging in.';
+      } else if (authError?.message?.includes('user not found')) {
+        errorMessage = 'No account found with this email address. Please check your email or register.';
+      } else {
+        errorMessage = authError?.message || 'Login failed. Please try again.';
       }
       
-      if (!authData) {
-        return { 
-          success: false, 
-          error: errorMessage
-        };
-      }
-    }
-
-    if (!authData?.user) {
       return { 
         success: false, 
-        error: 'Authentication failed.' 
+        error: errorMessage
       };
     }
 
+    // ============================================================
+    // STEP 4: Get or create user_data
+    // ============================================================
     console.log('✅ Auth login successful:', authData.user.id);
 
-    // Check if user exists in user_data - CREATE IF MISSING
     let { data, error } = await supabase
       .from('user_data')
       .select('*')
-      .eq('email', email)
+      .eq('email', normalizedEmail)
       .maybeSingle();
 
-    if (error) {
-      console.error('❌ Supabase Error:', error);
-      return { success: false, error: error.message };
-    }
-
-    // If user_data doesn't exist, CREATE IT automatically
+    // If user_data doesn't exist, create it
     if (!data) {
-      console.log('ℹ️ User found in Auth but NOT in user_data. Creating now...');
+      console.log('ℹ️ Creating user_data for user...');
       
-      // Create user_data record
       const newUserData = {
-        email: email,
+        email: normalizedEmail,
         auth_user_id: authData.user.id,
-        full_name: authData.user.user_metadata?.full_name || email,
+        full_name: authData.user.user_metadata?.full_name || normalizedEmail,
         email_verified: authData.user.email_confirmed_at !== null,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
-        password: null,
+        // NO PASSWORD FIELD
         role: 'User',
         permissions: ['Seasonal Forecast', 'Paint Analyzer'],
         contacts: [],
@@ -1369,71 +277,41 @@ export const loginUser = async (email: string, password: string) => {
         last_fetched: null,
       };
 
-      let insertResult = null;
-      let insertError = null;
-
-      // Try using Admin client first (bypasses RLS)
       if (supabaseAdmin) {
-        try {
-          const { data: inserted, error: err } = await supabaseAdmin
-            .from('user_data')
-            .insert(newUserData)
-            .select()
-            .single();
+        const { data: inserted, error: err } = await supabaseAdmin
+          .from('user_data')
+          .insert(newUserData)
+          .select()
+          .single();
 
-          if (err) {
-            console.error('❌ Admin client insert error:', err);
-            insertError = err;
-          } else {
-            insertResult = inserted;
-            console.log('✅ User_data created using Admin client');
-          }
-        } catch (err) {
-          console.error('❌ Admin client exception:', err);
-          insertError = err as any;
+        if (!err && inserted) {
+          data = inserted;
+          console.log('✅ user_data created with Admin client');
         }
       }
 
-      // Fallback to regular client
-      if (!insertResult) {
-        try {
-          const { data: inserted, error: err } = await supabase
-            .from('user_data')
-            .insert(newUserData)
-            .select()
-            .single();
+      if (!data) {
+        const { data: inserted, error: err } = await supabase
+          .from('user_data')
+          .insert(newUserData)
+          .select()
+          .single();
 
-          if (err) {
-            console.error('❌ Regular client insert error:', err);
-            insertError = err;
-          } else {
-            insertResult = inserted;
-            console.log('✅ User_data created using regular client');
-          }
-        } catch (err) {
-          console.error('❌ Regular client exception:', err);
-          insertError = err as any;
+        if (!err && inserted) {
+          data = inserted;
+          console.log('✅ user_data created with regular client');
         }
       }
 
-      if (insertError || !insertResult) {
-        console.error('❌ Error creating user_data:', insertError);
-        // Still allow login, but with warning
-        return {
-          success: true,
-          user: authData.user,
-          token: authData.session?.access_token || '',
-          warning: 'Profile data missing. Please update your profile.'
-        };
+      if (!data) {
+        console.warn('⚠️ Could not create user_data, but login succeeded');
       }
-
-      data = insertResult;
-      console.log('✅ User data created successfully!');
     }
 
     console.log('✅ User logged in successfully!');
     
-    const { password: _, ...userWithoutPassword } = data;
+    // Remove any password field if it exists
+    const { password: _, ...userWithoutPassword } = data || {};
     
     return { 
       success: true, 
@@ -1442,279 +320,714 @@ export const loginUser = async (email: string, password: string) => {
     };
   } catch (error: any) {
     console.error('❌ Error logging in:', error);
-    return { success: false, error: error.message };
+    return { 
+      success: false, 
+      error: error.message || 'An unexpected error occurred. Please try again.' 
+    };
   }
 };
 
 // ============================================================
-// PASSWORD RESET WITH PIN (6-DIGIT) - USING EMAIL SERVICE
+// REGISTER USER - COMPLETELY FIXED with proper validation
 // ============================================================
 
-// Generate a 6-digit PIN (re-exported from emailService)
-export { generatePIN } from './emailService';
-
-// Save reset token to database - WITH DEBUGGING
-export const saveResetToken = async (email: string, token: string) => {
-  try {
-    const normalizedEmail = email.toLowerCase().trim();
-    const callId = Math.random().toString(36).substring(7);
-    
-    console.log(`🔵 [${callId}] saveResetToken CALLED`);
-    console.log(`🔵 [${callId}] Email:`, normalizedEmail);
-    console.log(`🔵 [${callId}] Token:`, token);
-    
-   
-    const { error: deleteError } = await supabase
-      .from('password_reset_tokens')
-      .delete()
-      .eq('email', normalizedEmail)
-      .eq('used', false);
-
-    if (deleteError) {
-      console.error(`❌ [${callId}] Delete error:`, deleteError);
-    }
-
-    
-    const expiresAt = new Date();
-    expiresAt.setMinutes(expiresAt.getMinutes() + 10);
-    const expiresAtISO = expiresAt.toISOString();
-    
-    console.log(`⏰ [${callId}] Expires at:`, expiresAtISO);
-
-    
-    const { data, error } = await supabase
-      .from('password_reset_tokens')
-      .insert({
-        email: normalizedEmail,
-        token: token,
-        expires_at: expiresAtISO,
-        used: false,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      })
-      .select('id, email, token, expires_at, used, created_at');
-
-    if (error) {
-      console.error(`❌ [${callId}] Error saving reset token:`, error);
-      return { success: false, error: error.message };
-    }
-
-    console.log(`✅ [${callId}] Reset token saved!`);
-    console.log(`✅ [${callId}] ID:`, data?.[0]?.id);
-    console.log(`✅ [${callId}] Used:`, data?.[0]?.used);
-    console.log(`✅ [${callId}] Expires at:`, data?.[0]?.expires_at);
-    
-    return { success: true, data: data?.[0] || null };
-  } catch (error: any) {
-    console.error('❌ Error saving reset token:', error);
-    return { success: false, error: error.message };
-  }
-};
-
-// Verify reset token (PIN) - WITH DEBUGGING AND SAFEGUARD
-export const verifyResetToken = async (email: string, token: string) => {
-  try {
-    const normalizedEmail = email.toLowerCase().trim();
-    const callId = Math.random().toString(36).substring(7);
-    const now = new Date();
-    const nowISO = now.toISOString();
-    
-    console.log(`🔴 [${callId}] verifyResetToken CALLED`);
-    console.log(`🔴 [${callId}] Email:`, normalizedEmail);
-    console.log(`🔴 [${callId}] Token:`, token);
-    console.log(`🔴 [${callId}] Current time:`, nowISO);
-    
-    // Log the call stack to see who's calling this
-    console.log(`🔴 [${callId}] Call stack:`);
-    console.trace();
-
-    // First, check if the PIN exists (even if used or expired)
-    const { data: checkData, error: checkError } = await supabase
-      .from('password_reset_tokens')
-      .select('*')
-      .eq('email', normalizedEmail)
-      .eq('token', token)
-      .maybeSingle();
-
-    if (checkError) {
-      console.error(`❌ [${callId}] Check error:`, checkError);
-      return { success: false, error: checkError.message };
-    }
-
-    if (!checkData) {
-      console.log(`❌ [${callId}] No PIN found for this email and token`);
-      return { success: false, error: 'Invalid or expired PIN' };
-    }
-
-    console.log(`📝 [${callId}] Found PIN:`, {
-      id: checkData.id,
-      used: checkData.used,
-      expires_at: checkData.expires_at
-    });
-
-    // Check if already used
-    if (checkData.used) {
-      console.log(`❌ [${callId}] PIN already used!`);
-      return { success: false, error: 'PIN has already been used' };
-    }
-
-    // Check if expired
-    const expiresAt = new Date(checkData.expires_at);
-    if (now > expiresAt) {
-      console.log(`❌ [${callId}] PIN expired!`);
-      console.log(`   Expires at:`, expiresAt.toISOString());
-      console.log(`   Current time:`, nowISO);
-      return { success: false, error: 'PIN has expired. Please request a new one.' };
-    }
-
-    console.log(`✅ [${callId}] PIN is valid!`);
-    console.log(`   Time remaining:`, (expiresAt.getTime() - now.getTime()) / 1000, 'seconds');
-
-    // Mark token as used - with safeguard to prevent race conditions
-    const { error: updateError } = await supabase
-      .from('password_reset_tokens')
-      .update({ 
-        used: true,
-        updated_at: nowISO
-      })
-      .eq('id', checkData.id)
-      .eq('used', false);
-
-    if (updateError) {
-      console.error(`❌ [${callId}] Error marking token as used:`, updateError);
-      return { success: false, error: 'Failed to verify PIN' };
-    }
-
-    console.log(`✅ [${callId}] PIN marked as used`);
-    return { success: true, data: checkData };
-  } catch (error: any) {
-    console.error('❌ Error verifying token:', error);
-    return { success: false, error: error.message };
-  }
-};
-
-// ============================================================
-// UPDATE PASSWORD - UPDATES BOTH AUTH AND USER_DATA
-// ============================================================
-
-export const updateUserPassword = async (email: string, newPassword: string) => {
+export const registerUser = async (email: string, password: string, fullName: string) => {
+  console.log('📝 Registering user:', email);
+  
   try {
     const normalizedEmail = email.toLowerCase().trim();
     
-    console.log('📝 Updating password for:', normalizedEmail);
+    // ============================================================
+    // STEP 1: Validate inputs with clear error messages
+    // ============================================================
+    if (!normalizedEmail) {
+      return { success: false, error: 'Please enter your email address.' };
+    }
     
-    let authUpdated = false;
-    let userUpdated = false;
-    let authErrorMsg = '';
-
-    if (supabaseAdmin) {
-      try {
-        console.log('🔐 Updating Auth password using admin client...');
-        
-        const { data: userList, error: listError } = await supabaseAdmin.auth.admin.listUsers();
-        
-        if (listError) {
-          console.error('❌ Error listing users:', listError);
-          authErrorMsg = listError.message;
-        } else {
-          const user = userList?.users?.find((u: any) => u.email === normalizedEmail);
-          
-          if (user) {
-            const { error: authError } = await supabaseAdmin.auth.admin.updateUserById(
-              user.id,
-              { password: newPassword }
-            );
-            
-            if (authError) {
-              console.error('❌ Error updating auth password:', authError);
-              authErrorMsg = authError.message;
-            } else {
-              authUpdated = true;
-              console.log('✅ Auth password updated successfully');
-            }
-          } else {
-            console.log('⚠️ User not found in Auth');
-            authErrorMsg = 'User not found in Auth';
-          }
-        }
-      } catch (err) {
-        console.error('❌ Admin auth update error:', err);
-        authErrorMsg = err instanceof Error ? err.message : 'Unknown error';
-      }
-    } else {
-      console.log('⚠️ Admin client not available, skipping Auth update');
-      authErrorMsg = 'Admin client not available';
+    if (!email.includes('@') || !email.includes('.')) {
+      return { success: false, error: 'Please enter a valid email address.' };
+    }
+    
+    if (!password || password.length === 0) {
+      return { success: false, error: 'Please enter a password.' };
+    }
+    
+    if (password.length < 6) {
+      return { success: false, error: 'Password must be at least 6 characters.' };
+    }
+    
+    if (!fullName || fullName.trim().length === 0) {
+      return { success: false, error: 'Please enter your full name.' };
     }
 
-    console.log('📝 Updating password in user_data...');
-    const { error: dbError } = await supabase
-      .from('user_data')
-      .update({ 
-        password: newPassword,
-        updated_at: new Date().toISOString()
-      })
-      .eq('email', normalizedEmail);
-
-    if (dbError) {
-      console.error('❌ Error updating user_data password:', dbError);
-    } else {
-      userUpdated = true;
-      console.log('✅ user_data password updated successfully');
-    }
-
-    await supabase
-      .from('password_reset_tokens')
-      .delete()
-      .eq('email', normalizedEmail)
-      .eq('used', true);
-
-    if (authUpdated && userUpdated) {
-      console.log('✅ Password updated successfully in both Auth and user_data');
-      return { success: true, message: 'Password updated successfully!' };
-    } else if (userUpdated && !authUpdated) {
-      console.log('⚠️ Password updated in user_data but Auth update failed:', authErrorMsg);
-      return { 
-        success: true, 
-        message: 'Password updated in database but Auth sync failed. Please contact support.',
-        warning: true,
-        error: authErrorMsg
-      };
-    } else if (authUpdated && !userUpdated) {
-      console.log('⚠️ Password updated in Auth but user_data update failed');
+    // ============================================================
+    // STEP 2: Check if user already exists in Auth
+    // ============================================================
+    console.log('🔍 Checking if user already exists...');
+    const authCheck = await checkAuthUserExists(normalizedEmail);
+    
+    if (authCheck.exists) {
+      console.log('❌ User already exists in Auth');
       return { 
         success: false, 
-        error: 'Password updated in Auth but database update failed. Please try again.' 
+        error: 'This email is already registered. Please login instead.' 
       };
-    } else {
-      console.log('❌ Password update failed in both Auth and user_data');
+    }
+
+    // ============================================================
+    // STEP 3: Create Auth user
+    // ============================================================
+    console.log('📝 Creating Auth user...');
+    let authData = null;
+    let authError = null;
+
+    // Use Admin API in development
+    if (isDevelopment && supabaseAdmin) {
+      try {
+        const { data, error } = await supabaseAdmin.auth.admin.createUser({
+          email: normalizedEmail,
+          password: password,
+          email_confirm: true,
+          user_metadata: {
+            full_name: fullName.trim(),
+          },
+        });
+        
+        if (error) {
+          console.error('❌ Admin API error:', error);
+          authError = error;
+        } else {
+          authData = { user: data.user };
+          console.log('✅ User created with Admin API:', data.user.id);
+        }
+      } catch (adminErr) {
+        console.error('❌ Admin API exception:', adminErr);
+        authError = adminErr as any;
+      }
+    }
+
+    // Fallback to regular signup
+    if (!authData) {
+      try {
+        const result = await supabase.auth.signUp({
+          email: normalizedEmail,
+          password: password,
+          options: {
+            data: {
+              full_name: fullName.trim(),
+            },
+          },
+        });
+
+        if (result.error) {
+          console.error('❌ Signup error:', result.error);
+          authError = result.error;
+        } else {
+          authData = result.data;
+          console.log('✅ Regular signup successful!');
+        }
+      } catch (err) {
+        console.error('❌ Signup exception:', err);
+        authError = err as any;
+      }
+    }
+
+    if (!authData?.user) {
+      console.error('❌ No auth data returned');
+      
+      let errorMessage = '';
+      
+      if (authError?.message?.includes('rate limit')) {
+        errorMessage = 'Too many registration attempts. Please wait a few minutes and try again.';
+      } else if (authError?.message?.includes('already registered')) {
+        errorMessage = 'This email is already registered. Please login instead.';
+      } else {
+        errorMessage = authError?.message || 'Failed to create account. Please try again.';
+      }
+      
+      return { 
+        success: false, 
+        error: errorMessage
+      };
+    }
+
+    console.log('✅ User authenticated with ID:', authData.user.id);
+
+    // ============================================================
+    // STEP 4: Auto-confirm in development
+    // ============================================================
+    const isEmailConfirmed = authData.user.email_confirmed_at !== null;
+
+    if (isDevelopment && !isEmailConfirmed && supabaseAdmin) {
+      console.log('🔄 Auto-confirming email in development...');
+      try {
+        await supabaseAdmin.auth.admin.updateUserById(
+          authData.user.id,
+          { email_confirm: true }
+        );
+        console.log('✅ Email auto-confirmed');
+      } catch (err) {
+        console.error('❌ Failed to auto-confirm:', err);
+      }
+    }
+
+    // In production, user needs to confirm email
+    if (!isEmailConfirmed && !isDevelopment) {
+      return {
+        success: true,
+        message: 'Registration successful! Please check your email to confirm your account before logging in.',
+        data: null,
+        requiresConfirmation: true
+      };
+    }
+
+    // ============================================================
+    // STEP 5: Create user_data record (NO PASSWORD)
+    // ============================================================
+    console.log('📝 Creating user_data record...');
+    
+    const payload = {
+      email: normalizedEmail,
+      auth_user_id: authData.user.id,
+      full_name: fullName.trim(),
+      email_verified: true,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      // NO PASSWORD - Auth is the source of truth
+      role: 'User',
+      permissions: ['Seasonal Forecast', 'Paint Analyzer'],
+      contacts: [],
+      batch_size: 0.1,
+      phone: null,
+      location: null,
+      address: null,
+      join_date: null,
+      employee_id: null,
+      profile_picture: null,
+      inventory_data: null,
+      inventory_data_name: null,
+      color_analysis: null,
+      uploaded_image: null,
+      uploaded_file_name: null,
+      uploaded_file_size: null,
+      sales_data: null,
+      sales_data_name: null,
+      forecast_data: null,
+      last_fetched: null,
+    };
+
+    let newData = null;
+
+    // Try using Admin client first
+    if (supabaseAdmin) {
+      try {
+        const { data, error } = await supabaseAdmin
+          .from('user_data')
+          .insert(payload)
+          .select();
+
+        if (!error && data) {
+          newData = data;
+          console.log('✅ user_data created using Admin client');
+        }
+      } catch (err) {
+        console.error('❌ Admin client exception:', err);
+      }
+    }
+
+    // Fallback to regular client
+    if (!newData) {
+      try {
+        const { data, error } = await supabase
+          .from('user_data')
+          .insert(payload)
+          .select();
+
+        if (!error && data) {
+          newData = data;
+          console.log('✅ user_data created using regular client');
+        }
+      } catch (err) {
+        console.error('❌ Regular client exception:', err);
+      }
+    }
+
+    if (!newData) {
+      console.warn('⚠️ Could not create user_data, but user was created in Auth');
+      return { 
+        success: true, 
+        message: 'Account created but profile setup incomplete. Please login to complete your profile.',
+        data: null,
+        warning: 'Please login to complete your profile setup.'
+      };
+    }
+
+    console.log('✅ Registration complete!');
+    
+    return { 
+      success: true, 
+      data: newData[0] || null,
+      message: isDevelopment 
+        ? 'Registration successful! You can now login.' 
+        : 'Registration successful! Please check your email to confirm your account.'
+    };
+    
+  } catch (error: any) {
+    console.error('❌ Error registering user:', error);
+    return { 
+      success: false, 
+      error: error.message || 'Registration failed. Please try again.' 
+    };
+  }
+};
+
+// ============================================================
+// COMPLETE PASSWORD RESET - FIXED with validation
+// ============================================================
+
+export const completePasswordReset = async (email: string, newPassword: string) => {
+  console.log('🔄 Complete password reset for:', email);
+  
+  try {
+    const normalizedEmail = email.toLowerCase().trim();
+    
+    // ============================================================
+    // STEP 1: Validate inputs
+    // ============================================================
+    if (!normalizedEmail) {
+      return { success: false, error: 'Email is required.' };
+    }
+    
+    if (!newPassword || newPassword.length === 0) {
+      return { success: false, error: 'Please enter a new password.' };
+    }
+    
+    if (newPassword.length < 6) {
+      return { success: false, error: 'Password must be at least 6 characters.' };
+    }
+
+    if (!supabaseAdmin) {
+      console.error('❌ Admin client not available');
+      return { success: false, error: 'Password reset service unavailable. Please try again later.' };
+    }
+
+    // ============================================================
+    // STEP 2: Find the user in Auth
+    // ============================================================
+    console.log('🔍 Finding user in Auth...');
+    const { data: userList, error: listError } = await supabaseAdmin.auth.admin.listUsers();
+    
+    if (listError) {
+      console.error('❌ Error listing users:', listError);
+      return { success: false, error: 'Failed to find user. Please try again.' };
+    }
+
+    const user = userList?.users?.find((u: any) => u.email === normalizedEmail);
+    
+    if (!user) {
+      console.log('❌ User not found in Auth');
+      return { success: false, error: 'No account found with this email address.' };
+    }
+
+    console.log('👤 Found Auth user:', user.id);
+
+    // ============================================================
+    // STEP 3: Update the Auth password (THIS IS THE ONLY SOURCE OF TRUTH)
+    // ============================================================
+    console.log('🔐 Updating Auth password...');
+    const { error: authError } = await supabaseAdmin.auth.admin.updateUserById(
+      user.id,
+      { password: newPassword }
+    );
+    
+    if (authError) {
+      console.error('❌ Error updating auth password:', authError);
       return { 
         success: false, 
         error: 'Failed to update password. Please try again.' 
       };
     }
+    
+    console.log('✅ Auth password updated successfully');
+
+    // ============================================================
+    // STEP 4: Force sign out ALL sessions
+    // ============================================================
+    console.log('🚪 Invalidating ALL sessions...');
+    try {
+      await supabaseAdmin.auth.admin.signOut(user.id);
+      console.log('✅ User sessions invalidated');
+    } catch (err) {
+      console.warn('⚠️ Could not invalidate sessions:', err);
+    }
+
+    // ============================================================
+    // STEP 5: Clean up reset tokens
+    // ============================================================
+    await supabase
+      .from('password_reset_tokens')
+      .delete()
+      .eq('email', normalizedEmail);
+
+    console.log('✅ Password reset completed successfully!');
+    
+    
+    return { 
+      success: true, 
+      message: 'Password reset successfully! Please login with your new password.',
+      verified: true
+    };
+    
   } catch (error: any) {
-    console.error('❌ Error updating password:', error);
+    console.error('❌ Error in completePasswordReset:', error);
+    return { 
+      success: false, 
+      error: error.message || 'An unexpected error occurred. Please try again.' 
+    };
+  }
+};
+
+// ============================================================
+// USER DELETION - COMPLETE CLEANUP
+// ============================================================
+
+export const deleteUserPermanently = async (email: string) => {
+  console.log('🗑️ PERMANENTLY deleting user:', email);
+  
+  if (!supabaseAdmin) {
+    console.error('❌ Admin client not available');
+    return { success: false, error: 'Admin client not available' };
+  }
+
+  try {
+    const normalizedEmail = email.toLowerCase().trim();
+    
+    // Find the user in Auth
+    console.log('🔍 Finding Auth user...');
+    const { data: userList, error: listError } = await supabaseAdmin.auth.admin.listUsers();
+    
+    if (listError) {
+      console.error('❌ Error listing users:', listError);
+      return { success: false, error: listError.message };
+    }
+
+    const user = userList?.users?.find((u: any) => u.email === normalizedEmail);
+    
+    // Delete from Auth first
+    if (user) {
+      console.log('🗑️ Deleting Auth user:', user.id);
+      const { error: authError } = await supabaseAdmin.auth.admin.deleteUser(user.id);
+      
+      if (authError) {
+        console.error('❌ Error deleting Auth user:', authError);
+        return { success: false, error: authError.message };
+      }
+      console.log('✅ Auth user deleted');
+    }
+
+    // Delete from user_data
+    console.log('📝 Deleting from user_data...');
+    const { error: dataError } = await supabaseAdmin
+      .from('user_data')
+      .delete()
+      .eq('email', normalizedEmail);
+    
+    if (dataError && dataError.code !== 'PGRST116') {
+      console.error('❌ Error deleting user_data:', dataError);
+    } else {
+      console.log('✅ user_data deleted');
+    }
+
+    // Clean up reset tokens
+    await supabase
+      .from('password_reset_tokens')
+      .delete()
+      .eq('email', normalizedEmail);
+
+    console.log('✅ User PERMANENTLY deleted from all systems');
+    return { 
+      success: true, 
+      message: 'User permanently deleted from Auth, user_data, and all related records' 
+    };
+  } catch (error: any) {
+    console.error('❌ Error permanently deleting user:', error);
     return { success: false, error: error.message };
   }
 };
 
 // ============================================================
-// SEND PASSWORD RESET EMAIL - Using emailService
+// FORCE SYNC - Ensure Auth and user_data match
 // ============================================================
 
-export const sendPasswordResetEmailWithPIN = async (email: string, pin: string) => {
-  console.log('📧 Sending password reset PIN to:', email);
-  console.log(`🔑 PIN: ${pin}`);
+export const forceSyncUser = async (email: string) => {
+  console.log('🔧 Force syncing user:', email);
   
-  const result = await sendPasswordResetEmail(email, pin);
-  
-  if (result.success) {
-    console.log('✅ Password reset email sent successfully');
-  } else {
-    console.error('❌ Failed to send password reset email:', result.error);
+  try {
+    const normalizedEmail = email.toLowerCase().trim();
+    
+    if (!normalizedEmail) {
+      return { success: false, error: 'Email is required.' };
+    }
+    
+    if (!supabaseAdmin) {
+      return { success: false, error: 'Admin client not available' };
+    }
+
+    // Check Auth
+    const { data: userList } = await supabaseAdmin.auth.admin.listUsers();
+    const authUser = userList?.users?.find((u: any) => u.email === normalizedEmail);
+    
+    // Check user_data
+    const { data: userData } = await supabase
+      .from('user_data')
+      .select('*')
+      .eq('email', normalizedEmail)
+      .maybeSingle();
+
+    if (authUser && !userData) {
+      // Auth exists but user_data doesn't - create it
+      console.log('📝 Creating user_data for existing Auth user...');
+      
+      const newUserData = {
+        email: normalizedEmail,
+        auth_user_id: authUser.id,
+        full_name: authUser.user_metadata?.full_name || normalizedEmail,
+        role: 'User',
+        permissions: ['Seasonal Forecast', 'Paint Analyzer'],
+        contacts: [],
+        batch_size: 0.1,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      };
+
+      const { error: insertError } = await supabaseAdmin
+        .from('user_data')
+        .insert(newUserData);
+
+      if (insertError) {
+        console.error('❌ Failed to create user_data:', insertError);
+        return { success: false, error: insertError.message };
+      }
+      
+      console.log('✅ user_data created successfully');
+      return { success: true, message: 'User synced - user_data created' };
+    }
+
+    if (!authUser && userData) {
+      // user_data exists but Auth doesn't - orphaned record
+      console.log('🗑️ Orphaned user_data found - deleting...');
+      
+      const { error: deleteError } = await supabaseAdmin
+        .from('user_data')
+        .delete()
+        .eq('email', normalizedEmail);
+
+      if (deleteError) {
+        console.error('❌ Failed to delete orphaned user_data:', deleteError);
+        return { success: false, error: deleteError.message };
+      }
+      
+      console.log('✅ Orphaned user_data deleted');
+      return { success: true, message: 'Orphaned user_data deleted' };
+    }
+
+    if (authUser && userData) {
+      // Both exist - ensure they're linked
+      if (userData.auth_user_id !== authUser.id) {
+        console.log('🔄 Updating auth_user_id...');
+        
+        const { error: updateError } = await supabaseAdmin
+          .from('user_data')
+          .update({ auth_user_id: authUser.id })
+          .eq('email', normalizedEmail);
+
+        if (updateError) {
+          console.error('❌ Failed to update auth_user_id:', updateError);
+          return { success: false, error: updateError.message };
+        }
+        
+        console.log('✅ auth_user_id updated');
+        return { success: true, message: 'User sync completed' };
+      }
+      
+      console.log('✅ User is already in sync');
+      return { success: true, message: 'User is already in sync' };
+    }
+
+    console.log('❌ User not found in either system');
+    return { success: false, error: 'User not found in either system' };
+  } catch (error: any) {
+    console.error('❌ Error syncing user:', error);
+    return { success: false, error: error.message };
   }
+};
+
+// ============================================================
+// CREATE AUTH USER FOR EXISTING user_data
+// ============================================================
+
+export const createAuthUserForExisting = async (email: string, password: string) => {
+  console.log('🔧 Creating Auth user for existing user_data:', email);
   
-  return result;
+  if (!supabaseAdmin) {
+    console.error('❌ Admin client not available');
+    return { success: false, error: 'Admin client not available' };
+  }
+
+  try {
+    const normalizedEmail = email.toLowerCase().trim();
+    
+    // Check if user exists in user_data
+    const { data: userData, error: userDataError } = await supabase
+      .from('user_data')
+      .select('*')
+      .eq('email', normalizedEmail)
+      .maybeSingle();
+
+    if (userDataError) {
+      console.error('❌ Error checking user_data:', userDataError);
+      return { success: false, error: userDataError.message };
+    }
+
+    if (!userData) {
+      return { success: false, error: 'User not found in user_data' };
+    }
+
+    console.log('✅ User found in user_data:', userData);
+
+    // Check if already exists in Auth
+    const { data: userList } = await supabaseAdmin.auth.admin.listUsers();
+    const existingAuthUser = userList?.users?.find((u: any) => u.email === normalizedEmail);
+
+    if (existingAuthUser) {
+      console.log('✅ User already exists in Auth:', existingAuthUser.id);
+      
+      // Update password
+      console.log('🔄 Updating Auth password...');
+      const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(
+        existingAuthUser.id,
+        { password: password }
+      );
+      
+      if (updateError) {
+        console.error('❌ Failed to update password:', updateError);
+        return { success: false, error: updateError.message };
+      }
+      
+      console.log('✅ Password updated in Auth');
+      
+      // Update user_data
+      await supabase
+        .from('user_data')
+        .update({ 
+          auth_user_id: existingAuthUser.id,
+          updated_at: new Date().toISOString()
+        })
+        .eq('email', normalizedEmail);
+      
+      return { 
+        success: true, 
+        user: existingAuthUser,
+        message: 'User already exists in Auth. Password updated.'
+      };
+    }
+
+    // Create user in Auth
+    console.log('📝 Creating Auth user...');
+    const { data, error: createError } = await supabaseAdmin.auth.admin.createUser({
+      email: normalizedEmail,
+      password: password,
+      email_confirm: true,
+      user_metadata: {
+        full_name: userData.full_name || normalizedEmail,
+      },
+    });
+
+    if (createError) {
+      console.error('❌ Failed to create Auth user:', createError);
+      return { success: false, error: createError.message };
+    }
+
+    console.log('✅ Auth user created:', data.user.id);
+
+    // Update user_data with auth_user_id
+    const { error: updateDataError } = await supabase
+      .from('user_data')
+      .update({ 
+        auth_user_id: data.user.id,
+        updated_at: new Date().toISOString()
+      })
+      .eq('email', normalizedEmail);
+
+    if (updateDataError) {
+      console.error('❌ Failed to update user_data:', updateDataError);
+    } else {
+      console.log('✅ user_data updated with auth_user_id');
+    }
+
+    return { 
+      success: true, 
+      user: data.user,
+      message: 'Auth user created successfully'
+    };
+  } catch (error: any) {
+    console.error('❌ Error creating Auth user:', error);
+    return { success: false, error: error.message };
+  }
+};
+
+// ============================================================
+// AUTO-CONFIRM EMAIL IN DEVELOPMENT
+// ============================================================
+
+export const confirmUserEmail = async (email: string) => {
+  if (!isDevelopment) {
+    return { success: false, error: 'Only available in development' };
+  }
+
+  if (!supabaseAdmin) {
+    console.warn('⚠️ Admin client not available, skipping auto-confirm');
+    return { success: false, error: 'Admin client not available' };
+  }
+
+  try {
+    const normalizedEmail = email.toLowerCase().trim();
+    console.log('📧 Auto-confirming email for:', normalizedEmail);
+    
+    const { data: userList, error: listError } = await supabaseAdmin.auth.admin.listUsers();
+    
+    if (listError) {
+      console.error('❌ Error listing users:', listError);
+      return { success: false, error: listError.message };
+    }
+
+    const user = userList?.users?.find((u: any) => u.email === normalizedEmail);
+    
+    if (!user) {
+      return { success: false, error: 'User not found' };
+    }
+
+    const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(
+      user.id,
+      { email_confirm: true }
+    );
+
+    if (updateError) {
+      console.error('❌ Error confirming email:', updateError);
+      return { success: false, error: updateError.message };
+    }
+
+    console.log('✅ Email confirmed for:', normalizedEmail);
+    return { success: true, message: 'Email confirmed successfully!' };
+  } catch (error: any) {
+    console.error('❌ Error confirming email:', error);
+    return { success: false, error: error.message };
+  }
+};
+
+export const confirmExistingUser = async (email: string) => {
+  console.log('📧 Manually confirming existing user:', email);
+  return await confirmUserEmail(email);
 };
 
 // ============================================================
@@ -1742,7 +1055,7 @@ export const getCurrentSession = async () => {
 };
 
 // ============================================================
-// USER DATA - CRUD Operations
+// USER DATA - CRUD Operations (NO PASSWORD)
 // ============================================================
 
 export const getUserData = async (email: string) => {
@@ -1750,7 +1063,7 @@ export const getUserData = async (email: string) => {
     const { data, error } = await supabase
       .from('user_data')
       .select('*')
-      .eq('email', email)
+      .eq('email', email.toLowerCase().trim())
       .maybeSingle();
 
     if (error) {
@@ -1767,15 +1080,18 @@ export const getUserData = async (email: string) => {
 
 export const saveUserData = async (email: string, data: any) => {
   try {
+    // Remove password field if present (should not be stored)
+    const { password, ...cleanData } = data;
+    
     const payload = {
-      ...data,
+      ...cleanData,
       updated_at: new Date().toISOString(),
     };
 
     const { error } = await supabase
       .from('user_data')
       .update(payload)
-      .eq('email', email);
+      .eq('email', email.toLowerCase().trim());
 
     if (error) {
       console.error('❌ Supabase Error:', error);
@@ -1790,7 +1106,7 @@ export const saveUserData = async (email: string, data: any) => {
 };
 
 // ============================================================
-// PAINT ANALYZER - Data Storage 
+// PAINT ANALYZER - Data Storage
 // ============================================================
 
 export const savePaintAnalyzerData = async (email: string, data: {
@@ -1806,6 +1122,8 @@ export const savePaintAnalyzerData = async (email: string, data: {
   console.log('🎨 Saving Paint Analyzer data for user:', email);
   
   try {
+    const normalizedEmail = email.toLowerCase().trim();
+    
     const payload = {
       inventory_data: data.inventory_data || null,
       inventory_data_name: data.inventory_data_name || null,
@@ -1821,7 +1139,7 @@ export const savePaintAnalyzerData = async (email: string, data: {
     const { error } = await supabase
       .from('user_data')
       .update(payload)
-      .eq('email', email);
+      .eq('email', normalizedEmail);
 
     if (error) {
       console.error('❌ Supabase Error:', error);
@@ -1843,7 +1161,7 @@ export const getPaintAnalyzerData = async (email: string) => {
     const { data, error } = await supabase
       .from('user_data')
       .select('inventory_data, inventory_data_name, color_analysis, uploaded_image, uploaded_file_name, uploaded_file_size, batch_size, last_fetched')
-      .eq('email', email)
+      .eq('email', email.toLowerCase().trim())
       .maybeSingle();
 
     if (error) {
@@ -1862,6 +1180,8 @@ export const clearPaintAnalyzerData = async (email: string) => {
   console.log('🗑️ Clearing Paint Analyzer data for user:', email);
   
   try {
+    const normalizedEmail = email.toLowerCase().trim();
+    
     const { error } = await supabase
       .from('user_data')
       .update({
@@ -1875,7 +1195,7 @@ export const clearPaintAnalyzerData = async (email: string) => {
         last_fetched: null,
         updated_at: new Date().toISOString(),
       })
-      .eq('email', email);
+      .eq('email', normalizedEmail);
 
     if (error) {
       console.error('❌ Supabase Error:', error);
@@ -1903,6 +1223,8 @@ export const saveSalesForecastData = async (email: string, data: {
   console.log('📊 Saving Sales Forecast data for user:', email);
   
   try {
+    const normalizedEmail = email.toLowerCase().trim();
+    
     const payload = {
       sales_data: data.sales_data || null,
       sales_data_name: data.sales_data_name || null,
@@ -1914,7 +1236,7 @@ export const saveSalesForecastData = async (email: string, data: {
     const { error } = await supabase
       .from('user_data')
       .update(payload)
-      .eq('email', email);
+      .eq('email', normalizedEmail);
 
     if (error) {
       console.error('❌ Supabase Error:', error);
@@ -1936,7 +1258,7 @@ export const getSalesForecastData = async (email: string) => {
     const { data, error } = await supabase
       .from('user_data')
       .select('sales_data, sales_data_name, forecast_data, last_fetched')
-      .eq('email', email)
+      .eq('email', email.toLowerCase().trim())
       .maybeSingle();
 
     if (error) {
@@ -1955,6 +1277,8 @@ export const clearSalesForecastData = async (email: string) => {
   console.log('🗑️ Clearing Sales Forecast data for user:', email);
   
   try {
+    const normalizedEmail = email.toLowerCase().trim();
+    
     const { error } = await supabase
       .from('user_data')
       .update({
@@ -1964,7 +1288,7 @@ export const clearSalesForecastData = async (email: string) => {
         last_fetched: null,
         updated_at: new Date().toISOString(),
       })
-      .eq('email', email);
+      .eq('email', normalizedEmail);
 
     if (error) {
       console.error('❌ Supabase Error:', error);
@@ -1980,14 +1304,15 @@ export const clearSalesForecastData = async (email: string) => {
 };
 
 // ============================================================
-// USER PROFILE - COMPLETE WITH ALL FIELDS
+// USER PROFILE - COMPLETE WITH ALL FIELDS (NO PASSWORD)
 // ============================================================
 
 export const saveUserProfile = async (email: string, profileData: any) => {
   console.log('📤 Saving user profile for:', email);
-  console.log('📤 Profile data:', profileData);
   
   try {
+    const normalizedEmail = email.toLowerCase().trim();
+    
     const payload = {
       full_name: profileData.name || null,
       phone: profileData.phone || null,
@@ -2002,19 +1327,17 @@ export const saveUserProfile = async (email: string, profileData: any) => {
       updated_at: new Date().toISOString(),
     };
 
-    console.log('📤 Payload to save:', payload);
-
     const { error } = await supabase
       .from('user_data')
       .update(payload)
-      .eq('email', email);
+      .eq('email', normalizedEmail);
 
     if (error) {
       console.error('❌ Supabase Error:', error);
       throw error;
     }
 
-    console.log('✅ User profile saved successfully to Supabase!');
+    console.log('✅ User profile saved successfully!');
     return true;
   } catch (error: any) {
     console.error('❌ Error saving user profile:', error);
@@ -2029,7 +1352,7 @@ export const getUserProfile = async (email: string) => {
     const { data, error } = await supabase
       .from('user_data')
       .select('full_name, phone, role, location, address, join_date, employee_id, permissions, contacts, profile_picture')
-      .eq('email', email)
+      .eq('email', email.toLowerCase().trim())
       .maybeSingle();
 
     if (error) {
@@ -2041,8 +1364,6 @@ export const getUserProfile = async (email: string) => {
       console.log('ℹ️ No profile data found for:', email);
       return null;
     }
-
-    console.log('📥 Profile data from Supabase:', data);
 
     return {
       name: data.full_name || 'New User',
@@ -2072,9 +1393,10 @@ export const getUserProfile = async (email: string) => {
 
 export const saveProfilePicture = async (email: string, pictureData: string | null) => {
   console.log('📸 Saving profile picture for:', email);
-  console.log('📸 Picture data length:', pictureData?.length || 0);
   
   try {
+    const normalizedEmail = email.toLowerCase().trim();
+    
     const payload = {
       profile_picture: pictureData || null,
       updated_at: new Date().toISOString(),
@@ -2083,14 +1405,14 @@ export const saveProfilePicture = async (email: string, pictureData: string | nu
     const { error } = await supabase
       .from('user_data')
       .update(payload)
-      .eq('email', email);
+      .eq('email', normalizedEmail);
 
     if (error) {
       console.error('❌ Supabase Error:', error);
       throw error;
     }
 
-    console.log('✅ Profile picture saved successfully to Supabase!');
+    console.log('✅ Profile picture saved successfully!');
     return true;
   } catch (error: any) {
     console.error('❌ Error saving profile picture:', error);
@@ -2105,7 +1427,7 @@ export const getProfilePicture = async (email: string) => {
     const { data, error } = await supabase
       .from('user_data')
       .select('profile_picture')
-      .eq('email', email)
+      .eq('email', email.toLowerCase().trim())
       .maybeSingle();
 
     if (error) {
@@ -2113,10 +1435,162 @@ export const getProfilePicture = async (email: string) => {
       throw error;
     }
 
-    console.log('📥 Profile picture:', data?.profile_picture ? 'Found' : 'Not found');
     return data?.profile_picture || null;
   } catch (error: any) {
     console.error('❌ Error getting profile picture:', error);
     return null;
   }
-};  
+};
+
+// ============================================================
+// PASSWORD RESET WITH PIN (6-DIGIT)
+// ============================================================
+
+export { generatePIN } from './emailService';
+
+export const saveResetToken = async (email: string, token: string) => {
+  try {
+    const normalizedEmail = email.toLowerCase().trim();
+    
+    // Delete old unused tokens
+    await supabase
+      .from('password_reset_tokens')
+      .delete()
+      .eq('email', normalizedEmail)
+      .eq('used', false);
+
+    // Set expiration time (10 minutes from now)
+    const expiresAt = new Date();
+    expiresAt.setMinutes(expiresAt.getMinutes() + 10);
+
+    const { data, error } = await supabase
+      .from('password_reset_tokens')
+      .insert({
+        email: normalizedEmail,
+        token: token,
+        expires_at: expiresAt.toISOString(),
+        used: false,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      })
+      .select();
+
+    if (error) {
+      console.error('❌ Error saving reset token:', error);
+      return { success: false, error: error.message };
+    }
+
+    return { success: true, data: data?.[0] || null };
+  } catch (error: any) {
+    console.error('❌ Error saving reset token:', error);
+    return { success: false, error: error.message };
+  }
+};
+
+export const verifyResetToken = async (email: string, token: string) => {
+  try {
+    const normalizedEmail = email.toLowerCase().trim();
+    const now = new Date();
+
+    const { data, error } = await supabase
+      .from('password_reset_tokens')
+      .select('*')
+      .eq('email', normalizedEmail)
+      .eq('token', token)
+      .maybeSingle();
+
+    if (error) {
+      return { success: false, error: error.message };
+    }
+
+    if (!data) {
+      return { success: false, error: 'Invalid or expired PIN' };
+    }
+
+    if (data.used) {
+      return { success: false, error: 'PIN has already been used' };
+    }
+
+    const expiresAt = new Date(data.expires_at);
+    if (now > expiresAt) {
+      return { success: false, error: 'PIN has expired. Please request a new one.' };
+    }
+
+    await supabase
+      .from('password_reset_tokens')
+      .update({ 
+        used: true,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', data.id);
+
+    return { success: true, data };
+  } catch (error: any) {
+    console.error('❌ Error verifying token:', error);
+    return { success: false, error: error.message };
+  }
+};
+
+export const sendPasswordResetEmailWithPIN = async (email: string, pin: string) => {
+  console.log('📧 Sending password reset PIN to:', email);
+  console.log(`🔑 PIN: ${pin}`);
+  
+  const result = await sendPasswordResetEmail(email, pin);
+  
+  if (result.success) {
+    console.log('✅ Password reset email sent successfully');
+  } else {
+    console.error('❌ Failed to send password reset email:', result.error);
+  }
+  
+  return result;
+};
+
+// ============================================================
+// DEBUG: Check user status
+// ============================================================
+
+export const checkUserStatus = async (email: string) => {
+  console.log('🔍 Checking user status for:', email);
+  
+  try {
+    const normalizedEmail = email.toLowerCase().trim();
+    
+    // Check auth.users
+    if (supabaseAdmin) {
+      const { data: userList, error: listError } = await supabaseAdmin.auth.admin.listUsers();
+      
+      if (!listError && userList?.users) {
+        const user = userList.users.find((u: any) => u.email === normalizedEmail);
+        
+        if (user) {
+          console.log('✅ Auth user found:');
+          console.log('  - ID:', user.id);
+          console.log('  - Email:', user.email);
+          console.log('  - Confirmed:', user.email_confirmed_at !== null);
+          console.log('  - Created:', user.created_at);
+          console.log('  - Last sign in:', user.last_sign_in_at);
+        } else {
+          console.log('❌ User not found in auth.users');
+        }
+      }
+    }
+    
+    // Check user_data
+    const { data, error } = await supabase
+      .from('user_data')
+      .select('email, auth_user_id, full_name, created_at')
+      .eq('email', normalizedEmail)
+      .maybeSingle();
+    
+    if (error) {
+      console.error('❌ Error checking user_data:', error);
+    } else if (data) {
+      console.log('✅ user_data found:', data);
+    } else {
+      console.log('❌ user_data not found');
+    }
+  } catch (error) {
+    console.error('❌ Error checking user status:', error);
+  }
+};

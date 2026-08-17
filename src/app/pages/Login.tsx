@@ -67,22 +67,41 @@ export default function Login() {
     setError("");
     setIsLoading(true);
 
-    if (!email || !password) {
-      setError("Please enter both email and password.");
+    // Trim inputs
+    const trimmedEmail = email.trim();
+    const trimmedPassword = password.trim();
+
+    if (!trimmedEmail) {
+      setError("Please enter your email address.");
+      setIsLoading(false);
+      return;
+    }
+
+    if (!trimmedPassword) {
+      setError("Please enter your password.");
+      setIsLoading(false);
+      return;
+    }
+
+    if (trimmedPassword.length < 6) {
+      setError("Password must be at least 6 characters.");
       setIsLoading(false);
       return;
     }
 
     try {
-      const success = await login(email, password);
-      if (success) {
-        window.location.href = "/";
+      // Login now returns { success: boolean, error?: string }
+      const result = await login(trimmedEmail, trimmedPassword);
+      
+      if (result.success) {
+        navigate("/");
       } else {
-        setError("Invalid email or password. Please try again.");
+        // Display the specific error message from the server
+        setError(result.error || "Login failed. Please try again.");
       }
     } catch (err) {
       console.error("Login error:", err);
-      setError("An error occurred during login. Please try again.");
+      setError("An unexpected error occurred. Please try again.");
     } finally {
       setIsLoading(false);
     }
@@ -95,14 +114,22 @@ export default function Login() {
     setResetSuccess(false);
     setIsResetLoading(true);
 
-    if (!resetEmail) {
+    const trimmedResetEmail = resetEmail.trim();
+
+    if (!trimmedResetEmail) {
       setError("Please enter your email address.");
       setIsResetLoading(false);
       return;
     }
 
+    if (!trimmedResetEmail.includes('@') || !trimmedResetEmail.includes('.')) {
+      setError("Please enter a valid email address.");
+      setIsResetLoading(false);
+      return;
+    }
+
     try {
-      const result = await requestPasswordReset(resetEmail);
+      const result = await requestPasswordReset(trimmedResetEmail);
       
       if (result.success) {
         setResetSuccess(true);
@@ -110,14 +137,14 @@ export default function Login() {
         
         setTimeout(() => {
           setShowForgotPassword(false);
-          navigate("/reset-password", { state: { email: resetEmail } });
+          navigate("/reset-password", { state: { email: trimmedResetEmail } });
         }, 1500);
       } else {
         setError(result.error || "Failed to send PIN. Please try again.");
       }
     } catch (err) {
       console.error("Reset error:", err);
-      setError("An error occurred. Please try again.");
+      setError("An unexpected error occurred. Please try again.");
     } finally {
       setIsResetLoading(false);
     }
@@ -187,7 +214,7 @@ export default function Login() {
               <div>
                 <label htmlFor="email" className="block text-sm font-medium text-white/90 mb-2">Email</label>
                 <div className="relative">
-                  <User className="absolute left-3 top-6/13 -translate-y-1/2 size-5 text-white/50  pointer-events-none" />
+                  <User className="absolute left-3 top-6/13 -translate-y-1/2 size-5 text-white/50 pointer-events-none" />
                   <input
                     id="email"
                     type="email"
@@ -271,7 +298,6 @@ export default function Login() {
               </div>
             </form>
           </div>
-
         </div>
 
         {/* Forgot Password Modal */}
@@ -309,9 +335,7 @@ export default function Login() {
                 <div className="bg-green-500/20 border border-green-300/40 rounded-lg p-3 flex items-start gap-2 mb-4 animate-in slide-in-from-top-2 fade-in duration-300">
                   <Mail className="size-5 text-green-300 flex-shrink-0 mt-0.5" />
                   <p className="text-sm text-green-200">{resetMessage}</p>
-                  <p className="text-sm text-green-200 ml-auto">
-                    Redirecting...
-                  </p>
+                  <p className="text-sm text-green-200 ml-auto">Redirecting...</p>
                 </div>
               )}
 
@@ -374,10 +398,9 @@ export default function Login() {
                     setError("");
                     setResetSuccess(false);
                   }}
-                  className="group relative w-full rounded-lg border  bg-white/10 px-4 py-3 text-md font-medium text-white shadow-sm backdrop-blur-sm transition-all duration-300  hover:bg-white/20 hover:shadow-md  active:scale-[0.98]"
+                  className="group relative w-full rounded-lg border bg-white/10 px-4 py-3 text-md font-medium text-white shadow-sm backdrop-blur-sm transition-all duration-300 hover:bg-white/20 hover:shadow-md active:scale-[0.98]"
                 >
                   <span className="flex items-center justify-center gap-2">
-                    
                     Back to Login
                   </span>
                 </button>
