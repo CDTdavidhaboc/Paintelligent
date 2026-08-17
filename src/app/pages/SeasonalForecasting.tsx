@@ -2344,7 +2344,7 @@ Return ONLY valid JSON with this structure:
                                 <TableHead style={{ color: '#174d32' }}>Product</TableHead>
                                 <TableHead style={{ color: '#174d32' }}>Total Units Sold</TableHead>
                                 <TableHead style={{ color: '#174d32' }}>Total Revenue</TableHead>
-                                <TableHead style={{ color: '#174d32' }}>Volume Used (ml)</TableHead>
+                                
                               </TableRow>
                             </TableHeader>
                             <TableBody>
@@ -2365,9 +2365,7 @@ Return ONLY valid JSON with this structure:
                                   <TableCell className="font-bold">
                                     ₱{product.revenue.toLocaleString()}
                                   </TableCell>
-                                  <TableCell className="font-medium">
-                                    {product.volumeUsed?.toLocaleString() || 0}
-                                  </TableCell>
+                                  
                                 </TableRow>
                               ))}
                             </TableBody>
@@ -2407,7 +2405,7 @@ Return ONLY valid JSON with this structure:
                                 <TableHead style={{ color: '#1d4ed8' }}>Product</TableHead>
                                 <TableHead style={{ color: '#1d4ed8' }}>Total Units Sold</TableHead>
                                 <TableHead style={{ color: '#1d4ed8' }}>Total Revenue</TableHead>
-                                <TableHead style={{ color: '#1d4ed8' }}>Volume Used (ml)</TableHead>
+                      
                               </TableRow>
                             </TableHeader>
                             <TableBody>
@@ -2428,9 +2426,7 @@ Return ONLY valid JSON with this structure:
                                   <TableCell className="font-bold">
                                     ₱{product.revenue.toLocaleString()}
                                   </TableCell>
-                                  <TableCell className="font-medium">
-                                    {product.volumeUsed?.toLocaleString() || 0}
-                                  </TableCell>
+                                
                                 </TableRow>
                               ))}
                             </TableBody>
@@ -2463,7 +2459,7 @@ Return ONLY valid JSON with this structure:
                 </div>
               </div>
 
-              <CardContent className="px-6 pb-6">
+              <CardContent>
                 {(() => {
                   const groupedByAction = stockRecommendations.reduce((acc: any, category: any) => {
                     const action = category.items?.[0]?.action || "Maintain";
@@ -2502,15 +2498,11 @@ Return ONLY valid JSON with this structure:
                               className={`border-l-4 ${borderColor} ${bgColor} rounded-r-lg p-4`}
                             >
                               <div className="flex items-center gap-3 mb-4 pb-3 border-b border-gray-200">
-                                <span className={`w-3 h-3 rounded-full ${dotColor}`}></span>
-                                <h4 className="text-sm font-semibold text-gray-700">
+                                
+                                <h4 className="text-md font-semibold text-gray-700">
                                   {action} Stock
                                 </h4>
-                                <span
-                                  className={`px-2 py-0.5 rounded-full text-xs font-medium ${badgeColor}`}
-                                >
-                                  {groupedByAction[action].length} products
-                                </span>
+                                
                               </div>
 
                               <div className="overflow-x-auto">
@@ -2529,9 +2521,7 @@ Return ONLY valid JSON with this structure:
                                       <th className={`text-left px-4 py-2 text-xs font-semibold ${headerText}`}>
                                         Action
                                       </th>
-                                      <th className={`text-center px-4 py-2 text-xs font-semibold ${headerText}`}>
-                                        ml/Unit
-                                      </th>
+                                      
                                     </tr>
                                   </thead>
                                   <tbody>
@@ -2559,9 +2549,7 @@ Return ONLY valid JSON with this structure:
                                               {action}
                                             </span>
                                           </td>
-                                          <td className="text-center px-4 py-3 text-sm text-gray-600">
-                                            {item.volumePerUnit?.toLocaleString() || 0}
-                                          </td>
+                                          
                                         </tr>
                                       ))
                                     )}
@@ -2627,9 +2615,7 @@ Return ONLY valid JSON with this structure:
                               <p className="text-xs text-gray-500">
                                 {product.unitsSold?.toLocaleString() || 0} units
                               </p>
-                              <p className="text-xs text-gray-400">
-                                ₱{product.pricePerMl?.toFixed(4) || 0}/ml • {product.volumeUsed?.toLocaleString() || 0} ml total
-                              </p>
+                              
                             </div>
                             <Badge className="bg-green-100 text-green-700 text-xs">
                               {product.growth || "N/A"}
@@ -2682,9 +2668,7 @@ Return ONLY valid JSON with this structure:
                                 <p className="text-xs text-gray-500 mt-0.5">
                                   {product.unitsSold?.toLocaleString() || 0} units sold
                                 </p>
-                                <p className="text-xs text-gray-400">
-                                  ₱{product.pricePerMl?.toFixed(4) || 0}/ml • {product.volumeUsed?.toLocaleString() || 0} ml total
-                                </p>
+                                
                               </div>
                               <AlertCircle className="size-4 text-orange-500 flex-shrink-0 mt-0.5" />
                             </div>
