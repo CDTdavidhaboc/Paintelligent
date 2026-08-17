@@ -985,13 +985,11 @@ export default function UserProfile() {
           </CardHeader>
           
           {/* System Permissions - MERGED INSIDE PROFILE CARD */}
-          <CardContent className="pt-5">
+          <CardContent >
             <div className="flex items-center gap-2 mb-3">
               <Shield className="size-4 text-[#174d32]" />
               <h3 className="text-sm font-semibold text-gray-700">System Permissions & Access</h3>
-              <Badge className="bg-[#174d32] text-xs ml-2">
-                {displayData.permissions?.length || 0} Permissions
-              </Badge>
+             
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               {displayData.permissions && displayData.permissions.length > 0 ? (
@@ -1016,7 +1014,7 @@ export default function UserProfile() {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Contact Information - Email field removed */}
           <Card className="overflow-hidden rounded-2xl border border-emerald-100 bg-white shadow-[0_12px_32px_rgba(20,83,45,0.06)]">
-            <CardHeader className="border-b border-emerald-100 bg-gradient-to-r from-white to-emerald-50/70 px-6 py-4">
+            <CardHeader className="border-b border-emerald-100 bg-gradient-to-r from-white to-emerald-50/70 py-4">
               <CardTitle className="flex items-center gap-2 text-lg font-semibold text-gray-900">
                 <div className="flex size-8 items-center justify-center rounded-lg bg-[#174d32]">
                   <Phone className="size-4 text-white" />
@@ -1024,7 +1022,7 @@ export default function UserProfile() {
                 Contact Information
               </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-4 pt-5">
+            <CardContent>
               <EditableField
                 label="Phone Number"
                 value={displayData.phone}
@@ -1073,7 +1071,7 @@ export default function UserProfile() {
 
           {/* Contacts */}
           <Card className="overflow-hidden rounded-2xl border border-emerald-100 bg-white shadow-[0_12px_32px_rgba(20,83,45,0.06)]">
-            <CardHeader className="border-b border-emerald-100 bg-gradient-to-r from-white to-emerald-50/70 px-6 py-4">
+            <CardHeader className="border-b border-emerald-100 bg-gradient-to-r from-white to-emerald-50/70  py-4">
               <CardTitle className="flex items-center gap-2 text-lg font-semibold text-gray-900">
                 <div className="flex size-8 items-center justify-center rounded-lg bg-[#174d32]">
                   <Users className="size-4 text-white" />
@@ -1081,7 +1079,7 @@ export default function UserProfile() {
                 Contacts
               </CardTitle>
             </CardHeader>
-            <CardContent className="pt-5">
+            <CardContent>
               <div className="relative mb-3">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 size-4 text-gray-400" />
                 <input
