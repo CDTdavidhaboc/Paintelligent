@@ -77,6 +77,9 @@ interface SalesRecord {
   unitsSold?: number;
   product?: string;
   brand?: string;
+  usedVolume?: number;
+  fullVolume?: number;
+  subtotal?: number;
 }
 
 interface ProductDetail {
@@ -94,6 +97,8 @@ interface ProductDetail {
   rainyMonths: number;
   avgMonthlySales: number;
   bestSeason: string;
+  totalVolumeUsed: number;
+  pricePerMl: number;
 }
 
 interface SeasonProduct {
@@ -103,6 +108,7 @@ interface SeasonProduct {
   totalUnits: number;
   revenue: number;
   totalRevenue: number;
+  volumeUsed: number;
 }
 
 const MONTH_NAMES = [
@@ -181,6 +187,123 @@ const REQUIRED_HEADERS = [
   "Units Sold",
   "Season",
 ];
+
+// Product volume mappings (in ml)
+const PRODUCT_VOLUMES: Record<string, number> = {
+  // Gallons (GAL) - 3785 ml
+  "N-1540 DC Flat White GAL": 3785,
+  "N-1540 DC Flat White TIN": 3785,
+  "N-1541 DC Gloss White GAL": 3785,
+  "N-1541 DC Gloss White TIN": 3785,
+  "B-800 FWE Flatwall White GAL": 3785,
+  "B-800 FWE Flatwall White TIN": 3785,
+  "B-710 Permacoat Gloss White GAL": 3785,
+  "B-710 Permacoat Gloss White TIN": 3785,
+  "B-715 Permacoat Semi-Gloss White GAL": 3785,
+  "B-715 Permacoat Semi-Gloss White TIN": 3785,
+  "B-701 Permacoat Flat White GAL": 3785,
+  "B-701 Permacoat Flat White TIN": 3785,
+  "B-600 QDE White GAL": 3785,
+  "B-600 QDE White TIN": 3785,
+  "B-690 QDE Black GAL": 3785,
+  "B-691 QDE Flat Black GAL": 3785,
+  "B-680 QDE Choco Brown GAL": 3785,
+  "B-683 QDE Caramel Brown GAL": 3785,
+  "B-2570 RG Spanish Red GAL": 3785,
+  "B-2550 RG Baguio Green GAL": 3785,
+  "B-7760 Plexibond™ GAL": 3785,
+  "B-7760 Plexibond™ TIN": 3785,
+  "B-1250 Clear Gloss Lacquer GAL": 3785,
+  "B-1254 Lacquer Sanding Sealer GAL": 3785,
+  "B-1700 Acrytex Clear Coat GAL": 3785,
+  "B-58 OBE Spar Varnish GAL": 3785,
+  "B-2705 Oil Wood Stain Maple GAL": 3785,
+  "B-2707 Oil Wood Stain Mahogany GAL": 3785,
+  "B-700 SPC Clear Acrylic Emulsion GAL": 3785,
+  "B-1705 Acrytex Primer GAL": 3785,
+  "B-305 Lacquer Primer Surfacer GAL": 3785,
+  "B-311 OBE Plasolux Glazing Putty GAL": 3785,
+  "B-306 Lacquer Spot Putty GAL": 3785,
+  "CS-88 Solo Flat White Latex GAL": 3785,
+  "CS-88 Solo Flat White Latex TIN": 3785,
+  "CS-99 Solo Gloss White Latex GAL": 3785,
+  "CS-99 Solo Gloss White Latex TIN": 3785,
+  "DV-300 Flat Wall Enamel White GAL": 3785,
+  "DV-400 QDE White GAL": 3785,
+  "DR-6 Durax White GAL": 3785,
+  "DR-5 Durax Black GAL": 3785,
+  "DR-1 Durax International Red GAL": 3785,
+  "DR-2 Durax Lemon Yellow GAL": 3785,
+  "DR-3 Durax Pthalo Blue GAL": 3785,
+  "E-5000 WB EE White GAL": 3785,
+  "E-5100 WB EE Black GAL": 3785,
+  "E-6000 WB EP White GAL": 3785,
+  "E-6100 WB EP Black GAL": 3785,
+  "E-6200 WB EP Gray GAL": 3785,
+  "Domino QDE White GAL": 3785,
+  "Domino QDE Black": 3785,
+  "Domino QDE International Red GAL": 3785,
+  "Roofshield DV-50-13 Light Spanish Red GAL": 3785,
+  "Roofshield DV-50-91 Russet Brown GAL": 3785,
+  "Sun & Rain SR-660 Black GAL": 3785,
+  "Sun & Rain SR-933 Choco Brown GAL": 3785,
+  
+  // Liters (LT) - 1000 ml
+  "B-1250 Clear Gloss Lacquer LT": 1000,
+  "B-1254 Lacquer Sanding Sealer LT": 1000,
+  "B-1700 Acrytex Clear Coat LT": 1000,
+  "B-58 OBE Spar Varnish LT": 1000,
+  "B-2705 Oil Wood Stain Maple LT": 1000,
+  "B-2707 Oil Wood Stain Mahogany LT": 1000,
+  "B-305 Lacquer Primer Surfacer LT": 1000,
+  "B-306 Lacquer Spot Putty LT": 1000,
+  "B-311 OBE Plasolux Glazing Putty LT": 1000,
+  "Acry-Color AC-60 Black LT": 1000,
+  "Acry-Color AC-20 Thalo Blue LT": 1000,
+  "Acry-Color AC-30 Thalo Green LT": 1000,
+  "Acry-Color AC-40 Hansa Yellow LT": 1000,
+  "K-222 Top Coat Rapid Cure K92 LT": 1000,
+  "K-111 K92 Clearcoat Matte": 1000,
+  "WU-001 2K Clearcoat LT": 1000,
+  "WU-002 Mirror Finish 2K Clearcoat LT": 1000,
+  "R-25 Acrylic Thinner LT": 1000,
+  "UT-20 Urethane Thinner LT": 1000,
+  "K-650 K92 Thinner LT": 1000,
+  "FPU-500 Flat Black LT": 1000,
+  "YAKOO 328 Beige Putty w/ Hardener LT": 1000,
+  "YAKOO 380 Putty w/ Hardener LT": 1000,
+  
+  // 1/4 Liter - 250 ml
+  "Acry-Color AC-60 Black 1/4 Liter": 250,
+  "Acry-Color AC-20 Thalo Blue 1/4 Liter": 250,
+  "Acry-Color AC-30 Thalo Green 1/4 Liter": 250,
+  "Acry-Color AC-10 Toluidine Red 1/4 Liter": 250,
+  "Acry-Color AC-91 Burnt Sienna 1/4 Liter": 250,
+  "Acry-Color AC-90 Raw Sienna 1/4 Liter": 250,
+  "Acry-Color AC-92 Raw Umbere 1/4 Liter": 250,
+  "Acry-Color AC-12 Permanent Red 1/4 Liter": 250,
+  "Acry-Color AC-40 Hansa Yellow 1/4 Liter": 250,
+  "Oil Tinting Color TC-60 Lamp Black 1/4 Liter": 250,
+  "Oil Tinting Color TC-93 Burnt Umber 1/4 Liter": 250,
+  "Oil Tinting Color TC-11 Venetian Red 1/4 Liter": 250,
+  "Oil Tinting Color TC-90 Raw Sienna 1/4 Liter": 250,
+  "Oil Tinting Color TC-91 Burnt Sienna 1/4 Liter": 250,
+  "Oil Tinting Color TC-21 Thalo Blue 1/4 Liter": 250,
+  "Oil Tinting Color TC-33 Thanlo Green 1/4 Liter": 250,
+  "Oil Tinting Color TC-10 Bulletin Red 1/4 Liter": 250,
+  "Oil Tinting Color TC-44 Hansa Yellow 1/4 Liter": 250,
+};
+
+// Helper function to get product volume
+const getProductVolume = (productName: string): number => {
+  return PRODUCT_VOLUMES[productName] || 3785; // Default to 1 gallon if not found
+};
+
+// Helper function to calculate subtotal based on volume used
+const calculateSubtotal = (fullPrice: number, usedVolume: number, fullVolume: number): number => {
+  if (fullVolume === 0) return fullPrice;
+  return (usedVolume / fullVolume) * fullPrice;
+};
 
 const showNotification = (
   message: string,
@@ -322,20 +445,27 @@ export default function SeasonalForecasting() {
           rainyMonths: 0,
           avgMonthlySales: 0,
           bestSeason: "Dry",
+          totalVolumeUsed: 0,
+          pricePerMl: 0,
         });
       }
 
       const detail = productMap.get(productKey)!;
-      detail.totalSales += record.sales;
+      
+      // Use subtotal if available (volume-based pricing), otherwise use sales
+      const salesAmount = record.subtotal || record.sales;
+      
+      detail.totalSales += salesAmount;
       detail.totalUnits += record.unitsSold || 0;
       detail.months += 1;
+      detail.totalVolumeUsed += record.usedVolume || 0;
 
       if (isDry) {
-        detail.drySales += record.sales;
+        detail.drySales += salesAmount;
         detail.dryUnits += record.unitsSold || 0;
         detail.dryMonths += 1;
       } else {
-        detail.rainySales += record.sales;
+        detail.rainySales += salesAmount;
         detail.rainyUnits += record.unitsSold || 0;
         detail.rainyMonths += 1;
       }
@@ -345,11 +475,16 @@ export default function SeasonalForecasting() {
       const avgMonthly = p.totalSales / p.months;
       const dryAvg = p.dryMonths > 0 ? p.drySales / p.dryMonths : 0;
       const rainyAvg = p.rainyMonths > 0 ? p.rainySales / p.rainyMonths : 0;
+      
+      // Calculate price per ml
+      const totalVolume = p.totalVolumeUsed || 1;
+      const pricePerMl = p.totalSales / totalVolume;
 
       return {
         ...p,
         avgMonthlySales: Math.round(avgMonthly),
         bestSeason: dryAvg >= rainyAvg ? "Dry" : "Rainy",
+        pricePerMl: pricePerMl,
       };
     });
 
@@ -373,6 +508,7 @@ export default function SeasonalForecasting() {
         totalUnits: p.dryUnits,
         revenue: Math.round(p.drySales),
         totalRevenue: Math.round(p.drySales),
+        volumeUsed: Math.round(p.totalVolumeUsed / p.months * p.dryMonths / (p.dryMonths || 1)),
       }));
 
     const rainyTop5 = computedProductDetails
@@ -386,6 +522,7 @@ export default function SeasonalForecasting() {
         totalUnits: p.rainyUnits,
         revenue: Math.round(p.rainySales),
         totalRevenue: Math.round(p.rainySales),
+        volumeUsed: Math.round(p.totalVolumeUsed / p.months * p.rainyMonths / (p.rainyMonths || 1)),
       }));
 
     return {
@@ -420,7 +557,9 @@ export default function SeasonalForecasting() {
           name: p.product,
           currentStock: Math.round(p.totalUnits / (p.months || 1) * 2) || 30,
           recommendedStock: Math.round(p.totalUnits / (p.months || 1) * 4) || 60,
-          action: "Increase"
+          action: "Increase",
+          volumePerUnit: Math.round(p.totalVolumeUsed / (p.totalUnits || 1)) || 3785,
+          pricePerMl: p.pricePerMl,
         }]
       });
     });
@@ -432,7 +571,9 @@ export default function SeasonalForecasting() {
           name: p.product,
           currentStock: Math.round(p.totalUnits / (p.months || 1) * 2) || 30,
           recommendedStock: Math.round(p.totalUnits / (p.months || 1) * 2) || 30,
-          action: "Maintain"
+          action: "Maintain",
+          volumePerUnit: Math.round(p.totalVolumeUsed / (p.totalUnits || 1)) || 3785,
+          pricePerMl: p.pricePerMl,
         }]
       });
     });
@@ -447,32 +588,26 @@ export default function SeasonalForecasting() {
     return sortedByUnits.slice(0, 5).map(p => ({
       name: `${p.brand} ${p.product}`,
       unitsSold: p.totalUnits,
-      growth: `${Math.round((p.drySales / (p.rainySales || 1) - 1) * 100) || 0}%`
+      growth: `${Math.round((p.drySales / (p.rainySales || 1) - 1) * 100) || 0}%`,
+      totalRevenue: Math.round(p.totalSales),
+      volumeUsed: Math.round(p.totalVolumeUsed),
+      pricePerMl: p.pricePerMl,
     }));
   }, [computedProductDetails]);
 
-  // ============================================================
-  // SLOW MOVING PRODUCTS - FIXED: EXCLUDES PRODUCTS WITH 50+ UNITS
-  // ============================================================
   const slowMovingProducts = useMemo(() => {
     if (!computedProductDetails.length) return [];
 
     const sortedByUnits = [...computedProductDetails].sort((a, b) => b.totalUnits - a.totalUnits);
     
-    // Calculate average units to provide context
     const avgUnits = computedProductDetails.reduce((sum, p) => sum + p.totalUnits, 0) / computedProductDetails.length;
     
-    // STRICT CRITERIA for slow moving products:
-    // 1. Product must have LESS THAN 50 units total (hard threshold)
-    // 2. Product must be below 50% of the average units
-    // This ensures products with 67 units NEVER appear
     const slowProducts = sortedByUnits.filter(p => {
-      const hasLowUnits = p.totalUnits < 50; // Hard threshold - 50 units or less
-      const isBelowHalfAverage = p.totalUnits < avgUnits * 0.5; // Below 50% of average
+      const hasLowUnits = p.totalUnits < 50;
+      const isBelowHalfAverage = p.totalUnits < avgUnits * 0.5;
       return hasLowUnits && isBelowHalfAverage;
     }).slice(0, 3);
     
-    // If no products meet the criteria, return empty array
     if (slowProducts.length === 0) {
       return [];
     }
@@ -491,7 +626,10 @@ export default function SeasonalForecasting() {
       return {
         name: `${p.brand} ${p.product}`,
         unitsSold: p.totalUnits,
-        recommendation: recommendation
+        recommendation: recommendation,
+        totalRevenue: Math.round(p.totalSales),
+        volumeUsed: Math.round(p.totalVolumeUsed),
+        pricePerMl: p.pricePerMl,
       };
     });
   }, [computedProductDetails]);
@@ -629,6 +767,9 @@ export default function SeasonalForecasting() {
         if (item.unitsSold) {
           acc[key].unitsSold = (acc[key].unitsSold || 0) + item.unitsSold;
         }
+        if (item.usedVolume) {
+          acc[key].usedVolume = (acc[key].usedVolume || 0) + item.usedVolume;
+        }
       } else {
         acc[key] = {
           ...item,
@@ -748,6 +889,18 @@ export default function SeasonalForecasting() {
         );
         const unitsSold = Number(row["Units Sold"] || row["unitsSold"] || 0);
 
+        // Get volume information
+        const fullVolume = getProductVolume(product);
+        const usedVolume = Number(row["Used Volume"] || row["Volume Used"] || row["Quantity Used"] || 0);
+        
+        // Calculate subtotal based on volume used
+        let subtotal = sales;
+        if (usedVolume > 0 && fullVolume > 0 && sales > 0) {
+          // Calculate price per ml and subtotal based on volume used
+          const pricePerMl = sales / fullVolume;
+          subtotal = pricePerMl * usedVolume;
+        }
+
         const seasonFromCSV = row.Season || row["Season"] || "";
         let season = seasonFromCSV;
 
@@ -760,11 +913,14 @@ export default function SeasonalForecasting() {
           month: month,
           year: year,
           season: season,
-          sales: sales,
+          sales: subtotal,
           category: product || brand || "Unknown",
           product: product,
           brand: brand,
           unitsSold: unitsSold,
+          usedVolume: usedVolume > 0 ? usedVolume : fullVolume,
+          fullVolume: fullVolume,
+          subtotal: subtotal,
         };
       });
 
@@ -799,20 +955,25 @@ export default function SeasonalForecasting() {
             rainyMonths: 0,
             avgMonthlySales: 0,
             bestSeason: "Dry",
+            totalVolumeUsed: 0,
+            pricePerMl: 0,
           });
         }
 
         const detail = productMap.get(productKey)!;
-        detail.totalSales += record.sales;
+        const salesAmount = record.subtotal || record.sales;
+        
+        detail.totalSales += salesAmount;
         detail.totalUnits += record.unitsSold || 0;
         detail.months += 1;
+        detail.totalVolumeUsed += record.usedVolume || 0;
 
         if (isDry) {
-          detail.drySales += record.sales;
+          detail.drySales += salesAmount;
           detail.dryUnits += record.unitsSold || 0;
           detail.dryMonths += 1;
         } else {
-          detail.rainySales += record.sales;
+          detail.rainySales += salesAmount;
           detail.rainyUnits += record.unitsSold || 0;
           detail.rainyMonths += 1;
         }
@@ -823,11 +984,13 @@ export default function SeasonalForecasting() {
           const avgMonthly = p.totalSales / p.months;
           const dryAvg = p.dryMonths > 0 ? p.drySales / p.dryMonths : 0;
           const rainyAvg = p.rainyMonths > 0 ? p.rainySales / p.rainyMonths : 0;
+          const pricePerMl = p.totalVolumeUsed > 0 ? p.totalSales / p.totalVolumeUsed : 0;
 
           return {
             ...p,
             avgMonthlySales: Math.round(avgMonthly),
             bestSeason: dryAvg >= rainyAvg ? "Dry" : "Rainy",
+            pricePerMl: pricePerMl,
           };
         })
         .sort((a, b) => b.totalSales - a.totalSales);
@@ -2181,6 +2344,7 @@ Return ONLY valid JSON with this structure:
                                 <TableHead style={{ color: '#174d32' }}>Product</TableHead>
                                 <TableHead style={{ color: '#174d32' }}>Total Units Sold</TableHead>
                                 <TableHead style={{ color: '#174d32' }}>Total Revenue</TableHead>
+                                <TableHead style={{ color: '#174d32' }}>Volume Used (ml)</TableHead>
                               </TableRow>
                             </TableHeader>
                             <TableBody>
@@ -2200,6 +2364,9 @@ Return ONLY valid JSON with this structure:
                                   </TableCell>
                                   <TableCell className="font-bold">
                                     ₱{product.revenue.toLocaleString()}
+                                  </TableCell>
+                                  <TableCell className="font-medium">
+                                    {product.volumeUsed?.toLocaleString() || 0}
                                   </TableCell>
                                 </TableRow>
                               ))}
@@ -2240,6 +2407,7 @@ Return ONLY valid JSON with this structure:
                                 <TableHead style={{ color: '#1d4ed8' }}>Product</TableHead>
                                 <TableHead style={{ color: '#1d4ed8' }}>Total Units Sold</TableHead>
                                 <TableHead style={{ color: '#1d4ed8' }}>Total Revenue</TableHead>
+                                <TableHead style={{ color: '#1d4ed8' }}>Volume Used (ml)</TableHead>
                               </TableRow>
                             </TableHeader>
                             <TableBody>
@@ -2259,6 +2427,9 @@ Return ONLY valid JSON with this structure:
                                   </TableCell>
                                   <TableCell className="font-bold">
                                     ₱{product.revenue.toLocaleString()}
+                                  </TableCell>
+                                  <TableCell className="font-medium">
+                                    {product.volumeUsed?.toLocaleString() || 0}
                                   </TableCell>
                                 </TableRow>
                               ))}
@@ -2358,6 +2529,9 @@ Return ONLY valid JSON with this structure:
                                       <th className={`text-left px-4 py-2 text-xs font-semibold ${headerText}`}>
                                         Action
                                       </th>
+                                      <th className={`text-center px-4 py-2 text-xs font-semibold ${headerText}`}>
+                                        ml/Unit
+                                      </th>
                                     </tr>
                                   </thead>
                                   <tbody>
@@ -2384,6 +2558,9 @@ Return ONLY valid JSON with this structure:
                                             >
                                               {action}
                                             </span>
+                                          </td>
+                                          <td className="text-center px-4 py-3 text-sm text-gray-600">
+                                            {item.volumePerUnit?.toLocaleString() || 0}
                                           </td>
                                         </tr>
                                       ))
@@ -2450,6 +2627,9 @@ Return ONLY valid JSON with this structure:
                               <p className="text-xs text-gray-500">
                                 {product.unitsSold?.toLocaleString() || 0} units
                               </p>
+                              <p className="text-xs text-gray-400">
+                                ₱{product.pricePerMl?.toFixed(4) || 0}/ml • {product.volumeUsed?.toLocaleString() || 0} ml total
+                              </p>
                             </div>
                             <Badge className="bg-green-100 text-green-700 text-xs">
                               {product.growth || "N/A"}
@@ -2501,6 +2681,9 @@ Return ONLY valid JSON with this structure:
                                 </h4>
                                 <p className="text-xs text-gray-500 mt-0.5">
                                   {product.unitsSold?.toLocaleString() || 0} units sold
+                                </p>
+                                <p className="text-xs text-gray-400">
+                                  ₱{product.pricePerMl?.toFixed(4) || 0}/ml • {product.volumeUsed?.toLocaleString() || 0} ml total
                                 </p>
                               </div>
                               <AlertCircle className="size-4 text-orange-500 flex-shrink-0 mt-0.5" />
