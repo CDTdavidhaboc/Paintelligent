@@ -412,10 +412,6 @@ const getVerificationEmailHTML = (code: string, email: string) => {
               ⏱️ This code will expire in <span>10 minutes</span>
             </div>
             
-            <div style="text-align: center; margin: 20px 0;">
-              <a href="${window.location.origin}/login" class="btn">Go to Login</a>
-            </div>
-            
             <div class="security-note">
               <strong>🔒 Security Note:</strong> 
               Never share this code with anyone. Paintelligent will never ask for your verification code via phone or email.
