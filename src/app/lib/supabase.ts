@@ -1,6 +1,5 @@
-// src/app/lib/supabase.ts
 import { createClient } from '@supabase/supabase-js';
-import { sendPasswordResetEmail } from './emailService';
+import { sendPasswordResetEmail, generatePIN, sendVerificationEmail } from './emailService';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
@@ -10,11 +9,8 @@ if (!supabaseUrl || !supabaseAnonKey) {
   throw new Error('Missing Supabase environment variables');
 }
 
-// Regular client for normal operations
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
-// Admin client with service role key - BYPASSES RATE LIMITS
-// ⚠️ WARNING: Only use in development! Never expose this to the client!
 export const supabaseAdmin = supabaseServiceRoleKey 
   ? createClient(supabaseUrl, supabaseServiceRoleKey, {
       auth: {
@@ -24,15 +20,10 @@ export const supabaseAdmin = supabaseServiceRoleKey
     })
   : null;
 
-// ============================================================
-// HELPER FUNCTIONS
-// ============================================================
-
 const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
-const isDevelopment = import.meta.env.MODE === 'development';
 
 // ============================================================
-// CHECK IF USER EXISTS IN AUTH
+// CHECK USER FUNCTIONS
 // ============================================================
 
 export const checkAuthUserExists = async (email: string) => {
@@ -66,17 +57,13 @@ export const checkAuthUserExists = async (email: string) => {
   }
 };
 
-// ============================================================
-// CHECK IF USER EXISTS IN user_data
-// ============================================================
-
 export const checkUserExistsInData = async (email: string) => {
   console.log('🔍 Checking if user exists in user_data:', email);
   
   try {
     const { data, error } = await supabase
       .from('user_data')
-      .select('id, email, auth_user_id, full_name')
+      .select('id, email, auth_user_id, full_name, is_verified')
       .eq('email', email.toLowerCase().trim())
       .maybeSingle();
 
@@ -99,7 +86,379 @@ export const checkUserExistsInData = async (email: string) => {
 };
 
 // ============================================================
-// LOGIN USER - COMPLETELY FIXED with proper validation
+// REGISTER USER - STEP 1: SEND CODE ONLY
+// ============================================================
+
+export const registerUser = async (email: string, password: string, fullName: string) => {
+  console.log('📝 Pre-registering user:', email);
+  
+  try {
+    const normalizedEmail = email.toLowerCase().trim();
+    
+    if (!normalizedEmail) {
+      return { success: false, error: 'Please enter your email address.' };
+    }
+    if (!email.includes('@') || !email.includes('.')) {
+      return { success: false, error: 'Please enter a valid email address.' };
+    }
+    if (!password || password.length === 0) {
+      return { success: false, error: 'Please enter a password.' };
+    }
+    if (password.length < 6) {
+      return { success: false, error: 'Password must be at least 6 characters.' };
+    }
+    if (!fullName || fullName.trim().length === 0) {
+      return { success: false, error: 'Please enter your full name.' };
+    }
+
+    console.log('🔍 Checking if user already exists...');
+    
+    const authCheck = await checkAuthUserExists(normalizedEmail);
+    if (authCheck.exists) {
+      return { 
+        success: false, 
+        error: 'This email is already registered. Please login instead.' 
+      };
+    }
+
+    const dataCheck = await checkUserExistsInData(normalizedEmail);
+    if (dataCheck.exists) {
+      return { 
+        success: false, 
+        error: 'This email is already registered. Please login instead.' 
+      };
+    }
+
+    const { data: pendingData } = await supabase
+      .from('pending_registrations')
+      .select('*')
+      .eq('email', normalizedEmail)
+      .maybeSingle();
+
+    if (pendingData) {
+      console.log('🗑️ Deleting existing pending registration for:', normalizedEmail);
+      await supabase
+        .from('pending_registrations')
+        .delete()
+        .eq('email', normalizedEmail);
+    }
+
+    const verificationCode = generatePIN();
+    const expiresAt = new Date();
+    expiresAt.setMinutes(expiresAt.getMinutes() + 10);
+
+    console.log('🔑 Generated verification code:', verificationCode);
+
+    const { error: insertError } = await supabase
+      .from('pending_registrations')
+      .insert({
+        email: normalizedEmail,
+        full_name: fullName.trim(),
+        password_hash: password,
+        verification_code: verificationCode,
+        verification_code_expires_at: expiresAt.toISOString(),
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      });
+
+    if (insertError) {
+      console.error('❌ Error storing pending registration:', insertError);
+      return { 
+        success: false, 
+        error: 'Failed to start registration. Please try again.' 
+      };
+    }
+
+    console.log('✅ Pending registration stored successfully');
+
+    try {
+      const emailResult = await sendVerificationEmail(normalizedEmail, verificationCode);
+      
+      if (emailResult.success) {
+        console.log('✅ Verification email sent successfully!');
+      } else {
+        console.error('❌ Failed to send verification email:', emailResult.error);
+      }
+    } catch (emailError) {
+      console.error('❌ Email sending error:', emailError);
+    }
+
+    console.log('✅ Pre-registration complete! Verification email sent.');
+    
+    return { 
+      success: true, 
+      message: 'Verification code sent! Please check your email.',
+      requiresVerification: true
+    };
+    
+  } catch (error: any) {
+    console.error('❌ Error in registerUser:', error);
+    return { 
+      success: false, 
+      error: error.message || 'Registration failed. Please try again.' 
+    };
+  }
+};
+
+// ============================================================
+// VERIFY REGISTRATION CODE - STEP 2: CREATE ACCOUNT
+// ============================================================
+
+export const verifyRegistrationCode = async (email: string, code: string) => {
+  try {
+    const normalizedEmail = email.toLowerCase().trim();
+    console.log('🔍 Verifying registration code for:', normalizedEmail);
+    
+    if (!normalizedEmail) {
+      return { success: false, error: 'Email is required.' };
+    }
+    
+    if (!code || code.length !== 6) {
+      return { success: false, error: 'Please enter a valid 6-digit verification code.' };
+    }
+
+    const { data: pendingData, error: pendingError } = await supabase
+      .from('pending_registrations')
+      .select('*')
+      .eq('email', normalizedEmail)
+      .maybeSingle();
+
+    if (pendingError || !pendingData) {
+      console.error('❌ Pending registration not found:', pendingError);
+      return { success: false, error: 'No pending registration found. Please register again.' };
+    }
+
+    if (pendingData.verification_code !== code) {
+      console.log('❌ Invalid code. Expected:', pendingData.verification_code, 'Got:', code);
+      return { success: false, error: 'Invalid verification code.' };
+    }
+
+    const expiresAt = new Date(pendingData.verification_code_expires_at);
+    if (new Date() > expiresAt) {
+      return { success: false, error: 'Verification code has expired. Please request a new one.' };
+    }
+
+    console.log('📝 Creating Auth user for verified email:', normalizedEmail);
+
+    let authData = null;
+    let authError = null;
+
+    if (supabaseAdmin) {
+      try {
+        const { data, error } = await supabaseAdmin.auth.admin.createUser({
+          email: normalizedEmail,
+          password: pendingData.password_hash,
+          email_confirm: true,
+          user_metadata: {
+            full_name: pendingData.full_name,
+          },
+        });
+        
+        if (error) {
+          console.error('❌ Admin API error:', error);
+          authError = error;
+        } else {
+          authData = { user: data.user };
+          console.log('✅ User created with Admin API:', data.user.id);
+        }
+      } catch (adminErr) {
+        console.error('❌ Admin API exception:', adminErr);
+        authError = adminErr as any;
+      }
+    }
+
+    if (!authData) {
+      try {
+        const result = await supabase.auth.signUp({
+          email: normalizedEmail,
+          password: pendingData.password_hash,
+          options: {
+            data: {
+              full_name: pendingData.full_name,
+            },
+          },
+        });
+
+        if (result.error) {
+          console.error('❌ Signup error:', result.error);
+          authError = result.error;
+        } else {
+          authData = result.data;
+          console.log('✅ Regular signup successful!');
+        }
+      } catch (err) {
+        console.error('❌ Signup exception:', err);
+        authError = err as any;
+      }
+    }
+
+    if (!authData?.user) {
+      console.error('❌ No auth data returned');
+      
+      let errorMessage = 'Failed to create account. Please try again.';
+      if (authError?.message?.includes('already registered')) {
+        errorMessage = 'This email is already registered. Please login instead.';
+      } else if (authError?.message?.includes('rate limit')) {
+        errorMessage = 'Too many registration attempts. Please wait a few minutes and try again.';
+      }
+      
+      return { 
+        success: false, 
+        error: errorMessage
+      };
+    }
+
+    console.log('✅ User authenticated with ID:', authData.user.id);
+
+    console.log('📝 Creating user_data record...');
+    
+    const payload = {
+      email: normalizedEmail,
+      auth_user_id: authData.user.id,
+      full_name: pendingData.full_name,
+      email_verified: true,
+      is_verified: true,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      role: 'User',
+      permissions: ['Seasonal Forecast', 'Paint Analyzer'],
+      contacts: [],
+      batch_size: 0.1,
+    };
+
+    let newData = null;
+
+    if (supabaseAdmin) {
+      try {
+        const { data, error } = await supabaseAdmin
+          .from('user_data')
+          .insert(payload)
+          .select();
+
+        if (!error && data) {
+          newData = data;
+          console.log('✅ user_data created using Admin client');
+        }
+      } catch (err) {
+        console.error('❌ Admin client exception:', err);
+      }
+    }
+
+    if (!newData) {
+      try {
+        const { data, error } = await supabase
+          .from('user_data')
+          .insert(payload)
+          .select();
+
+        if (!error && data) {
+          newData = data;
+          console.log('✅ user_data created using regular client');
+        }
+      } catch (err) {
+        console.error('❌ Regular client exception:', err);
+      }
+    }
+
+    if (!newData) {
+      console.warn('⚠️ Could not create user_data, but Auth user was created');
+    }
+
+    await supabase
+      .from('pending_registrations')
+      .delete()
+      .eq('email', normalizedEmail);
+
+    console.log('✅ Account verified and created successfully for:', normalizedEmail);
+    
+    return { 
+      success: true, 
+      data: newData?.[0] || null,
+      message: 'Account created successfully! Please login.'
+    };
+    
+  } catch (error: any) {
+    console.error('❌ Verification error:', error);
+    return { success: false, error: error.message || 'Verification failed. Please try again.' };
+  }
+};
+
+// ============================================================
+// RESEND VERIFICATION CODE
+// ============================================================
+
+export const resendVerificationCode = async (email: string) => {
+  try {
+    const normalizedEmail = email.toLowerCase().trim();
+    console.log('📤 Resending verification code for:', normalizedEmail);
+    
+    if (!normalizedEmail) {
+      return { success: false, error: 'Email is required.' };
+    }
+
+    const { data: pendingData, error: pendingError } = await supabase
+      .from('pending_registrations')
+      .select('*')
+      .eq('email', normalizedEmail)
+      .maybeSingle();
+
+    if (pendingError || !pendingData) {
+      console.error('❌ Pending registration not found:', pendingError);
+      return { success: false, error: 'No pending registration found. Please register again.' };
+    }
+
+    const newCode = generatePIN();
+    console.log('🔑 Generated new verification code:', newCode);
+    
+    const expiresAt = new Date();
+    expiresAt.setMinutes(expiresAt.getMinutes() + 10);
+
+    const { error: updateError } = await supabase
+      .from('pending_registrations')
+      .update({
+        verification_code: newCode,
+        verification_code_expires_at: expiresAt.toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+      .eq('email', normalizedEmail);
+
+    if (updateError) {
+      console.error('❌ Error updating verification code:', updateError);
+      return { success: false, error: 'Failed to resend code. Please try again.' };
+    }
+
+    console.log(`📧 New verification code for ${normalizedEmail}: ${newCode}`);
+    
+    try {
+      const emailResult = await sendVerificationEmail(normalizedEmail, newCode);
+      
+      if (!emailResult.success) {
+        console.error('❌ Failed to resend verification email:', emailResult.error);
+        return { 
+          success: true, 
+          message: 'Code generated but email delivery failed. Please check console for the code.',
+          warning: true
+        };
+      }
+    } catch (emailError) {
+      console.error('❌ Email sending error:', emailError);
+      return { 
+        success: true, 
+        message: 'Code generated but email delivery failed. Please check console for the code.',
+        warning: true
+      };
+    }
+
+    console.log('✅ Verification code resent successfully');
+    return { success: true };
+  } catch (error: any) {
+    console.error('❌ Resend verification error:', error);
+    return { success: false, error: error.message || 'Failed to resend code. Please try again.' };
+  }
+};
+
+// ============================================================
+// LOGIN USER
 // ============================================================
 
 export const loginUser = async (email: string, password: string) => {
@@ -108,9 +467,6 @@ export const loginUser = async (email: string, password: string) => {
   try {
     const normalizedEmail = email.toLowerCase().trim();
     
-    // ============================================================
-    // STEP 1: Validate inputs with clear error messages
-    // ============================================================
     if (!normalizedEmail) {
       return { success: false, error: 'Please enter your email address.' };
     }
@@ -124,13 +480,25 @@ export const loginUser = async (email: string, password: string) => {
     }
 
     // ============================================================
-    // STEP 2: Check if email exists in Auth
+    // ✅ COMMENT OUT OR REMOVE THIS VERIFICATION CHECK
     // ============================================================
+    // const { data: userData, error: userError } = await supabase
+    //   .from('user_data')
+    //   .select('is_verified')
+    //   .eq('email', normalizedEmail)
+    //   .single();
+
+    // if (!userError && userData && userData.is_verified === false) {
+    //   return { 
+    //     success: false, 
+    //     error: 'Please verify your email address first. Check your inbox for the verification code.' 
+    //   };
+    // }
+
     console.log('🔍 Checking if email exists in Auth...');
     const authCheck = await checkAuthUserExists(normalizedEmail);
     
     if (!authCheck.success) {
-      console.error('❌ Auth check failed:', authCheck.error);
       return { 
         success: false, 
         error: 'Authentication system error. Please try again.' 
@@ -138,35 +506,12 @@ export const loginUser = async (email: string, password: string) => {
     }
 
     if (!authCheck.exists) {
-      console.log('❌ Email not found in Auth:', normalizedEmail);
-      
-      // Check if user_data has orphaned record
-      const { data: userData } = await supabase
-        .from('user_data')
-        .select('email')
-        .eq('email', normalizedEmail)
-        .maybeSingle();
-      
-      if (userData) {
-        console.log('⚠️ Orphaned user_data found for:', normalizedEmail);
-        return { 
-          success: false, 
-          error: 'This account needs to be re-activated. Please contact support.' 
-        };
-      }
-      
-      // Clear message - email doesn't exist
       return { 
         success: false, 
         error: 'No account found with this email address. Please check your email or register.' 
       };
     }
 
-    console.log('✅ Email found in Auth');
-
-    // ============================================================
-    // STEP 3: Attempt login with Auth ONLY
-    // ============================================================
     console.log('📡 Attempting login with Auth...');
     let authData = null;
     let authError = null;
@@ -213,7 +558,6 @@ export const loginUser = async (email: string, password: string) => {
       
       let errorMessage = '';
       
-      // Handle specific error cases with user-friendly messages
       if (authError?.message?.includes('Invalid login credentials')) {
         errorMessage = 'Incorrect password. Please try again.';
       } else if (authError?.message?.includes('Email not confirmed')) {
@@ -232,9 +576,6 @@ export const loginUser = async (email: string, password: string) => {
       };
     }
 
-    // ============================================================
-    // STEP 4: Get or create user_data
-    // ============================================================
     console.log('✅ Auth login successful:', authData.user.id);
 
     let { data, error } = await supabase
@@ -243,7 +584,6 @@ export const loginUser = async (email: string, password: string) => {
       .eq('email', normalizedEmail)
       .maybeSingle();
 
-    // If user_data doesn't exist, create it
     if (!data) {
       console.log('ℹ️ Creating user_data for user...');
       
@@ -252,65 +592,29 @@ export const loginUser = async (email: string, password: string) => {
         auth_user_id: authData.user.id,
         full_name: authData.user.user_metadata?.full_name || normalizedEmail,
         email_verified: authData.user.email_confirmed_at !== null,
+        is_verified: true,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
-        // NO PASSWORD FIELD
         role: 'User',
         permissions: ['Seasonal Forecast', 'Paint Analyzer'],
         contacts: [],
         batch_size: 0.1,
-        phone: null,
-        location: null,
-        address: null,
-        join_date: null,
-        employee_id: null,
-        profile_picture: null,
-        inventory_data: null,
-        inventory_data_name: null,
-        color_analysis: null,
-        uploaded_image: null,
-        uploaded_file_name: null,
-        uploaded_file_size: null,
-        sales_data: null,
-        sales_data_name: null,
-        forecast_data: null,
-        last_fetched: null,
       };
 
-      if (supabaseAdmin) {
-        const { data: inserted, error: err } = await supabaseAdmin
-          .from('user_data')
-          .insert(newUserData)
-          .select()
-          .single();
+      const { data: inserted, error: err } = await supabase
+        .from('user_data')
+        .insert(newUserData)
+        .select()
+        .single();
 
-        if (!err && inserted) {
-          data = inserted;
-          console.log('✅ user_data created with Admin client');
-        }
-      }
-
-      if (!data) {
-        const { data: inserted, error: err } = await supabase
-          .from('user_data')
-          .insert(newUserData)
-          .select()
-          .single();
-
-        if (!err && inserted) {
-          data = inserted;
-          console.log('✅ user_data created with regular client');
-        }
-      }
-
-      if (!data) {
-        console.warn('⚠️ Could not create user_data, but login succeeded');
+      if (!err && inserted) {
+        data = inserted;
+        console.log('✅ user_data created');
       }
     }
 
     console.log('✅ User logged in successfully!');
     
-    // Remove any password field if it exists
     const { password: _, ...userWithoutPassword } = data || {};
     
     return { 
@@ -326,264 +630,90 @@ export const loginUser = async (email: string, password: string) => {
     };
   }
 };
-
 // ============================================================
-// REGISTER USER - COMPLETELY FIXED with proper validation
+// PASSWORD RESET FUNCTIONS
 // ============================================================
 
-export const registerUser = async (email: string, password: string, fullName: string) => {
-  console.log('📝 Registering user:', email);
-  
+export const saveResetToken = async (email: string, token: string) => {
   try {
     const normalizedEmail = email.toLowerCase().trim();
     
-    // ============================================================
-    // STEP 1: Validate inputs with clear error messages
-    // ============================================================
-    if (!normalizedEmail) {
-      return { success: false, error: 'Please enter your email address.' };
-    }
-    
-    if (!email.includes('@') || !email.includes('.')) {
-      return { success: false, error: 'Please enter a valid email address.' };
-    }
-    
-    if (!password || password.length === 0) {
-      return { success: false, error: 'Please enter a password.' };
-    }
-    
-    if (password.length < 6) {
-      return { success: false, error: 'Password must be at least 6 characters.' };
-    }
-    
-    if (!fullName || fullName.trim().length === 0) {
-      return { success: false, error: 'Please enter your full name.' };
-    }
+    await supabase
+      .from('password_reset_tokens')
+      .delete()
+      .eq('email', normalizedEmail)
+      .eq('used', false);
 
-    // ============================================================
-    // STEP 2: Check if user already exists in Auth
-    // ============================================================
-    console.log('🔍 Checking if user already exists...');
-    const authCheck = await checkAuthUserExists(normalizedEmail);
-    
-    if (authCheck.exists) {
-      console.log('❌ User already exists in Auth');
-      return { 
-        success: false, 
-        error: 'This email is already registered. Please login instead.' 
-      };
+    const expiresAt = new Date();
+    expiresAt.setMinutes(expiresAt.getMinutes() + 10);
+
+    const { data, error } = await supabase
+      .from('password_reset_tokens')
+      .insert({
+        email: normalizedEmail,
+        token: token,
+        expires_at: expiresAt.toISOString(),
+        used: false,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      })
+      .select();
+
+    if (error) {
+      console.error('❌ Error saving reset token:', error);
+      return { success: false, error: error.message };
     }
 
-    // ============================================================
-    // STEP 3: Create Auth user
-    // ============================================================
-    console.log('📝 Creating Auth user...');
-    let authData = null;
-    let authError = null;
-
-    // Use Admin API in development
-    if (isDevelopment && supabaseAdmin) {
-      try {
-        const { data, error } = await supabaseAdmin.auth.admin.createUser({
-          email: normalizedEmail,
-          password: password,
-          email_confirm: true,
-          user_metadata: {
-            full_name: fullName.trim(),
-          },
-        });
-        
-        if (error) {
-          console.error('❌ Admin API error:', error);
-          authError = error;
-        } else {
-          authData = { user: data.user };
-          console.log('✅ User created with Admin API:', data.user.id);
-        }
-      } catch (adminErr) {
-        console.error('❌ Admin API exception:', adminErr);
-        authError = adminErr as any;
-      }
-    }
-
-    // Fallback to regular signup
-    if (!authData) {
-      try {
-        const result = await supabase.auth.signUp({
-          email: normalizedEmail,
-          password: password,
-          options: {
-            data: {
-              full_name: fullName.trim(),
-            },
-          },
-        });
-
-        if (result.error) {
-          console.error('❌ Signup error:', result.error);
-          authError = result.error;
-        } else {
-          authData = result.data;
-          console.log('✅ Regular signup successful!');
-        }
-      } catch (err) {
-        console.error('❌ Signup exception:', err);
-        authError = err as any;
-      }
-    }
-
-    if (!authData?.user) {
-      console.error('❌ No auth data returned');
-      
-      let errorMessage = '';
-      
-      if (authError?.message?.includes('rate limit')) {
-        errorMessage = 'Too many registration attempts. Please wait a few minutes and try again.';
-      } else if (authError?.message?.includes('already registered')) {
-        errorMessage = 'This email is already registered. Please login instead.';
-      } else {
-        errorMessage = authError?.message || 'Failed to create account. Please try again.';
-      }
-      
-      return { 
-        success: false, 
-        error: errorMessage
-      };
-    }
-
-    console.log('✅ User authenticated with ID:', authData.user.id);
-
-    // ============================================================
-    // STEP 4: Auto-confirm in development
-    // ============================================================
-    const isEmailConfirmed = authData.user.email_confirmed_at !== null;
-
-    if (isDevelopment && !isEmailConfirmed && supabaseAdmin) {
-      console.log('🔄 Auto-confirming email in development...');
-      try {
-        await supabaseAdmin.auth.admin.updateUserById(
-          authData.user.id,
-          { email_confirm: true }
-        );
-        console.log('✅ Email auto-confirmed');
-      } catch (err) {
-        console.error('❌ Failed to auto-confirm:', err);
-      }
-    }
-
-    // In production, user needs to confirm email
-    if (!isEmailConfirmed && !isDevelopment) {
-      return {
-        success: true,
-        message: 'Registration successful! Please check your email to confirm your account before logging in.',
-        data: null,
-        requiresConfirmation: true
-      };
-    }
-
-    // ============================================================
-    // STEP 5: Create user_data record (NO PASSWORD)
-    // ============================================================
-    console.log('📝 Creating user_data record...');
-    
-    const payload = {
-      email: normalizedEmail,
-      auth_user_id: authData.user.id,
-      full_name: fullName.trim(),
-      email_verified: true,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-      // NO PASSWORD - Auth is the source of truth
-      role: 'User',
-      permissions: ['Seasonal Forecast', 'Paint Analyzer'],
-      contacts: [],
-      batch_size: 0.1,
-      phone: null,
-      location: null,
-      address: null,
-      join_date: null,
-      employee_id: null,
-      profile_picture: null,
-      inventory_data: null,
-      inventory_data_name: null,
-      color_analysis: null,
-      uploaded_image: null,
-      uploaded_file_name: null,
-      uploaded_file_size: null,
-      sales_data: null,
-      sales_data_name: null,
-      forecast_data: null,
-      last_fetched: null,
-    };
-
-    let newData = null;
-
-    // Try using Admin client first
-    if (supabaseAdmin) {
-      try {
-        const { data, error } = await supabaseAdmin
-          .from('user_data')
-          .insert(payload)
-          .select();
-
-        if (!error && data) {
-          newData = data;
-          console.log('✅ user_data created using Admin client');
-        }
-      } catch (err) {
-        console.error('❌ Admin client exception:', err);
-      }
-    }
-
-    // Fallback to regular client
-    if (!newData) {
-      try {
-        const { data, error } = await supabase
-          .from('user_data')
-          .insert(payload)
-          .select();
-
-        if (!error && data) {
-          newData = data;
-          console.log('✅ user_data created using regular client');
-        }
-      } catch (err) {
-        console.error('❌ Regular client exception:', err);
-      }
-    }
-
-    if (!newData) {
-      console.warn('⚠️ Could not create user_data, but user was created in Auth');
-      return { 
-        success: true, 
-        message: 'Account created but profile setup incomplete. Please login to complete your profile.',
-        data: null,
-        warning: 'Please login to complete your profile setup.'
-      };
-    }
-
-    console.log('✅ Registration complete!');
-    
-    return { 
-      success: true, 
-      data: newData[0] || null,
-      message: isDevelopment 
-        ? 'Registration successful! You can now login.' 
-        : 'Registration successful! Please check your email to confirm your account.'
-    };
-    
+    return { success: true, data: data?.[0] || null };
   } catch (error: any) {
-    console.error('❌ Error registering user:', error);
-    return { 
-      success: false, 
-      error: error.message || 'Registration failed. Please try again.' 
-    };
+    console.error('❌ Error saving reset token:', error);
+    return { success: false, error: error.message };
   }
 };
 
-// ============================================================
-// COMPLETE PASSWORD RESET - FIXED with validation
-// ============================================================
+export const verifyResetToken = async (email: string, token: string) => {
+  try {
+    const normalizedEmail = email.toLowerCase().trim();
+    const now = new Date();
+
+    const { data, error } = await supabase
+      .from('password_reset_tokens')
+      .select('*')
+      .eq('email', normalizedEmail)
+      .eq('token', token)
+      .maybeSingle();
+
+    if (error) {
+      return { success: false, error: error.message };
+    }
+
+    if (!data) {
+      return { success: false, error: 'Invalid or expired PIN' };
+    }
+
+    if (data.used) {
+      return { success: false, error: 'PIN has already been used' };
+    }
+
+    const expiresAt = new Date(data.expires_at);
+    if (now > expiresAt) {
+      return { success: false, error: 'PIN has expired. Please request a new one.' };
+    }
+
+    await supabase
+      .from('password_reset_tokens')
+      .update({ 
+        used: true,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', data.id);
+
+    return { success: true, data };
+  } catch (error: any) {
+    console.error('❌ Error verifying token:', error);
+    return { success: false, error: error.message };
+  }
+};
 
 export const completePasswordReset = async (email: string, newPassword: string) => {
   console.log('🔄 Complete password reset for:', email);
@@ -591,9 +721,6 @@ export const completePasswordReset = async (email: string, newPassword: string) 
   try {
     const normalizedEmail = email.toLowerCase().trim();
     
-    // ============================================================
-    // STEP 1: Validate inputs
-    // ============================================================
     if (!normalizedEmail) {
       return { success: false, error: 'Email is required.' };
     }
@@ -611,9 +738,6 @@ export const completePasswordReset = async (email: string, newPassword: string) 
       return { success: false, error: 'Password reset service unavailable. Please try again later.' };
     }
 
-    // ============================================================
-    // STEP 2: Find the user in Auth
-    // ============================================================
     console.log('🔍 Finding user in Auth...');
     const { data: userList, error: listError } = await supabaseAdmin.auth.admin.listUsers();
     
@@ -631,9 +755,6 @@ export const completePasswordReset = async (email: string, newPassword: string) 
 
     console.log('👤 Found Auth user:', user.id);
 
-    // ============================================================
-    // STEP 3: Update the Auth password (THIS IS THE ONLY SOURCE OF TRUTH)
-    // ============================================================
     console.log('🔐 Updating Auth password...');
     const { error: authError } = await supabaseAdmin.auth.admin.updateUserById(
       user.id,
@@ -650,27 +771,12 @@ export const completePasswordReset = async (email: string, newPassword: string) 
     
     console.log('✅ Auth password updated successfully');
 
-    // ============================================================
-    // STEP 4: Force sign out ALL sessions
-    // ============================================================
-    console.log('🚪 Invalidating ALL sessions...');
-    try {
-      await supabaseAdmin.auth.admin.signOut(user.id);
-      console.log('✅ User sessions invalidated');
-    } catch (err) {
-      console.warn('⚠️ Could not invalidate sessions:', err);
-    }
-
-    // ============================================================
-    // STEP 5: Clean up reset tokens
-    // ============================================================
     await supabase
       .from('password_reset_tokens')
       .delete()
       .eq('email', normalizedEmail);
 
     console.log('✅ Password reset completed successfully!');
-    
     
     return { 
       success: true, 
@@ -687,23 +793,82 @@ export const completePasswordReset = async (email: string, newPassword: string) 
   }
 };
 
-// ============================================================
-// USER DELETION - COMPLETE CLEANUP
-// ============================================================
-
-export const deleteUserPermanently = async (email: string) => {
-  console.log('🗑️ PERMANENTLY deleting user:', email);
+export const sendPasswordResetEmailWithPIN = async (email: string, pin: string) => {
+  console.log('📧 Sending password reset PIN to:', email);
+  console.log(`🔑 PIN: ${pin}`);
   
-  if (!supabaseAdmin) {
-    console.error('❌ Admin client not available');
-    return { success: false, error: 'Admin client not available' };
+  const result = await sendPasswordResetEmail(email, pin);
+  
+  if (result.success) {
+    console.log('✅ Password reset email sent successfully');
+  } else {
+    console.error('❌ Failed to send password reset email:', result.error);
   }
+  
+  return result;
+};
 
+// ============================================================
+// USER DATA FUNCTIONS
+// ============================================================
+
+export const getUserData = async (email: string) => {
+  try {
+    const { data, error } = await supabase
+      .from('user_data')
+      .select('*')
+      .eq('email', email.toLowerCase().trim())
+      .maybeSingle();
+
+    if (error) {
+      console.error('❌ Supabase Error:', error);
+      throw error;
+    }
+
+    return data;
+  } catch (error: any) {
+    console.error('❌ Error getting user data:', error);
+    return null;
+  }
+};
+
+export const saveUserData = async (email: string, data: any) => {
+  try {
+    const { password, ...cleanData } = data;
+    
+    const payload = {
+      ...cleanData,
+      updated_at: new Date().toISOString(),
+    };
+
+    const { error } = await supabase
+      .from('user_data')
+      .update(payload)
+      .eq('email', email.toLowerCase().trim());
+
+    if (error) {
+      console.error('❌ Supabase Error:', error);
+      throw error;
+    }
+
+    return true;
+  } catch (error: any) {
+    console.error('❌ Error saving user data:', error);
+    return false;
+  }
+};
+
+export const confirmUserEmail = async (email: string) => {
+  console.log('📧 Auto-confirming email for:', email);
+  
   try {
     const normalizedEmail = email.toLowerCase().trim();
     
-    // Find the user in Auth
-    console.log('🔍 Finding Auth user...');
+    if (!supabaseAdmin) {
+      console.warn('⚠️ Admin client not available');
+      return { success: false, error: 'Admin client not available' };
+    }
+
     const { data: userList, error: listError } = await supabaseAdmin.auth.admin.listUsers();
     
     if (listError) {
@@ -713,51 +878,37 @@ export const deleteUserPermanently = async (email: string) => {
 
     const user = userList?.users?.find((u: any) => u.email === normalizedEmail);
     
-    // Delete from Auth first
-    if (user) {
-      console.log('🗑️ Deleting Auth user:', user.id);
-      const { error: authError } = await supabaseAdmin.auth.admin.deleteUser(user.id);
-      
-      if (authError) {
-        console.error('❌ Error deleting Auth user:', authError);
-        return { success: false, error: authError.message };
-      }
-      console.log('✅ Auth user deleted');
+    if (!user) {
+      return { success: false, error: 'User not found' };
     }
 
-    // Delete from user_data
-    console.log('📝 Deleting from user_data...');
-    const { error: dataError } = await supabaseAdmin
-      .from('user_data')
-      .delete()
-      .eq('email', normalizedEmail);
-    
-    if (dataError && dataError.code !== 'PGRST116') {
-      console.error('❌ Error deleting user_data:', dataError);
-    } else {
-      console.log('✅ user_data deleted');
+    const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(
+      user.id,
+      { email_confirm: true }
+    );
+
+    if (updateError) {
+      console.error('❌ Error confirming email:', updateError);
+      return { success: false, error: updateError.message };
     }
 
-    // Clean up reset tokens
     await supabase
-      .from('password_reset_tokens')
-      .delete()
+      .from('user_data')
+      .update({
+        is_verified: true,
+        verification_code: null,
+        verification_code_expires_at: null,
+        updated_at: new Date().toISOString()
+      })
       .eq('email', normalizedEmail);
 
-    console.log('✅ User PERMANENTLY deleted from all systems');
-    return { 
-      success: true, 
-      message: 'User permanently deleted from Auth, user_data, and all related records' 
-    };
+    console.log('✅ Email confirmed for:', normalizedEmail);
+    return { success: true, message: 'Email confirmed successfully!' };
   } catch (error: any) {
-    console.error('❌ Error permanently deleting user:', error);
+    console.error('❌ Error confirming email:', error);
     return { success: false, error: error.message };
   }
 };
-
-// ============================================================
-// FORCE SYNC - Ensure Auth and user_data match
-// ============================================================
 
 export const forceSyncUser = async (email: string) => {
   console.log('🔧 Force syncing user:', email);
@@ -773,11 +924,9 @@ export const forceSyncUser = async (email: string) => {
       return { success: false, error: 'Admin client not available' };
     }
 
-    // Check Auth
     const { data: userList } = await supabaseAdmin.auth.admin.listUsers();
     const authUser = userList?.users?.find((u: any) => u.email === normalizedEmail);
     
-    // Check user_data
     const { data: userData } = await supabase
       .from('user_data')
       .select('*')
@@ -785,7 +934,6 @@ export const forceSyncUser = async (email: string) => {
       .maybeSingle();
 
     if (authUser && !userData) {
-      // Auth exists but user_data doesn't - create it
       console.log('📝 Creating user_data for existing Auth user...');
       
       const newUserData = {
@@ -796,6 +944,7 @@ export const forceSyncUser = async (email: string) => {
         permissions: ['Seasonal Forecast', 'Paint Analyzer'],
         contacts: [],
         batch_size: 0.1,
+        is_verified: true,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       };
@@ -814,7 +963,6 @@ export const forceSyncUser = async (email: string) => {
     }
 
     if (!authUser && userData) {
-      // user_data exists but Auth doesn't - orphaned record
       console.log('🗑️ Orphaned user_data found - deleting...');
       
       const { error: deleteError } = await supabaseAdmin
@@ -832,7 +980,6 @@ export const forceSyncUser = async (email: string) => {
     }
 
     if (authUser && userData) {
-      // Both exist - ensure they're linked
       if (userData.auth_user_id !== authUser.id) {
         console.log('🔄 Updating auth_user_id...');
         
@@ -862,12 +1009,8 @@ export const forceSyncUser = async (email: string) => {
   }
 };
 
-// ============================================================
-// CREATE AUTH USER FOR EXISTING user_data
-// ============================================================
-
-export const createAuthUserForExisting = async (email: string, password: string) => {
-  console.log('🔧 Creating Auth user for existing user_data:', email);
+export const deleteUserPermanently = async (email: string) => {
+  console.log('🗑️ PERMANENTLY deleting user:', email);
   
   if (!supabaseAdmin) {
     console.error('❌ Admin client not available');
@@ -877,123 +1020,7 @@ export const createAuthUserForExisting = async (email: string, password: string)
   try {
     const normalizedEmail = email.toLowerCase().trim();
     
-    // Check if user exists in user_data
-    const { data: userData, error: userDataError } = await supabase
-      .from('user_data')
-      .select('*')
-      .eq('email', normalizedEmail)
-      .maybeSingle();
-
-    if (userDataError) {
-      console.error('❌ Error checking user_data:', userDataError);
-      return { success: false, error: userDataError.message };
-    }
-
-    if (!userData) {
-      return { success: false, error: 'User not found in user_data' };
-    }
-
-    console.log('✅ User found in user_data:', userData);
-
-    // Check if already exists in Auth
-    const { data: userList } = await supabaseAdmin.auth.admin.listUsers();
-    const existingAuthUser = userList?.users?.find((u: any) => u.email === normalizedEmail);
-
-    if (existingAuthUser) {
-      console.log('✅ User already exists in Auth:', existingAuthUser.id);
-      
-      // Update password
-      console.log('🔄 Updating Auth password...');
-      const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(
-        existingAuthUser.id,
-        { password: password }
-      );
-      
-      if (updateError) {
-        console.error('❌ Failed to update password:', updateError);
-        return { success: false, error: updateError.message };
-      }
-      
-      console.log('✅ Password updated in Auth');
-      
-      // Update user_data
-      await supabase
-        .from('user_data')
-        .update({ 
-          auth_user_id: existingAuthUser.id,
-          updated_at: new Date().toISOString()
-        })
-        .eq('email', normalizedEmail);
-      
-      return { 
-        success: true, 
-        user: existingAuthUser,
-        message: 'User already exists in Auth. Password updated.'
-      };
-    }
-
-    // Create user in Auth
-    console.log('📝 Creating Auth user...');
-    const { data, error: createError } = await supabaseAdmin.auth.admin.createUser({
-      email: normalizedEmail,
-      password: password,
-      email_confirm: true,
-      user_metadata: {
-        full_name: userData.full_name || normalizedEmail,
-      },
-    });
-
-    if (createError) {
-      console.error('❌ Failed to create Auth user:', createError);
-      return { success: false, error: createError.message };
-    }
-
-    console.log('✅ Auth user created:', data.user.id);
-
-    // Update user_data with auth_user_id
-    const { error: updateDataError } = await supabase
-      .from('user_data')
-      .update({ 
-        auth_user_id: data.user.id,
-        updated_at: new Date().toISOString()
-      })
-      .eq('email', normalizedEmail);
-
-    if (updateDataError) {
-      console.error('❌ Failed to update user_data:', updateDataError);
-    } else {
-      console.log('✅ user_data updated with auth_user_id');
-    }
-
-    return { 
-      success: true, 
-      user: data.user,
-      message: 'Auth user created successfully'
-    };
-  } catch (error: any) {
-    console.error('❌ Error creating Auth user:', error);
-    return { success: false, error: error.message };
-  }
-};
-
-// ============================================================
-// AUTO-CONFIRM EMAIL IN DEVELOPMENT
-// ============================================================
-
-export const confirmUserEmail = async (email: string) => {
-  if (!isDevelopment) {
-    return { success: false, error: 'Only available in development' };
-  }
-
-  if (!supabaseAdmin) {
-    console.warn('⚠️ Admin client not available, skipping auto-confirm');
-    return { success: false, error: 'Admin client not available' };
-  }
-
-  try {
-    const normalizedEmail = email.toLowerCase().trim();
-    console.log('📧 Auto-confirming email for:', normalizedEmail);
-    
+    console.log('🔍 Finding Auth user...');
     const { data: userList, error: listError } = await supabaseAdmin.auth.admin.listUsers();
     
     if (listError) {
@@ -1003,110 +1030,47 @@ export const confirmUserEmail = async (email: string) => {
 
     const user = userList?.users?.find((u: any) => u.email === normalizedEmail);
     
-    if (!user) {
-      return { success: false, error: 'User not found' };
+    if (user) {
+      console.log('🗑️ Deleting Auth user:', user.id);
+      const { error: authError } = await supabaseAdmin.auth.admin.deleteUser(user.id);
+      
+      if (authError) {
+        console.error('❌ Error deleting Auth user:', authError);
+        return { success: false, error: authError.message };
+      }
+      console.log('✅ Auth user deleted');
     }
 
-    const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(
-      user.id,
-      { email_confirm: true }
-    );
-
-    if (updateError) {
-      console.error('❌ Error confirming email:', updateError);
-      return { success: false, error: updateError.message };
+    console.log('📝 Deleting from user_data...');
+    const { error: dataError } = await supabaseAdmin
+      .from('user_data')
+      .delete()
+      .eq('email', normalizedEmail);
+    
+    if (dataError && dataError.code !== 'PGRST116') {
+      console.error('❌ Error deleting user_data:', dataError);
+    } else {
+      console.log('✅ user_data deleted');
     }
 
-    console.log('✅ Email confirmed for:', normalizedEmail);
-    return { success: true, message: 'Email confirmed successfully!' };
+    await supabase
+      .from('password_reset_tokens')
+      .delete()
+      .eq('email', normalizedEmail);
+
+    console.log('✅ User PERMANENTLY deleted from all systems');
+    return { 
+      success: true, 
+      message: 'User permanently deleted from Auth, user_data, and all related records' 
+    };
   } catch (error: any) {
-    console.error('❌ Error confirming email:', error);
+    console.error('❌ Error permanently deleting user:', error);
     return { success: false, error: error.message };
   }
 };
 
-export const confirmExistingUser = async (email: string) => {
-  console.log('📧 Manually confirming existing user:', email);
-  return await confirmUserEmail(email);
-};
-
 // ============================================================
-// GET CURRENT USER
-// ============================================================
-
-export const getCurrentUser = async () => {
-  try {
-    const { data: { user } } = await supabase.auth.getUser();
-    return user;
-  } catch (error) {
-    console.error('❌ Error getting current user:', error);
-    return null;
-  }
-};
-
-export const getCurrentSession = async () => {
-  try {
-    const { data: { session } } = await supabase.auth.getSession();
-    return session;
-  } catch (error) {
-    console.error('❌ Error getting current session:', error);
-    return null;
-  }
-};
-
-// ============================================================
-// USER DATA - CRUD Operations (NO PASSWORD)
-// ============================================================
-
-export const getUserData = async (email: string) => {
-  try {
-    const { data, error } = await supabase
-      .from('user_data')
-      .select('*')
-      .eq('email', email.toLowerCase().trim())
-      .maybeSingle();
-
-    if (error) {
-      console.error('❌ Supabase Error:', error);
-      throw error;
-    }
-
-    return data;
-  } catch (error: any) {
-    console.error('❌ Error getting user data:', error);
-    return null;
-  }
-};
-
-export const saveUserData = async (email: string, data: any) => {
-  try {
-    // Remove password field if present (should not be stored)
-    const { password, ...cleanData } = data;
-    
-    const payload = {
-      ...cleanData,
-      updated_at: new Date().toISOString(),
-    };
-
-    const { error } = await supabase
-      .from('user_data')
-      .update(payload)
-      .eq('email', email.toLowerCase().trim());
-
-    if (error) {
-      console.error('❌ Supabase Error:', error);
-      throw error;
-    }
-
-    return true;
-  } catch (error: any) {
-    console.error('❌ Error saving user data:', error);
-    return false;
-  }
-};
-
-// ============================================================
-// PAINT ANALYZER - Data Storage
+// PAINT ANALYZER FUNCTIONS
 // ============================================================
 
 export const savePaintAnalyzerData = async (email: string, data: {
@@ -1211,7 +1175,7 @@ export const clearPaintAnalyzerData = async (email: string) => {
 };
 
 // ============================================================
-// SALES FORECASTING - Data Storage
+// SALES FORECAST FUNCTIONS
 // ============================================================
 
 export const saveSalesForecastData = async (email: string, data: {
@@ -1304,7 +1268,7 @@ export const clearSalesForecastData = async (email: string) => {
 };
 
 // ============================================================
-// USER PROFILE - COMPLETE WITH ALL FIELDS (NO PASSWORD)
+// USER PROFILE FUNCTIONS
 // ============================================================
 
 export const saveUserProfile = async (email: string, profileData: any) => {
@@ -1387,10 +1351,6 @@ export const getUserProfile = async (email: string) => {
   }
 };
 
-// ============================================================
-// PROFILE PICTURE - SEPARATE FUNCTIONS
-// ============================================================
-
 export const saveProfilePicture = async (email: string, pictureData: string | null) => {
   console.log('📸 Saving profile picture for:', email);
   
@@ -1439,158 +1399,5 @@ export const getProfilePicture = async (email: string) => {
   } catch (error: any) {
     console.error('❌ Error getting profile picture:', error);
     return null;
-  }
-};
-
-// ============================================================
-// PASSWORD RESET WITH PIN (6-DIGIT)
-// ============================================================
-
-export { generatePIN } from './emailService';
-
-export const saveResetToken = async (email: string, token: string) => {
-  try {
-    const normalizedEmail = email.toLowerCase().trim();
-    
-    // Delete old unused tokens
-    await supabase
-      .from('password_reset_tokens')
-      .delete()
-      .eq('email', normalizedEmail)
-      .eq('used', false);
-
-    // Set expiration time (10 minutes from now)
-    const expiresAt = new Date();
-    expiresAt.setMinutes(expiresAt.getMinutes() + 10);
-
-    const { data, error } = await supabase
-      .from('password_reset_tokens')
-      .insert({
-        email: normalizedEmail,
-        token: token,
-        expires_at: expiresAt.toISOString(),
-        used: false,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      })
-      .select();
-
-    if (error) {
-      console.error('❌ Error saving reset token:', error);
-      return { success: false, error: error.message };
-    }
-
-    return { success: true, data: data?.[0] || null };
-  } catch (error: any) {
-    console.error('❌ Error saving reset token:', error);
-    return { success: false, error: error.message };
-  }
-};
-
-export const verifyResetToken = async (email: string, token: string) => {
-  try {
-    const normalizedEmail = email.toLowerCase().trim();
-    const now = new Date();
-
-    const { data, error } = await supabase
-      .from('password_reset_tokens')
-      .select('*')
-      .eq('email', normalizedEmail)
-      .eq('token', token)
-      .maybeSingle();
-
-    if (error) {
-      return { success: false, error: error.message };
-    }
-
-    if (!data) {
-      return { success: false, error: 'Invalid or expired PIN' };
-    }
-
-    if (data.used) {
-      return { success: false, error: 'PIN has already been used' };
-    }
-
-    const expiresAt = new Date(data.expires_at);
-    if (now > expiresAt) {
-      return { success: false, error: 'PIN has expired. Please request a new one.' };
-    }
-
-    await supabase
-      .from('password_reset_tokens')
-      .update({ 
-        used: true,
-        updated_at: new Date().toISOString()
-      })
-      .eq('id', data.id);
-
-    return { success: true, data };
-  } catch (error: any) {
-    console.error('❌ Error verifying token:', error);
-    return { success: false, error: error.message };
-  }
-};
-
-export const sendPasswordResetEmailWithPIN = async (email: string, pin: string) => {
-  console.log('📧 Sending password reset PIN to:', email);
-  console.log(`🔑 PIN: ${pin}`);
-  
-  const result = await sendPasswordResetEmail(email, pin);
-  
-  if (result.success) {
-    console.log('✅ Password reset email sent successfully');
-  } else {
-    console.error('❌ Failed to send password reset email:', result.error);
-  }
-  
-  return result;
-};
-
-// ============================================================
-// DEBUG: Check user status
-// ============================================================
-
-export const checkUserStatus = async (email: string) => {
-  console.log('🔍 Checking user status for:', email);
-  
-  try {
-    const normalizedEmail = email.toLowerCase().trim();
-    
-    // Check auth.users
-    if (supabaseAdmin) {
-      const { data: userList, error: listError } = await supabaseAdmin.auth.admin.listUsers();
-      
-      if (!listError && userList?.users) {
-        const user = userList.users.find((u: any) => u.email === normalizedEmail);
-        
-        if (user) {
-          console.log('✅ Auth user found:');
-          console.log('  - ID:', user.id);
-          console.log('  - Email:', user.email);
-          console.log('  - Confirmed:', user.email_confirmed_at !== null);
-          console.log('  - Created:', user.created_at);
-          console.log('  - Last sign in:', user.last_sign_in_at);
-        } else {
-          console.log('❌ User not found in auth.users');
-        }
-      }
-    }
-    
-    // Check user_data
-    const { data, error } = await supabase
-      .from('user_data')
-      .select('email, auth_user_id, full_name, created_at')
-      .eq('email', normalizedEmail)
-      .maybeSingle();
-    
-    if (error) {
-      console.error('❌ Error checking user_data:', error);
-    } else if (data) {
-      console.log('✅ user_data found:', data);
-    } else {
-      console.log('❌ user_data not found');
-    }
-  } catch (error) {
-    console.error('❌ Error checking user status:', error);
   }
 };

@@ -129,10 +129,6 @@ const normalizeText = (value: unknown) => String(value ?? "").toLowerCase().trim
 
 const isActiveProduct = (item: any) => normalizeText(item.availability).includes("active");
 
-// ============================================================
-// CATEGORY CLASSIFICATIONS
-// ============================================================
-
 const AUTOMOTIVE_CATEGORIES = [
   "automotive enamel", "epoxy enamel", "epoxy primer", "urethane",
   "catalyst", "body filler", "clearcoat", "top coat", "primer surfacer",
@@ -155,10 +151,6 @@ const HARDWARE_CATEGORIES = [
   "rollers", "tape", "sanding", "putty knife", "masking tape",
   "sandpaper", "spray paint", "combo", "single",
 ];
-
-// ============================================================
-// CLASSIFICATION FUNCTIONS
-// ============================================================
 
 const isAutomotiveProduct = (item: any) => {
   const haystack = `${item.product ?? ""} ${item.category ?? ""} ${item.brand ?? ""}`.toLowerCase();
@@ -193,10 +185,6 @@ const isPaintFormulationProduct = (item: any) => {
   return paintKeywords.some(keyword => haystack.includes(keyword));
 };
 
-// ============================================================
-// COLOR KEYWORDS
-// ============================================================
-
 const colorKeywords: Record<string, string[]> = {
   red: ["red", "crimson", "scarlet", "ruby", "maroon"],
   pink: ["pink", "rose", "salmon", "fuchsia", "magenta"],
@@ -211,10 +199,6 @@ const colorKeywords: Record<string, string[]> = {
   white: ["white"],
   gray: ["gray", "grey", "silver", "neutral"],
 };
-
-// ============================================================
-// HELPER: Parse Stock Value
-// ============================================================
 
 const parseStockValue = (value: any): number => {
   if (!value && value !== 0) return 0;
@@ -234,10 +218,6 @@ const parseStockValue = (value: any): number => {
   
   return 0;
 };
-
-// ============================================================
-// INVENTORY FILTERING
-// ============================================================
 
 const filterInventoryForFormulation = (inventory: any[], vision: VisionAnalysis) => {
   const family = normalizeText(vision.colorFamily || vision.dominantColor);
@@ -285,10 +265,6 @@ const findInventoryMatch = (component: any, inventory: any[]) => {
     return itemProduct === product && (!brand || itemBrand === brand);
   });
 };
-
-// ============================================================
-// LOAD INVENTORY
-// ============================================================
 
 const loadInventory = (uploadedData: any[] | null) => {
   if (!uploadedData || uploadedData.length === 0) {
@@ -341,10 +317,6 @@ const loadInventory = (uploadedData: any[] | null) => {
     });
 };
 
-// ============================================================
-// NOTIFICATION HELPER
-// ============================================================
-
 const showNotification = (message: string, type: 'success' | 'error' | 'info' = 'success') => {
   const colors = {
     success: 'bg-green-800 border-green-400/30',
@@ -389,10 +361,6 @@ const showNotification = (message: string, type: 'success' | 'error' | 'info' = 
   }, 3000);
 };
 
-// ============================================================
-// MAIN COMPONENT
-// ============================================================
-
 export default function PaintComponentAnalyzer() {
   const { userEmail } = useAuth();
   const [isLoading, setIsLoading] = useState(true);
@@ -420,10 +388,8 @@ export default function PaintComponentAnalyzer() {
   const [isDraggingFile, setIsDraggingFile] = useState(false);
   const [isDataSaved, setIsDataSaved] = useState(false);
 
-  // Add state for remove confirmation dialog
   const [showRemoveDialog, setShowRemoveDialog] = useState(false);
 
-  // Lock body scroll when dialog is open
   useEffect(() => {
     if (showRemoveDialog) {
       document.body.style.overflow = 'hidden';
@@ -435,9 +401,6 @@ export default function PaintComponentAnalyzer() {
     };
   }, [showRemoveDialog]);
 
-  // ============================================================
-  // SUPABASE: Load saved data on mount
-  // ============================================================
   useEffect(() => {
     const loadData = async () => {
       if (!userEmail) {
@@ -492,9 +455,6 @@ export default function PaintComponentAnalyzer() {
     loadData();
   }, [userEmail]);
 
-  // ============================================================
-  // SUPABASE: Save to cloud when data changes (debounced)
-  // ============================================================
   useEffect(() => {
     const saveToCloud = async () => {
       if (!userEmail) return;
@@ -539,10 +499,6 @@ export default function PaintComponentAnalyzer() {
     return () => clearTimeout(timeoutId);
   }, [userEmail, uploadedData, uploadedDataName, colorAnalysis, uploadedImage, uploadedFileName, uploadedFileSize, batchSizeLiters, lastFetched]);
 
-  // ============================================================
-  // ANIMATION & EFFECTS
-  // ============================================================
-
   useEffect(() => {
     const timer = setTimeout(() => setIsVisible(true), 80);
     return () => clearTimeout(timer);
@@ -561,9 +517,6 @@ export default function PaintComponentAnalyzer() {
     return () => window.clearInterval(interval);
   }, [isAnalyzing]);
 
-  // ============================================================
-  // SUPABASE: Clear data
-  // ============================================================
   const clearSupabaseData = async () => {
     if (!userEmail) return;
     
@@ -590,10 +543,6 @@ export default function PaintComponentAnalyzer() {
       showNotification("❌ Failed to clear data", "error");
     }
   };
-
-  // ============================================================
-  // HANDLERS
-  // ============================================================
 
   const handleSaveData = () => {
     if (!uploadedData || uploadedData.length === 0) {
@@ -922,32 +871,24 @@ Required JSON format:
       const formulationText = formulationResult.text ?? "";
       const geminiData = JSON.parse(extractJson(formulationText));
 
-      // ============================================================
-      // FIX: Normalize amounts to match the target batch size
-      // ============================================================
       const targetMl = batchSizeLiters * 1000;
       const components = geminiData.components || geminiData.paintComponents || [];
       
-      // Calculate total amount from AI response
       const totalAiAmount = components.reduce((sum: number, c: any) => sum + (c.amountMl || 0), 0);
       
-      // If the AI amounts don't match the target (within 0.1ml tolerance), scale them
       if (totalAiAmount > 0 && Math.abs(totalAiAmount - targetMl) > 0.1) {
         const scaleFactor = targetMl / totalAiAmount;
         
-        // Scale the components
         geminiData.components = components.map((c: any) => ({
           ...c,
           amountMl: (c.amountMl || 0) * scaleFactor,
           priceValue: (c.priceValue || 0) * scaleFactor,
         }));
         
-        // Scale the total price
         geminiData.totalPrice = (geminiData.totalPrice || 0) * scaleFactor;
         
         console.log(`✅ Normalized amounts: ${totalAiAmount}ml → ${targetMl}ml (scale: ${scaleFactor.toFixed(3)})`);
       } else {
-        // If amounts already match, use as-is
         geminiData.components = components;
         console.log(`✅ Amounts already match target: ${targetMl}ml`);
       }
@@ -1092,21 +1033,13 @@ Required JSON format:
     showNotification("🗑️ Image removed", "info");
   };
 
-  // ============================================================
-  // FIXED: scaledComponents - properly calculates amounts and prices for current batch size
-  // ============================================================
   const scaledComponents = useMemo(() => {
     if (!colorAnalysis) return [];
     
     const targetMl = batchSizeLiters * 1000;
-    
-    // Get the original components
     const components = colorAnalysis.paintComponents;
-    
-    // Calculate the total original amount from AI
     const totalOriginalAmount = components.reduce((sum, c) => sum + (c.amountMl || 0), 0);
     
-    // If there are no amounts, return empty
     if (totalOriginalAmount === 0) {
       return components.map((c) => ({
         ...c,
@@ -1115,35 +1048,22 @@ Required JSON format:
       }));
     }
     
-    // Calculate the scaling factor
     const scaleFactor = targetMl / totalOriginalAmount;
-    
-    // Calculate total percentage for fallback pricing
     const totalPercentage = components.reduce((sum, c) => sum + (c.percentage || 0), 0);
     
     return components.map((c) => {
-      // Scale the amount
       const amountMl = (c.amountMl || 0) * scaleFactor;
       
-      // Calculate price for this component based on the scaled amount
       let priceValue = 0;
       
-      // If we have volume info, calculate price based on volume
       if (c.volumeL && c.volumeL > 0 && c.estPricePHP > 0) {
-        // Price per liter * amount in liters
         const pricePerLiter = c.estPricePHP / c.volumeL;
         priceValue = pricePerLiter * (amountMl / 1000);
-      } 
-      // If we have a price value already, scale it proportionally
-      else if (c.priceValue > 0) {
+      } else if (c.priceValue > 0) {
         priceValue = c.priceValue * scaleFactor;
-      }
-      // If we have percentage, use percentage-based distribution
-      else if (totalPercentage > 0 && c.percentage > 0 && colorAnalysis.totalPrice > 0) {
+      } else if (totalPercentage > 0 && c.percentage > 0 && colorAnalysis.totalPrice > 0) {
         priceValue = (colorAnalysis.totalPrice * (c.percentage / totalPercentage)) * scaleFactor;
-      }
-      // Fallback: use unit price
-      else if (c.estPricePHP > 0) {
+      } else if (c.estPricePHP > 0) {
         priceValue = c.estPricePHP * scaleFactor;
       }
       
@@ -1155,9 +1075,6 @@ Required JSON format:
     });
   }, [colorAnalysis, batchSizeLiters]);
 
-  // ============================================================
-  // FIXED: totalPrice - always calculates from scaled components
-  // ============================================================
   const totalPrice = useMemo(
     () => {
       return scaledComponents.reduce((sum, c) => sum + (c.scaledPrice || 0), 0);
@@ -1168,7 +1085,6 @@ Required JSON format:
   const isDataLoaded = uploadedData !== null && uploadedData.length > 0;
   const isAnalyzerEnabled = isDataSaved && isDataLoaded;
 
-  // Handle remove with confirmation - centered dialog
   const handleRemoveWithConfirmation = () => {
     if (uploadedImage) {
       setShowRemoveDialog(true);
@@ -1263,7 +1179,6 @@ Required JSON format:
           }
         `}</style>
 
-        {/* Page header */}
         <header className="overflow-hidden rounded-2xl bg-[#174d32] px-5 py-5 text-white shadow-[0_18px_45px_rgba(23,77,50,0.18)] sm:px-7 sm:py-6">
           <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-start gap-4">
@@ -1306,7 +1221,6 @@ Required JSON format:
           </div>
         </header>
 
-        {/* Inventory Section */}
         <section>
           <Card className="overflow-hidden rounded-2xl border border-emerald-100 bg-white shadow-[0_12px_32px_rgba(20,83,45,0.06)]">
             <CardHeader className="border-b border-emerald-100 bg-[#174d32] h-10 flex items-center px-4">
@@ -1465,7 +1379,6 @@ Required JSON format:
           </Card>
         </section>
 
-        {/* Vision Scanner Section */}
         <section>
           <Card className={`overflow-hidden rounded-2xl border shadow-[0_12px_32px_rgba(20,83,45,0.06)] ${isAnalyzerEnabled ? 'border-emerald-100 bg-white' : 'border-gray-200 bg-white/60'}`}>
             <CardHeader className={`border-b ${isAnalyzerEnabled ? 'border-emerald-100 bg-gradient-to-r from-emerald-50/80 via-white to-white' : 'border-gray-200 bg-gray-50'} p-5`}>
@@ -1723,10 +1636,8 @@ Required JSON format:
           </Card>
         </section>
 
-        {/* Results from Gemini AI */}
         {colorAnalysis && (
           <>
-            {/* Color Overview */}
             <Card className="border-l-4 border-[#174d32] overflow-hidden rounded-2xl border border-emerald-100 bg-white shadow-[0_12px_32px_rgba(20,83,45,0.06)]">
               <CardContent className="pt-5">
                 <div className="flex items-center gap-4">
@@ -1757,7 +1668,6 @@ Required JSON format:
               </CardContent>
             </Card>
 
-            {/* Paint Mixing Formula + Prices */}
             <Card className="overflow-hidden rounded-2xl border border-emerald-100 bg-white shadow-[0_12px_32px_rgba(20,83,45,0.06)]">
               <CardHeader className="border-b border-emerald-100 bg-gradient-to-r from-white to-emerald-50/70">
                 <CardTitle className="flex items-center gap-2">
@@ -1770,7 +1680,6 @@ Required JSON format:
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                {/* Batch Size */}
                 <div className="mb-6 p-4 bg-green-50 rounded-xl border-2 border-[#174d32]">
                   <Label className="text-sm font-semibold text-gray-700 mb-2 block">
                     Target Batch Size (Liters)
@@ -1910,7 +1819,6 @@ Required JSON format:
               </CardContent>
             </Card>
 
-            {/* Consistency */}
             {colorAnalysis.consistency &&
               colorAnalysis.consistency.type !== "—" && (
                 <Card className="border-l-4 border-[#174d32] overflow-hidden rounded-2xl border border-emerald-100 bg-white shadow-[0_12px_32px_rgba(20,83,45,0.06)]">
@@ -1958,7 +1866,6 @@ Required JSON format:
                 </Card>
               )}
 
-            {/* Application Guide */}
             {colorAnalysis.applicationGuide && (
               <Card className="border-l-4 border-blue-500 overflow-hidden rounded-2xl border border-blue-100 bg-white shadow-[0_12px_32px_rgba(20,83,45,0.06)]">
                 <CardHeader className="border-b border-blue-100 bg-gradient-to-r from-white to-blue-50/70">
@@ -2024,7 +1931,6 @@ Required JSON format:
               </Card>
             )}
 
-            {/* Stock Warnings */}
             {colorAnalysis.stockWarnings.length > 0 && (
               <Card className="border-l-4 border-orange-500 overflow-hidden rounded-2xl border border-orange-100 bg-white shadow-[0_12px_32px_rgba(20,83,45,0.06)]">
                 <CardHeader className="border-b border-orange-100 bg-gradient-to-r from-white to-orange-50/70">
@@ -2056,7 +1962,6 @@ Required JSON format:
         )}
       </div>
 
-      {/* Confirmation Dialog - Using Portal to render at root level */}
       {showRemoveDialog && createPortal(
         <div 
           className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"

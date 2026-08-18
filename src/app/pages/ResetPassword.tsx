@@ -1,5 +1,3 @@
-// src/pages/ResetPassword.tsx
-
 import { useState, useEffect, useRef } from "react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
@@ -25,21 +23,18 @@ export default function ResetPassword() {
   const navigate = useNavigate();
   const location = useLocation();
   
-  // Get auth functions
   const { 
     requestPasswordReset, 
     verifyPIN,
     completePasswordReset,
-    logout // ✅ Added - to force logout after password reset
+    logout
   } = useAuth();
 
-  // Form data
   const [email, setEmail] = useState("");
   const [pin, setPin] = useState(["", "", "", "", "", ""]);
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   
-  // UI states
   const [showEmailForm, setShowEmailForm] = useState(true);
   const [showPinForm, setShowPinForm] = useState(false);
   const [showPasswordForm, setShowPasswordForm] = useState(false);
@@ -52,13 +47,11 @@ export default function ResetPassword() {
   const [resendCooldown, setResendCooldown] = useState(0);
   const [passwordStrength, setPasswordStrength] = useState(0);
   
-  // Refs to prevent double submission
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
   const isSubmittingRef = useRef(false);
   const isVerifyingRef = useRef(false);
   const isSendingRef = useRef(false);
 
-  // Check if email was passed from login page
   useEffect(() => {
     if (location.state?.email) {
       setEmail(location.state.email);
@@ -68,7 +61,6 @@ export default function ResetPassword() {
     }
   }, [location.state]);
 
-  // Resend cooldown timer
   useEffect(() => {
     if (resendCooldown > 0) {
       const timer = setTimeout(() => setResendCooldown(resendCooldown - 1), 1000);
@@ -76,7 +68,6 @@ export default function ResetPassword() {
     }
   }, [resendCooldown]);
 
-  // Focus first input when PIN form shows
   useEffect(() => {
     if (showPinForm && inputRefs.current[0]) {
       inputRefs.current[0].focus();
@@ -117,7 +108,6 @@ export default function ResetPassword() {
     return passwordStrength >= 4;
   };
 
-  // Handle PIN input change
   const handlePinChange = (index: number, value: string) => {
     if (value && !/^\d$/.test(value)) return;
     
@@ -130,14 +120,12 @@ export default function ResetPassword() {
     }
   };
 
-  // Handle backspace key
   const handleKeyDown = (index: number, e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Backspace' && !pin[index] && index > 0) {
       inputRefs.current[index - 1]?.focus();
     }
   };
 
-  // Handle paste
   const handlePaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
     e.preventDefault();
     const pastedData = e.clipboardData.getData('text').replace(/\D/g, '');
@@ -153,7 +141,6 @@ export default function ResetPassword() {
     }
   };
 
-  // Step 1: Send PIN to email
   const handleSendPIN = async (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -196,7 +183,6 @@ export default function ResetPassword() {
     }
   };
 
-  // Step 2: Verify PIN
   const handleVerifyPIN = async (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -244,89 +230,82 @@ export default function ResetPassword() {
     }
   };
 
-  // ============================================================
-  // STEP 3: Reset Password - UPDATED to use completePasswordReset
-  // ============================================================
   const handleResetPassword = async (e: React.FormEvent) => {
-  e.preventDefault();
-  
-  if (isSubmittingRef.current || isLoading) {
-    console.log('⏳ Already resetting password, please wait...');
-    return;
-  }
-  
-  setError("");
-  setIsLoading(true);
-  isSubmittingRef.current = true;
-
-  // Validate password
-  if (!newPassword || !confirmPassword) {
-    setError("Please fill in all fields.");
-    setIsLoading(false);
-    isSubmittingRef.current = false;
-    return;
-  }
-
-  if (newPassword.length < 6) {
-    setError("Password must be at least 6 characters long.");
-    setIsLoading(false);
-    isSubmittingRef.current = false;
-    return;
-  }
-
-  if (newPassword !== confirmPassword) {
-    setError("Passwords do not match.");
-    setIsLoading(false);
-    isSubmittingRef.current = false;
-    return;
-  }
-
-  if (!isPasswordStrongEnough()) {
-    setError("Please choose a stronger password. Try using a mix of uppercase, lowercase, numbers, and special characters.");
-    setIsLoading(false);
-    isSubmittingRef.current = false;
-    return;
-  }
-
-  try {
-    console.log('🔐 Resetting password for:', email);
-    console.log('🔑 New password length:', newPassword.length);
+    e.preventDefault();
     
-    const result = await completePasswordReset(email, newPassword);
-    
-    console.log('📊 Reset result:', result);
-    
-    if (result.success) {
-      // ✅ FORCE LOGOUT
-      logout();
-      
-      // ✅ Clear ALL storage again (double-check)
-      localStorage.clear();
-      sessionStorage.clear();
-      
-      setSuccess(true);
-      setError("");
-      setShowPasswordForm(false);
-      console.log("✅ Password reset successful!");
-      console.log("ℹ️ Old password is now invalid. Only the new password works.");
-      
-      // ✅ Force a hard reload after 2 seconds to clear all cached state
-      setTimeout(() => {
-        // Use window.location.href to force a full page reload
-        window.location.href = "/login";
-      }, 2500);
-    } else {
-      setError(result.error || "Failed to reset password. Please try again.");
+    if (isSubmittingRef.current || isLoading) {
+      console.log('⏳ Already resetting password, please wait...');
+      return;
     }
-  } catch (err: any) {
-    console.error("Reset error:", err);
-    setError(err.message || "An error occurred. Please try again.");
-  } finally {
-    setIsLoading(false);
-    isSubmittingRef.current = false;
-  }
-};
-  // Resend PIN
+    
+    setError("");
+    setIsLoading(true);
+    isSubmittingRef.current = true;
+
+    if (!newPassword || !confirmPassword) {
+      setError("Please fill in all fields.");
+      setIsLoading(false);
+      isSubmittingRef.current = false;
+      return;
+    }
+
+    if (newPassword.length < 6) {
+      setError("Password must be at least 6 characters long.");
+      setIsLoading(false);
+      isSubmittingRef.current = false;
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      setError("Passwords do not match.");
+      setIsLoading(false);
+      isSubmittingRef.current = false;
+      return;
+    }
+
+    if (!isPasswordStrongEnough()) {
+      setError("Please choose a stronger password. Try using a mix of uppercase, lowercase, numbers, and special characters.");
+      setIsLoading(false);
+      isSubmittingRef.current = false;
+      return;
+    }
+
+    try {
+      console.log('🔐 Resetting password for:', email);
+      console.log('🔑 New password length:', newPassword.length);
+      
+      const result = await completePasswordReset(email, newPassword);
+      
+      console.log('📊 Reset result:', result);
+      
+      if (result.success) {
+        logout();
+        
+        localStorage.clear();
+        sessionStorage.clear();
+        
+        setSuccess(true);
+        setError("");
+        setShowPasswordForm(false);
+        console.log("✅ Password reset successful!");
+        console.log("ℹ️ Old password is now invalid. Only the new password works.");
+        
+        // ✅ FIXED: Use navigate instead of window.location.href
+        setTimeout(() => {
+          navigate("/login", { replace: true });
+        }, 2500);
+      } else {
+        setError(result.error || "Failed to reset password. Please try again.");
+      }
+    } catch (err: any) {
+      console.error("Reset error:", err);
+      setError(err.message || "An error occurred. Please try again.");
+    } finally {
+      setIsLoading(false);
+      isSubmittingRef.current = false;
+    }
+  };
+
   const handleResendPIN = async () => {
     if (resendCooldown > 0) return;
     
@@ -371,7 +350,7 @@ export default function ResetPassword() {
       setShowEmailForm(true);
       setError("");
     } else {
-      navigate("/login");
+      navigate("/login", { replace: true });
     }
   };
 
@@ -385,16 +364,14 @@ export default function ResetPassword() {
     setPin(["", "", "", "", "", ""]);
     setNewPassword("");
     setConfirmPassword("");
-    navigate("/login");
+    navigate("/login", { replace: true });
   };
 
   const pinString = pin.join('');
 
   return (
     <>
-      {/* Styles to hide browser's native password toggle */}
       <style>{`
-        /* Hide browser's native password toggle */
         input[type="password"]::-ms-reveal {
           display: none !important;
         }
@@ -415,7 +392,6 @@ export default function ResetPassword() {
           display: none !important;
         }
         
-        /* Firefox */
         input[type="password"]::-moz-reveal {
           display: none !important;
         }
@@ -440,9 +416,6 @@ export default function ResetPassword() {
             </div>
 
             <div className="bg-white/10 backdrop-blur-xl border border-white/20 rounded-2xl shadow-2xl px-6 sm:px-8 py-6 sm:py-8">
-              {/* ============================================================
-                  SUCCESS STATE - Check Animation
-                  ============================================================ */}
               {success ? (
                 <div className="flex flex-col items-center justify-center gap-4 py-6">
                   <div className="relative">
@@ -473,7 +446,6 @@ export default function ResetPassword() {
                 </div>
               ) : (
                 <>
-                  {/* Back Button */}
                   <button
                     onClick={goBack}
                     className="group mb-6 flex w-fit items-center gap-2.5 rounded-lg bg-white/10 px-4 py-2 text-sm font-medium text-white/80 backdrop-blur-sm transition-all duration-300 hover:bg-white/20 hover:text-white  active:scale-95"
@@ -485,9 +457,6 @@ export default function ResetPassword() {
                     </span>
                   </button>
 
-                  {/* ============================================================
-                      EMAIL FORM 
-                      ============================================================ */}
                   {showEmailForm && (
                     <>
                       <div className="flex items-center gap-3 mb-2">
@@ -553,9 +522,6 @@ export default function ResetPassword() {
                     </>
                   )}
 
-                  {/* ============================================================
-                      PIN FORM - 6 Separate Input Fields
-                      ============================================================ */}
                   {showPinForm && !success && (
                     <>
                       <div className="flex items-center gap-3 mb-2">
@@ -638,9 +604,6 @@ export default function ResetPassword() {
                     </>
                   )}
 
-                  {/* ============================================================
-                      NEW PASSWORD FORM - Clean UI like Register
-                      ============================================================ */}
                   {showPasswordForm && !success && (
                     <>
                       <div className="flex items-center gap-3 mb-2">
@@ -660,7 +623,6 @@ export default function ResetPassword() {
                       )}
 
                       <form onSubmit={handleResetPassword} className="space-y-4">
-                        {/* New Password */}
                         <div>
                           <label className="block text-sm font-medium text-white/90 mb-1">
                             New Password
@@ -687,7 +649,6 @@ export default function ResetPassword() {
                             </button>
                           </div>
 
-                          {/* Password Strength Indicator - Same as Register */}
                           {newPassword && !success && (
                             <div className="mt-2 space-y-1">
                               <div className="flex gap-1 h-1.5">
@@ -727,7 +688,6 @@ export default function ResetPassword() {
                           )}
                         </div>
 
-                        {/* Confirm Password */}
                         <div>
                           <label className="block text-sm font-medium text-white/90 mb-1">
                             Confirm Password

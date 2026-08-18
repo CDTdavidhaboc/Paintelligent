@@ -1,4 +1,3 @@
-// src/app/components/Layout.tsx
 import { Outlet, NavLink } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { useState, useEffect, useCallback } from "react";
@@ -27,7 +26,7 @@ export default function Layout() {
     description: "Sunny weather"
   });
 
-  // Load user name from multiple sources
+
   const loadUserName = useCallback(async () => {
     console.log("🔄 Loading user name for:", userEmail);
     
@@ -37,7 +36,7 @@ export default function Layout() {
       return;
     }
 
-    // First, check if we have a saved name in localStorage
+
     const userNameKey = `user_${userEmail}_userName`;
     const savedName = localStorage.getItem(userNameKey);
     
@@ -47,7 +46,6 @@ export default function Layout() {
       return;
     }
 
-    // Fallback to profile data
     const userDataKey = `user_${userEmail}_profileData`;
     let savedData = localStorage.getItem(userDataKey);
 
@@ -70,7 +68,6 @@ export default function Layout() {
       }
     }
 
-    // Try Supabase
     try {
       const userData = await getUserData(userEmail);
       if (userData) {
@@ -86,7 +83,7 @@ export default function Layout() {
       console.error("Error loading from Supabase:", error);
     }
 
-    // Last resort: use email
+   
     if (userEmail) {
       const emailName = userEmail.split('@')[0];
       const displayName = emailName.charAt(0).toUpperCase() + emailName.slice(1);
@@ -95,7 +92,6 @@ export default function Layout() {
     }
   }, [userEmail]);
 
-  // Determine season based on month (Philippines - wet/dry seasons)
   const getSeason = () => {
     const now = new Date();
     const month = now.getMonth() + 1; // 1-12
@@ -137,7 +133,6 @@ export default function Layout() {
     loadUserName();
   }, [userEmail, loadUserName]);
 
-  // Handle profile updates with immediate state update
   useEffect(() => {
     const handleProfileUpdate = (event: Event) => {
       console.log("📥 Profile update event received");
@@ -147,19 +142,19 @@ export default function Layout() {
         console.log("✅ Immediately updating name to:", customEvent.detail.name);
         setUserName(customEvent.detail.name);
         
-        // Also save it to localStorage immediately
+       
         if (userEmail) {
           const userNameKey = `user_${userEmail}_userName`;
           localStorage.setItem(userNameKey, customEvent.detail.name);
         }
       } else {
-        // Reload from storage
+      
         console.log("ℹ️ No name in event, reloading from storage");
         loadUserName();
       }
     };
 
-    // Listen for the event
+    
     window.addEventListener('profileUpdated', handleProfileUpdate);
     
     return () => {
@@ -167,7 +162,7 @@ export default function Layout() {
     };
   }, [userEmail, loadUserName]);
 
-  // Also listen for storage changes from other tabs
+
   useEffect(() => {
     const handleStorageChange = (e: StorageEvent) => {
       if (e.key === `user_${userEmail}_userName` || e.key === 'userName') {
@@ -195,13 +190,13 @@ export default function Layout() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Top Navigation Bar */}
+    
       <nav className="bg-[#174d32] border-b border-[#1a4d2e] sticky top-0 z-50 shadow-lg rounded-b-xl">
         <div className="px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
-            {/* Left: Logo and Greeting */}
+          
             <div className="flex items-center gap-3">
-              {/* Mobile menu button */}
+             
               <button
                 onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
                 className="lg:hidden text-white hover:text-green-200 transition-colors p-2 rounded-lg hover:bg-white/10"
@@ -228,7 +223,7 @@ export default function Layout() {
               </div>
             </div>
             
-            {/* Right: Navigation Links */}
+           
             <div className="flex items-center gap-2">
               {/* Desktop Navigation */}
               <div className="flex items-center gap-1">
@@ -253,7 +248,7 @@ export default function Layout() {
             </div>
           </div>
 
-          {/* Mobile Navigation */}
+          
           {isMobileMenuOpen && (
             <div className="lg:hidden py-3 space-y-1 border-t border-white/10 animate-in slide-in-from-top-2 duration-200">
               {navItems.map((item) => (
@@ -279,7 +274,7 @@ export default function Layout() {
         </div>
       </nav>
 
-      {/* Page Content */}
+     
       <main>
         <Outlet />
       </main>

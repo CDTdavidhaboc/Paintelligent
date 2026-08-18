@@ -5,16 +5,13 @@ const ai = new GoogleGenAI({
     apiKey: import.meta.env.VITE_GEMINI_API_KEY,
 });
 
-// Helper function to convert values to numbers
 const toNumber = (value: unknown, fallback = 0) => {
     const parsed = Number(String(value ?? "").replace(/,/g, ""));
     return Number.isFinite(parsed) ? parsed : fallback;
 };
 
-// Process file based on extension (CSV or Excel)
 const processFileData = (fileData: any, fileExtension: string) => {
     if (fileExtension === 'csv') {
-        // Parse CSV data
         const result = Papa.parse(fileData, {
             header: true,
             skipEmptyLines: true,
@@ -22,7 +19,6 @@ const processFileData = (fileData: any, fileExtension: string) => {
         });
         return result.data;
     } else if (fileExtension === 'xlsx' || fileExtension === 'xls') {
-        // Parse Excel data
         const workbook = XLSX.read(fileData, { type: 'array' });
         const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
         return XLSX.utils.sheet_to_json(firstSheet);
@@ -30,9 +26,7 @@ const processFileData = (fileData: any, fileExtension: string) => {
     throw new Error("Unsupported file format. Please upload CSV or Excel files.");
 };
 
-// Updated: Now uses user-uploaded CSV/Excel data, no default fallback
 const loadInventory = (uploadedData: any[] | null) => {
-    // Check if user uploaded data is provided
     if (!uploadedData || uploadedData.length === 0) {
         throw new Error("Please upload a CSV or Excel inventory file first.");
     }
@@ -40,7 +34,6 @@ const loadInventory = (uploadedData: any[] | null) => {
     console.log("Using user-uploaded data:", uploadedData.length, "rows");
     console.log("Sample data:", uploadedData[0]);
     
-    // Parse and normalize the user-uploaded data
     return uploadedData
         .filter((item) => item.Product || item.Brand || item.Category || item.product || item.brand || item.category)
         .map((item) => ({
@@ -57,7 +50,6 @@ const loadInventory = (uploadedData: any[] | null) => {
         }));
 };
 
-// Function to read file and return parsed data
 const readInventoryFile = (file: File): Promise<any[]> => {
     return new Promise((resolve, reject) => {
         const fileExtension = file.name.split('.').pop()?.toLowerCase();
@@ -69,7 +61,6 @@ const readInventoryFile = (file: File): Promise<any[]> => {
 
         const reader = new FileReader();
 
-        // Handle CSV files
         if (fileExtension === 'csv') {
             reader.onload = (ev) => {
                 try {
@@ -106,7 +97,6 @@ const readInventoryFile = (file: File): Promise<any[]> => {
             return;
         }
 
-        // Handle Excel files (.xlsx, .xls)
         reader.onload = (ev) => {
             try {
                 const data = ev.target?.result;
@@ -119,7 +109,6 @@ const readInventoryFile = (file: File): Promise<any[]> => {
                     return;
                 }
 
-                // Check if the data has the required headers
                 const hasRequiredHeaders = jsonData.some((item: any) => 
                     item.Product || item.product || item.Brand || item.brand || 
                     item.Category || item.category

@@ -1,6 +1,5 @@
-// src/app/pages/Login.tsx
 import { useState, useEffect } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { 
   Lock, 
@@ -26,48 +25,62 @@ export default function Login() {
   const [resetMessage, setResetMessage] = useState("");
   const [resetSuccess, setResetSuccess] = useState(false);
   const [isResetLoading, setIsResetLoading] = useState(false);
-  const { login, requestPasswordReset } = useAuth();
+  const [redirecting, setRedirecting] = useState(false);
+  
+  const { login, requestPasswordReset, isAuthenticated, loading } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
 
-  // Auto-dismiss login error after 5 seconds
+  // ✅ Get the intended destination from location state
+  const from = location.state?.from || "/sales-forecasting";
+
+  // ✅ Handle redirect when authenticated
+  useEffect(() => {
+    if (!loading && isAuthenticated && !redirecting) {
+      setRedirecting(true);
+      console.log("✅ Already authenticated, redirecting to:", from);
+      navigate(from, { replace: true });
+    }
+  }, [isAuthenticated, loading, navigate, from, redirecting]);
+
+  // ✅ Error auto-clear effect
   useEffect(() => {
     if (error) {
-      const timer = setTimeout(() => {
-        setError("");
-      }, 5000);
-
+      const timer = setTimeout(() => setError(""), 5000);
       return () => clearTimeout(timer);
     }
   }, [error]);
 
-  // Auto-dismiss reset error after 5 seconds
-  useEffect(() => {
-    if (error && showForgotPassword) {
-      const timer = setTimeout(() => {
-        setError("");
-      }, 5000);
-
-      return () => clearTimeout(timer);
-    }
-  }, [error, showForgotPassword]);
-
-  // Auto-dismiss reset success message after 5 seconds (but keep the redirect)
+  // ✅ Reset message auto-clear effect
   useEffect(() => {
     if (resetMessage && resetSuccess) {
-      const timer = setTimeout(() => {
-        setResetMessage("");
-      }, 5000);
-
+      const timer = setTimeout(() => setResetMessage(""), 5000);
       return () => clearTimeout(timer);
     }
   }, [resetMessage, resetSuccess]);
+
+  // ✅ Show loading while checking auth
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-screen bg-black">
+        <div className="text-center">
+          <div className="size-12 border-4 border-[#4a9d6f] border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="mt-4 text-white/70">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // ✅ If redirecting or authenticated, don't render login
+  if (redirecting || isAuthenticated) {
+    return null;
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
     setIsLoading(true);
 
-    // Trim inputs
     const trimmedEmail = email.trim();
     const trimmedPassword = password.trim();
 
@@ -90,19 +103,18 @@ export default function Login() {
     }
 
     try {
-      // Login now returns { success: boolean, error?: string }
       const result = await login(trimmedEmail, trimmedPassword);
       
       if (result.success) {
-        navigate("/");
+        setRedirecting(true);
+        navigate(from, { replace: true });
       } else {
-        // Display the specific error message from the server
         setError(result.error || "Login failed. Please try again.");
+        setIsLoading(false);
       }
     } catch (err) {
       console.error("Login error:", err);
       setError("An unexpected error occurred. Please try again.");
-    } finally {
       setIsLoading(false);
     }
   };
@@ -137,24 +149,25 @@ export default function Login() {
         
         setTimeout(() => {
           setShowForgotPassword(false);
-          navigate("/reset-password", { state: { email: trimmedResetEmail } });
+          navigate("/reset-password", { 
+            state: { email: trimmedResetEmail },
+            replace: true 
+          });
         }, 1500);
       } else {
         setError(result.error || "Failed to send PIN. Please try again.");
+        setIsResetLoading(false);
       }
     } catch (err) {
       console.error("Reset error:", err);
       setError("An unexpected error occurred. Please try again.");
-    } finally {
       setIsResetLoading(false);
     }
   };
 
   return (
     <>
-      {/* Styles to hide browser's native password toggle */}
       <style>{`
-        /* Hide browser's native password toggle */
         input[type="password"]::-ms-reveal {
           display: none !important;
         }
@@ -175,7 +188,6 @@ export default function Login() {
           display: none !important;
         }
         
-        /* Firefox */
         input[type="password"]::-moz-reveal {
           display: none !important;
         }

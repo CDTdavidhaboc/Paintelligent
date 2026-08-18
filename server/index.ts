@@ -20,7 +20,7 @@ const transporter = nodemailer.createTransport({
   },
 });
 
-// Send email endpoint
+
 app.post('/api/send-email', async (req, res) => {
   const { to, subject, html, text } = req.body;
 

@@ -1,30 +1,31 @@
-// src/app/context/AuthContext.tsx
-
 import {
   createContext,
   useContext,
   useState,
   useEffect,
   ReactNode,
+  useRef,
+  useCallback,
 } from "react";
 import { 
   getUserData, 
   saveUserData, 
   registerUser, 
   loginUser,
-  generatePIN,
   saveResetToken,
   verifyResetToken,
   sendPasswordResetEmailWithPIN,
   confirmUserEmail,
   completePasswordReset as completePasswordResetService,
   supabase,
-  supabaseAdmin,
   checkUserExistsInData,
   checkAuthUserExists,
   forceSyncUser,
   deleteUserPermanently,
+  verifyRegistrationCode as verifyCode,
+  resendVerificationCode as resendCode,
 } from "../lib/supabase";
+import { generatePIN } from "../lib/emailService";
 
 interface AuthContextType {
   isAuthenticated: boolean;
@@ -33,18 +34,14 @@ interface AuthContextType {
   userId: string | null;
   login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
   logout: () => void;
-  register: (email: string, password: string, fullName: string) => Promise<{ success: boolean; error?: string; message?: string }>;
+  register: (email: string, password: string, fullName: string) => Promise<{ success: boolean; error?: string; message?: string; requiresVerification?: boolean }>;
   syncUserData: (data: any) => Promise<boolean>;
   loadUserData: () => Promise<any>;
-  // PIN-based password reset
   requestPasswordReset: (email: string) => Promise<{ success: boolean; error?: string; message?: string }>;
   verifyPIN: (email: string, pin: string) => Promise<{ success: boolean; error?: string }>;
   resetPasswordWithPIN: (email: string, pin: string, newPassword: string) => Promise<{ success: boolean; error?: string }>;
-  // ✅ Complete password reset (recommended)
   completePasswordReset: (email: string, newPassword: string) => Promise<{ success: boolean; error?: string; message?: string }>;
-  // Confirm email
   confirmEmail: (email: string) => Promise<{ success: boolean; error?: string; message?: string }>;
-  // ✅ User management
   checkUserStatus: (email: string) => Promise<{ 
     existsInAuth: boolean; 
     existsInData: boolean; 
@@ -54,6 +51,8 @@ interface AuthContextType {
   }>;
   forceSyncUser: (email: string) => Promise<{ success: boolean; error?: string; message?: string }>;
   deleteUser: (email: string) => Promise<{ success: boolean; error?: string; message?: string }>;
+  verifyRegistrationCode: (email: string, code: string) => Promise<{ success: boolean; error?: string }>;
+  resendVerificationCode: (email: string) => Promise<{ success: boolean; error?: string }>;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -63,57 +62,82 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
+  
+  // ✅ Use refs to track auth state
+  const authInitialized = useRef(false);
+  const logoutInProgress = useRef(false);
 
-  const checkAuth = () => {
-    const auth = localStorage.getItem("isAuthenticated") === "true";
-    const email = localStorage.getItem("userEmail");
-    const id = localStorage.getItem("userId");
-    
-    console.log("🔍 Auth check - authenticated:", auth, "email:", email);
-    
-    if (auth && email) {
-      setIsAuthenticated(true);
-      setUserEmail(email);
-      setUserId(id || email);
-    } else {
+  // ✅ Memoized auth check function
+  const checkAuth = useCallback(() => {
+    // Don't check if logout is in progress
+    if (logoutInProgress.current) {
+      console.log("⏳ Logout in progress, skipping auth check");
+      return;
+    }
+
+    try {
+      const auth = localStorage.getItem("isAuthenticated") === "true";
+      const email = localStorage.getItem("userEmail");
+      const id = localStorage.getItem("userId");
+      
+      console.log("🔍 Auth check - authenticated:", auth, "email:", email);
+      
+      // ✅ Check if email is valid (not "null" or empty)
+      const isValidEmail = email && email !== "null" && email !== "";
+      
+      if (auth && isValidEmail) {
+        setIsAuthenticated(true);
+        setUserEmail(email);
+        setUserId(id || email);
+      } else {
+        setIsAuthenticated(false);
+        setUserEmail(null);
+        setUserId(null);
+      }
+    } catch (error) {
+      console.error("❌ Auth check error:", error);
       setIsAuthenticated(false);
       setUserEmail(null);
       setUserId(null);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
-  };
-
-  useEffect(() => {
-    checkAuth();
   }, []);
 
+  // ✅ Initialize auth once
+  useEffect(() => {
+    if (!authInitialized.current) {
+      console.log("🚀 Initializing auth...");
+      checkAuth();
+      authInitialized.current = true;
+    }
+  }, [checkAuth]);
+
+  // ✅ Handle storage events (for multi-tab sync)
   useEffect(() => {
     const handleStorageChange = (e: StorageEvent) => {
-      if (e.key === 'isAuthenticated' || e.key === 'userEmail') {
-        console.log("📥 Storage event detected - rechecking auth");
-        checkAuth();
+      if (e.key === 'isAuthenticated' || e.key === 'userEmail' || e.key === 'userId') {
+        console.log("📥 Storage event detected:", e.key);
+        // Small delay to ensure storage is updated
+        setTimeout(checkAuth, 100);
       }
     };
 
     window.addEventListener('storage', handleStorageChange);
-    
-    return () => {
-      window.removeEventListener('storage', handleStorageChange);
-    };
-  }, []);
+    return () => window.removeEventListener('storage', handleStorageChange);
+  }, [checkAuth]);
 
   // ============================================================
-  // LOGIN - FIXED with proper error handling
+  // LOGIN
   // ============================================================
+  
   const login = async (email: string, password: string) => {
     try {
       console.log("🔑 Logging in user:", email);
       
-      // Trim inputs
       const trimmedEmail = email.trim();
       const trimmedPassword = password.trim();
       
-      // Validate empty fields (additional client-side validation)
       if (!trimmedEmail) {
         return { success: false, error: 'Please enter your email address.' };
       }
@@ -129,16 +153,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return { success: false, error: result.error };
       }
 
+      // ✅ Update localStorage
       localStorage.setItem("isAuthenticated", "true");
       localStorage.setItem("userEmail", trimmedEmail);
       localStorage.setItem("userId", result.user?.auth_user_id || trimmedEmail);
       localStorage.setItem("authToken", result.token || "");
       
+      // ✅ Update state
       setIsAuthenticated(true);
       setUserEmail(trimmedEmail);
       setUserId(result.user?.auth_user_id || trimmedEmail);
-      
-      window.dispatchEvent(new Event('storage'));
       
       console.log("✅ Login successful for:", trimmedEmail);
       return { success: true };
@@ -152,18 +176,57 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   // ============================================================
-  // REGISTER - FIXED with proper error handling
+  // LOGOUT - FIXED
   // ============================================================
+  
+  const logout = useCallback(() => {
+    console.log("🚪 Logging out user:", userEmail);
+    
+    // ✅ Set logout flag to prevent auth checks during logout
+    logoutInProgress.current = true;
+    
+    // ✅ Clear all auth-related localStorage
+    localStorage.removeItem("isAuthenticated");
+    localStorage.removeItem("userEmail");
+    localStorage.removeItem("userId");
+    localStorage.removeItem("authToken");
+    
+    // ✅ Clear profile data
+    if (userEmail) {
+      const userDataKey = `user_${userEmail}_profileData`;
+      const userPictureKey = `user_${userEmail}_profilePicture`;
+      localStorage.removeItem(userDataKey);
+      localStorage.removeItem(userPictureKey);
+    }
+    localStorage.removeItem('userProfileData');
+    localStorage.removeItem('userProfilePicture');
+    
+    // ✅ Update state immediately
+    setIsAuthenticated(false);
+    setUserEmail(null);
+    setUserId(null);
+    
+    // ✅ Clear logout flag after a delay
+    setTimeout(() => {
+      logoutInProgress.current = false;
+      setLoading(false);
+    }, 300);
+    
+    console.log("✅ Logout successful - state cleared");
+  }, [userEmail]);
+
+  // ============================================================
+  // REGISTER
+  // ============================================================
+  
   const register = async (email: string, password: string, fullName: string) => {
     try {
       console.log("📝 Registering user:", email);
       
-      // Trim inputs
       const trimmedEmail = email.trim();
       const trimmedPassword = password.trim();
       const trimmedFullName = fullName.trim();
       
-      // Client-side validation
       if (!trimmedEmail) {
         return { success: false, error: 'Please enter your email address.' };
       }
@@ -186,17 +249,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       
       const result = await registerUser(trimmedEmail, trimmedPassword, trimmedFullName);
       
-      // Auto-confirm in development
-      if (result.success && import.meta.env.MODE === 'development') {
-        console.log('📧 Auto-confirming email in development...');
-        const confirmResult = await confirmUserEmail(trimmedEmail);
-        if (confirmResult.success) {
-          console.log('✅ Email auto-confirmed!');
-        } else {
-          console.warn('⚠️ Auto-confirm failed:', confirmResult.error);
-        }
-      }
-      
       return result;
     } catch (error: any) {
       console.error("Registration error:", error);
@@ -205,37 +257,58 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   // ============================================================
-  // LOGOUT
+  // VERIFY REGISTRATION CODE
   // ============================================================
-  const logout = () => {
-    console.log("🚪 Logging out user:", userEmail);
-    
-    localStorage.removeItem("isAuthenticated");
-    localStorage.removeItem("userEmail");
-    localStorage.removeItem("userId");
-    localStorage.removeItem("authToken");
-    
-    if (userEmail) {
-      const userDataKey = `user_${userEmail}_profileData`;
-      const userPictureKey = `user_${userEmail}_profilePicture`;
-      localStorage.removeItem(userDataKey);
-      localStorage.removeItem(userPictureKey);
+  
+  const verifyRegistrationCodeFn = async (email: string, code: string) => {
+    try {
+      const normalizedEmail = email.toLowerCase().trim();
+      console.log('🔍 Verifying registration code for:', normalizedEmail);
+      
+      if (!normalizedEmail) {
+        return { success: false, error: 'Email is required.' };
+      }
+      
+      if (!code || code.length !== 6) {
+        return { success: false, error: 'Please enter a valid 6-digit verification code.' };
+      }
+      
+      const result = await verifyCode(normalizedEmail, code);
+      console.log('🔍 Verification result:', result);
+      
+      return result;
+    } catch (error: any) {
+      console.error('❌ verifyRegistrationCode error:', error);
+      return { success: false, error: error.message };
     }
-    localStorage.removeItem('userProfileData');
-    localStorage.removeItem('userProfilePicture');
-    
-    setIsAuthenticated(false);
-    setUserEmail(null);
-    setUserId(null);
-    
-    window.dispatchEvent(new Event('storage'));
-    
-    console.log("✅ Logout successful");
   };
 
   // ============================================================
-  // USER DATA OPERATIONS
+  // RESEND VERIFICATION CODE
   // ============================================================
+  
+  const resendVerificationCodeFn = async (email: string) => {
+    try {
+      const normalizedEmail = email.toLowerCase().trim();
+      console.log('📤 Resending verification code for:', normalizedEmail);
+      
+      if (!normalizedEmail) {
+        return { success: false, error: 'Email is required.' };
+      }
+      
+      const result = await resendCode(normalizedEmail);
+      console.log('📤 Resend result:', result);
+      return result;
+    } catch (error: any) {
+      console.error('❌ resendVerificationCode error:', error);
+      return { success: false, error: error.message };
+    }
+  };
+
+  // ============================================================
+  // OTHER FUNCTIONS
+  // ============================================================
+  
   const syncUserData = async (data: any) => {
     if (!userEmail) return false;
     return await saveUserData(userEmail, data);
@@ -246,9 +319,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return await getUserData(userEmail);
   };
 
-  // ============================================================
-  // PIN-BASED PASSWORD RESET FUNCTIONS
-  // ============================================================
   const requestPasswordReset = async (email: string) => {
     try {
       const normalizedEmail = email.toLowerCase().trim();
@@ -261,7 +331,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         };
       }
       
-      // Check if user exists in Auth (source of truth)
       const authCheck = await checkAuthUserExists(normalizedEmail);
       
       if (!authCheck.success) {
@@ -281,17 +350,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       console.log("✅ User found in Auth:", authCheck.user.email);
 
-      // Generate a 6-digit PIN
       const pin = generatePIN();
       console.log('📝 Generated PIN:', pin);
       
-      // Save PIN to database
       const saveResult = await saveResetToken(normalizedEmail, pin);
       if (!saveResult.success) {
         return { success: false, error: saveResult.error };
       }
       
-      // Send email with PIN
       const emailResult = await sendPasswordResetEmailWithPIN(normalizedEmail, pin);
       
       if (!emailResult.success) {
@@ -336,15 +402,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  // ============================================================
-  // ✅ COMPLETE PASSWORD RESET - RECOMMENDED
-  // ============================================================
   const completePasswordReset = async (email: string, newPassword: string) => {
     try {
       const normalizedEmail = email.toLowerCase().trim();
       console.log('🔄 Complete password reset for:', normalizedEmail);
       
-      // Validate inputs
       if (!normalizedEmail) {
         return { 
           success: false, 
@@ -370,16 +432,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       
       if (result.success) {
         console.log('✅ Password reset completed successfully!');
-        
-        // Clear any cached user data to force re-login
-        localStorage.removeItem("isAuthenticated");
-        localStorage.removeItem("userEmail");
-        localStorage.removeItem("userId");
-        localStorage.removeItem("authToken");
-        
-        setIsAuthenticated(false);
-        setUserEmail(null);
-        setUserId(null);
+        logout();
       } else {
         console.error('❌ Password reset failed:', result.error);
       }
@@ -394,57 +447,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  // ============================================================
-  // DEPRECATED: resetPasswordWithPIN - Use completePasswordReset
-  // ============================================================
   const resetPasswordWithPIN = async (email: string, pin: string, newPassword: string) => {
     console.warn('⚠️ resetPasswordWithPIN is deprecated. Use completePasswordReset instead.');
-    
-    try {
-      const normalizedEmail = email.toLowerCase().trim();
-      
-      if (!normalizedEmail) {
-        return { success: false, error: 'Email is required.' };
-      }
-      
-      if (!pin || pin.length !== 6) {
-        return { success: false, error: 'Please enter a valid 6-digit PIN.' };
-      }
-      
-      if (!newPassword || newPassword.length < 6) {
-        return { success: false, error: 'Password must be at least 6 characters.' };
-      }
-      
-      // STEP 1: Verify the PIN
-      const verifyResult = await verifyResetToken(normalizedEmail, pin);
-      if (!verifyResult.success) {
-        console.log('❌ PIN verification failed:', verifyResult.error);
-        return { success: false, error: verifyResult.error };
-      }
-      
-      console.log('✅ PIN verified successfully!');
-      
-      // STEP 2: Update the password
-      const updateResult = await completePasswordReset(normalizedEmail, newPassword);
-      if (!updateResult.success) {
-        console.log('❌ Password update failed:', updateResult.error);
-        return { 
-          success: false, 
-          error: 'Password update failed. Please request a new PIN.' 
-        };
-      }
-      
-      console.log('✅ Password updated successfully!');
-      return { success: true, message: 'Password updated successfully!' };
-    } catch (error: any) {
-      console.error('❌ Reset password error:', error);
-      return { success: false, error: error.message };
-    }
+    return completePasswordReset(email, newPassword);
   };
 
-  // ============================================================
-  // CONFIRM EMAIL
-  // ============================================================
   const confirmEmail = async (email: string) => {
     try {
       console.log('📧 Confirming email:', email);
@@ -456,9 +463,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  // ============================================================
-  // ✅ USER MANAGEMENT
-  // ============================================================
   const checkUserStatus = async (email: string) => {
     try {
       const normalizedEmail = email.toLowerCase().trim();
@@ -506,7 +510,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const forceSyncUser = async (email: string) => {
+  const forceSyncUserFn = async (email: string) => {
     try {
       const normalizedEmail = email.toLowerCase().trim();
       
@@ -532,7 +536,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       
       const result = await deleteUserPermanently(normalizedEmail);
       if (result.success) {
-        // If user is currently logged in, log them out
         if (userEmail === normalizedEmail) {
           logout();
         }
@@ -544,9 +547,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  // ============================================================
-  // CONTEXT VALUE
-  // ============================================================
   const value = {
     isAuthenticated,
     loading,
@@ -557,16 +557,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     register,
     syncUserData,
     loadUserData,
-    // Password reset functions
     requestPasswordReset,
     verifyPIN,
-    resetPasswordWithPIN, // Deprecated - kept for backward compatibility
-    completePasswordReset, // ✅ Recommended
+    resetPasswordWithPIN,
+    completePasswordReset,
     confirmEmail,
-    // User management
     checkUserStatus,
-    forceSyncUser,
+    forceSyncUser: forceSyncUserFn,
     deleteUser,
+    verifyRegistrationCode: verifyRegistrationCodeFn,
+    resendVerificationCode: resendVerificationCodeFn,
   };
 
   return (

@@ -10,8 +10,6 @@ import { useAuth } from "../context/AuthContext";
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { getUserData, saveUserProfile, saveProfilePicture } from "../lib/supabase";
 
-
-// Default user data for new users
 const DEFAULT_USER_DATA = {
   name: "New User",
   phone: "",
@@ -32,14 +30,12 @@ const DEFAULT_USER_DATA = {
   ]
 };
 
-// Ensure both permissions always exist
 const ENSURE_PERMISSIONS = ["Seasonal Forecast", "Paint Analyzer"];
 
 export default function UserProfile() {
   const navigate = useNavigate();
   const { logout, userEmail } = useAuth();
   
-  // States
   const [isEditing, setIsEditing] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [lastLoginDate, setLastLoginDate] = useState("");
@@ -57,18 +53,15 @@ export default function UserProfile() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const notificationTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Animation
   useEffect(() => {
     const timer = setTimeout(() => setIsVisible(true), 80);
     return () => clearTimeout(timer);
   }, []);
 
-  // Get user-specific storage keys
   const getUserStorageKey = (key: string) => {
     return `user_${userEmail}_${key}`;
   };
 
-  // Load user data from Supabase AND localStorage
   useEffect(() => {
     const loadUserData = async () => {
       if (!userEmail) {
@@ -78,7 +71,6 @@ export default function UserProfile() {
 
       console.log("🔄 Loading user data for:", userEmail);
 
-      // FIRST: Try to load from Supabase (source of truth)
       try {
         const supabaseData = await getUserData(userEmail);
         
@@ -107,22 +99,18 @@ export default function UserProfile() {
           setLocalAddress(profileData.address || '');
           setIsNewUser(false);
           
-          // Load picture from Supabase
           if (supabaseData.profile_picture) {
             console.log("📸 Loaded picture from Supabase");
             setProfilePicture(supabaseData.profile_picture);
             setTempProfilePicture(supabaseData.profile_picture);
           }
           
-          // Cache in localStorage for faster loading
           const userDataKey = getUserStorageKey('profileData');
           localStorage.setItem(userDataKey, JSON.stringify(profileData));
           
-          // Save name separately
           const userNameKey = getUserStorageKey('userName');
           localStorage.setItem(userNameKey, profileData.name);
           
-          // Save picture separately
           if (supabaseData.profile_picture) {
             const userPictureKey = getUserStorageKey('profilePicture');
             localStorage.setItem(userPictureKey, supabaseData.profile_picture);
@@ -136,7 +124,6 @@ export default function UserProfile() {
         console.error("Error loading from Supabase:", error);
       }
 
-      // SECOND: Fallback to localStorage
       const userDataKey = getUserStorageKey('profileData');
       const userPictureKey = getUserStorageKey('profilePicture');
       const userNameKey = getUserStorageKey('userName');
@@ -145,7 +132,6 @@ export default function UserProfile() {
       let savedPicture = localStorage.getItem(userPictureKey);
       let savedName = localStorage.getItem(userNameKey);
       
-      // Fallback to global keys if not found
       if (!savedUserData) {
         savedUserData = localStorage.getItem("userProfileData");
       }
@@ -156,14 +142,12 @@ export default function UserProfile() {
         savedName = localStorage.getItem("userName");
       }
       
-      // Load picture from localStorage
       if (savedPicture) {
         console.log("📸 Loaded picture from localStorage");
         setProfilePicture(savedPicture);
         setTempProfilePicture(savedPicture);
       }
 
-      // Load user data from localStorage
       if (savedUserData) {
         console.log("📥 Loaded user data from localStorage");
         const parsedData = JSON.parse(savedUserData);
@@ -182,7 +166,6 @@ export default function UserProfile() {
           parsedData.contacts = DEFAULT_USER_DATA.contacts;
         }
         
-        // Use saved name if available
         if (savedName) {
           parsedData.name = savedName;
         }
@@ -195,7 +178,6 @@ export default function UserProfile() {
         return;
       }
 
-      // If nothing works, create default user
       const emailName = userEmail?.split('@')[0] || "New User";
       const formattedName = savedName || emailName
         .split(/[._-]/)
@@ -213,7 +195,6 @@ export default function UserProfile() {
       setLocalAddress(defaultData.address || '');
       setIsNewUser(true);
       
-      // Save to localStorage
       localStorage.setItem(userDataKey, JSON.stringify(defaultData));
       localStorage.setItem(userNameKey, formattedName);
       
@@ -223,7 +204,6 @@ export default function UserProfile() {
     loadUserData();
   }, [userEmail]);
 
-  // Update last login date
   useEffect(() => {
     const now = new Date();
     const month = now.toLocaleString('en-US', { month: 'long' });
@@ -233,7 +213,6 @@ export default function UserProfile() {
     setLastLoginDate(`${month} ${day}, ${year} at ${time}`);
   }, []);
 
-  // Cleanup timeout on unmount
   useEffect(() => {
     return () => {
       if (notificationTimeoutRef.current) {
@@ -242,7 +221,6 @@ export default function UserProfile() {
     };
   }, []);
 
-  // Show notification function
   const showNotificationMessage = (message: string) => {
     setNotificationMessage(message);
     setShowNotification(true);
@@ -257,7 +235,6 @@ export default function UserProfile() {
     }, 3000);
   };
 
-  // Save user data to localStorage AND Supabase
   const saveUserData = async (data: any) => {
     try {
       console.log("💾 Saving user data:", data);
@@ -274,24 +251,20 @@ export default function UserProfile() {
       
       console.log("💾 Data to save:", dataToSave);
       
-      // Save to localStorage
       const userDataKey = getUserStorageKey('profileData');
       localStorage.setItem(userDataKey, JSON.stringify(dataToSave));
       localStorage.setItem('userProfileData', JSON.stringify(dataToSave));
       
-      // Save name separately
       const userNameKey = getUserStorageKey('userName');
       localStorage.setItem(userNameKey, dataToSave.name);
       localStorage.setItem('userName', dataToSave.name);
       
-      // Save picture separately if it exists
       if (profilePicture) {
         const userPictureKey = getUserStorageKey('profilePicture');
         localStorage.setItem(userPictureKey, profilePicture);
         localStorage.setItem('userProfilePicture', profilePicture);
       }
       
-      // SAVE TO SUPABASE - Include ALL fields
       if (userEmail) {
         console.log("📤 Saving to Supabase with data:", {
           name: dataToSave.name,
@@ -334,7 +307,6 @@ export default function UserProfile() {
       setLocalAddress(dataToSave.address || '');
       setIsNewUser(false);
       
-      // Dispatch event to update Layout
       window.dispatchEvent(new CustomEvent('profileUpdated', { 
         detail: { name: dataToSave.name } 
       }));
@@ -346,7 +318,6 @@ export default function UserProfile() {
     }
   };
 
-  // Handle edit toggle
   const handleEditToggle = () => {
     if (isEditing) {
       setTempUserData(userData);
@@ -361,10 +332,8 @@ export default function UserProfile() {
     setIsEditing(!isEditing);
   };
 
-  // Handle save
   const handleSave = async () => {
     try {
-      // First save the user data (name, phone, location, address, etc.)
       const saveSuccess = await saveUserData(tempUserData);
       
       if (!saveSuccess) {
@@ -372,16 +341,13 @@ export default function UserProfile() {
         return;
       }
       
-      // Then save picture if changed
       if (tempProfilePicture !== profilePicture) {
         const userPictureKey = getUserStorageKey('profilePicture');
         if (tempProfilePicture) {
-          // Save to localStorage
           localStorage.setItem(userPictureKey, tempProfilePicture);
           localStorage.setItem('userProfilePicture', tempProfilePicture);
           setProfilePicture(tempProfilePicture);
           
-          // Also save picture to Supabase
           if (userEmail) {
             try {
               await saveProfilePicture(userEmail, tempProfilePicture);
@@ -393,12 +359,10 @@ export default function UserProfile() {
           
           console.log("📸 Picture saved to localStorage");
         } else {
-          // Remove picture
           localStorage.removeItem(userPictureKey);
           localStorage.removeItem('userProfilePicture');
           setProfilePicture(null);
           
-          // Also remove picture from Supabase
           if (userEmail) {
             try {
               await saveProfilePicture(userEmail, null);
@@ -415,7 +379,6 @@ export default function UserProfile() {
       setIsEditing(false);
       showNotificationMessage("Profile saved successfully! ✅");
       
-      // Dispatch event again for redundancy
       setTimeout(() => {
         window.dispatchEvent(new CustomEvent('profileUpdated', { 
           detail: { name: tempUserData.name } 
@@ -428,7 +391,6 @@ export default function UserProfile() {
     }
   };
 
-  // Handle input change
   const handleInputChange = useCallback((field: string, value: string) => {
     setTempUserData(prev => ({
       ...prev,
@@ -436,7 +398,6 @@ export default function UserProfile() {
     }));
   }, []);
 
-  // Contact management functions
   const handleAddContact = () => {
     const newContact = {
       id: Date.now(),
@@ -467,18 +428,20 @@ export default function UserProfile() {
     }));
   };
 
-  // Handle logout with confirmation
   const handleLogoutWithConfirmation = () => {
     setShowLogoutDialog(true);
   };
 
+  // ============================================================
+  // ✅ FIXED: confirmLogout - NO PAGE REFRESH
+  // ============================================================
   const confirmLogout = () => {
     setShowLogoutDialog(false);
     
     console.log("🔴 Logging out...");
     
     try {
-      // Clear all user data from localStorage
+      // Clear user-specific localStorage
       if (userEmail) {
         const keysToRemove = [
           `user_${userEmail}_profileData`,
@@ -497,21 +460,20 @@ export default function UserProfile() {
         });
       }
       
-      // Call logout from context
+      // Call logout from AuthContext
       logout();
       console.log("✅ Logout successful");
       
-      // Navigate to login
-      window.location.href = "/login";
+      // ✅ FIXED: Use React Router navigate (NO page refresh)
+      navigate("/login", { replace: true });
       
     } catch (error) {
       console.error("❌ Logout error:", error);
-      // Emergency fallback - force redirect
-      window.location.href = "/login";
+      // ✅ FIXED: Use React Router navigate (NO page refresh)
+      navigate("/login", { replace: true });
     }
   };
 
-  // Handle profile picture
   const handleProfilePictureClick = () => {
     if (isEditing && fileInputRef.current) {
       fileInputRef.current.click();
@@ -539,11 +501,9 @@ export default function UserProfile() {
       const imageData = e.target?.result as string;
       console.log("📸 Image loaded, data length:", imageData.length);
       
-      // Update states
       setTempProfilePicture(imageData);
       setProfilePicture(imageData);
       
-      // Save to localStorage immediately
       if (userEmail) {
         const key = getUserStorageKey('profilePicture');
         try {
@@ -585,12 +545,10 @@ export default function UserProfile() {
   const displayData = isEditing ? tempUserData : userData;
   const displayPicture = isEditing ? tempProfilePicture : profilePicture;
 
-  // Sync localAddress with displayData.address
   useEffect(() => {
     setLocalAddress(displayData.address || '');
   }, [displayData.address]);
 
-  // Filter contacts based on search term
   const filteredContacts = useMemo(() => {
     return (displayData.contacts || []).filter((contact: any) =>
       contact.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -600,7 +558,6 @@ export default function UserProfile() {
     );
   }, [displayData.contacts, searchTerm]);
 
-  // Editable field component - memoized to prevent unnecessary re-renders
   const EditableField = useMemo(() => {
     return function EditableField({ label, value, field, type = "text", icon: Icon, readOnly = false }: any) {
       if (isEditing && !readOnly) {
@@ -649,7 +606,6 @@ export default function UserProfile() {
 
   return (
     <>
-      {/* Notification Toast - Original Design with Fixed Positioning */}
       {showNotification && (
         <div className="fixed bottom-6 right-6 z-[9999] animate-slide-up">
           <div className={`flex items-center gap-3 px-6 py-4 rounded-lg shadow-2xl border max-w-md ${
@@ -670,7 +626,6 @@ export default function UserProfile() {
         </div>
       )}
 
-      {/* Logout Confirmation Dialog */}
       {showLogoutDialog && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
           <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl animate-in slide-in-from-bottom-4 duration-300">
@@ -765,7 +720,6 @@ export default function UserProfile() {
           }
         `}</style>
 
-        {/* Header */}
         <header className="overflow-hidden rounded-2xl bg-[#174d32] px-5 py-5 text-white shadow-[0_18px_45px_rgba(23,77,50,0.18)] sm:px-7 sm:py-6">
           <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-start gap-4">
@@ -824,7 +778,6 @@ export default function UserProfile() {
           </div>
         </header>
 
-        {/* New User Banner */}
         {isNewUser && (
           <div className="flex items-start gap-4 rounded-2xl border border-emerald-200 bg-gradient-to-r from-emerald-50 to-white p-4 shadow-sm">
             <div className="flex size-12 shrink-0 items-center justify-center rounded-xl bg-emerald-500">
@@ -839,12 +792,10 @@ export default function UserProfile() {
           </div>
         )}
 
-        {/* Profile Overview Card - MERGED with System Permissions */}
         <Card className={`overflow-hidden rounded-2xl border ${isNewUser ? 'border-emerald-200' : 'border-emerald-100'} bg-white shadow-[0_12px_32px_rgba(20,83,45,0.06)]`}>
           <CardHeader className="border-b border-emerald-100 bg-gradient-to-r from-white to-emerald-50/70 px-6 py-5">
             <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
               <div className="flex items-start gap-6">
-                {/* Profile Picture Section */}
                 <div className="relative group">
                   <input
                     type="file"
@@ -896,7 +847,6 @@ export default function UserProfile() {
                   )}
                 </div>
 
-                {/* User Info Section - Email removed from header */}
                 <div className="flex-1 min-w-0 pt-1">
                   {isEditing ? (
                     <div className="relative">
@@ -942,8 +892,6 @@ export default function UserProfile() {
                         {displayData.role}
                       </Badge>
                     )}
-
-                    
                   </div>
                    <div className="mt-2">
                     <div className="flex items-center gap-2 text-gray-600 
@@ -958,7 +906,6 @@ export default function UserProfile() {
                 </div>
               </div>
 
-              {/* Metadata Section */}
               <div className="flex flex-col items-start lg:items-end gap-3 flex-shrink-0">
                 {isNewUser && (
                   <div className="flex items-center gap-2 bg-emerald-50 px-4 py-2 rounded-xl 
@@ -984,12 +931,10 @@ export default function UserProfile() {
             </div>
           </CardHeader>
           
-          {/* System Permissions - MERGED INSIDE PROFILE CARD */}
           <CardContent >
             <div className="flex items-center gap-2 mb-3">
               <Shield className="size-4 text-[#174d32]" />
               <h3 className="text-sm font-semibold text-gray-700">System Permissions & Access</h3>
-             
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               {displayData.permissions && displayData.permissions.length > 0 ? (
@@ -1012,7 +957,6 @@ export default function UserProfile() {
         </Card>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Contact Information - Email field removed */}
           <Card className="overflow-hidden rounded-2xl border border-emerald-100 bg-white shadow-[0_12px_32px_rgba(20,83,45,0.06)]">
             <CardHeader className="border-b border-emerald-100 bg-gradient-to-r from-white to-emerald-50/70 py-4">
               <CardTitle className="flex items-center gap-2 text-lg font-semibold text-gray-900">
@@ -1069,7 +1013,6 @@ export default function UserProfile() {
             </CardContent>
           </Card>
 
-          {/* Contacts */}
           <Card className="overflow-hidden rounded-2xl border border-emerald-100 bg-white shadow-[0_12px_32px_rgba(20,83,45,0.06)]">
             <CardHeader className="border-b border-emerald-100 bg-gradient-to-r from-white to-emerald-50/70  py-4">
               <CardTitle className="flex items-center gap-2 text-lg font-semibold text-gray-900">

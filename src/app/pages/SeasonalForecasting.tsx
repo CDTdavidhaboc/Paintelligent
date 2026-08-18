@@ -188,9 +188,7 @@ const REQUIRED_HEADERS = [
   "Season",
 ];
 
-// Product volume mappings (in ml)
 const PRODUCT_VOLUMES: Record<string, number> = {
-  // Gallons (GAL) - 3785 ml
   "N-1540 DC Flat White GAL": 3785,
   "N-1540 DC Flat White TIN": 3785,
   "N-1541 DC Gloss White GAL": 3785,
@@ -248,7 +246,6 @@ const PRODUCT_VOLUMES: Record<string, number> = {
   "Sun & Rain SR-660 Black GAL": 3785,
   "Sun & Rain SR-933 Choco Brown GAL": 3785,
   
-  // Liters (LT) - 1000 ml
   "B-1250 Clear Gloss Lacquer LT": 1000,
   "B-1254 Lacquer Sanding Sealer LT": 1000,
   "B-1700 Acrytex Clear Coat LT": 1000,
@@ -273,7 +270,6 @@ const PRODUCT_VOLUMES: Record<string, number> = {
   "YAKOO 328 Beige Putty w/ Hardener LT": 1000,
   "YAKOO 380 Putty w/ Hardener LT": 1000,
   
-  // 1/4 Liter - 250 ml
   "Acry-Color AC-60 Black 1/4 Liter": 250,
   "Acry-Color AC-20 Thalo Blue 1/4 Liter": 250,
   "Acry-Color AC-30 Thalo Green 1/4 Liter": 250,
@@ -294,12 +290,10 @@ const PRODUCT_VOLUMES: Record<string, number> = {
   "Oil Tinting Color TC-44 Hansa Yellow 1/4 Liter": 250,
 };
 
-// Helper function to get product volume
 const getProductVolume = (productName: string): number => {
-  return PRODUCT_VOLUMES[productName] || 3785; // Default to 1 gallon if not found
+  return PRODUCT_VOLUMES[productName] || 3785;
 };
 
-// Helper function to calculate subtotal based on volume used
 const calculateSubtotal = (fullPrice: number, usedVolume: number, fullVolume: number): number => {
   if (fullVolume === 0) return fullPrice;
   return (usedVolume / fullVolume) * fullPrice;
@@ -388,9 +382,6 @@ export default function SeasonalForecasting() {
   const CACHE_TIMESTAMP_KEY = "sales_forecast_timestamp";
   const CACHE_DATA_COUNT_KEY = "sales_forecast_data_count";
 
-  // ============================================================
-  // SEASONAL DATA COMPUTATION
-  // ============================================================
   const computedSeasonalData = useMemo(() => {
     if (!salesData.length) return null;
 
@@ -417,9 +408,6 @@ export default function SeasonalForecasting() {
     };
   }, [salesData]);
 
-  // ============================================================
-  // PRODUCT DETAILS COMPUTATION - SUMMARIZES EACH SPECIFIC PRODUCT
-  // ============================================================
   const computedProductDetails = useMemo(() => {
     if (!originalData.length) return [];
 
@@ -452,7 +440,6 @@ export default function SeasonalForecasting() {
 
       const detail = productMap.get(productKey)!;
       
-      // Use subtotal if available (volume-based pricing), otherwise use sales
       const salesAmount = record.subtotal || record.sales;
       
       detail.totalSales += salesAmount;
@@ -476,7 +463,6 @@ export default function SeasonalForecasting() {
       const dryAvg = p.dryMonths > 0 ? p.drySales / p.dryMonths : 0;
       const rainyAvg = p.rainyMonths > 0 ? p.rainySales / p.rainyMonths : 0;
       
-      // Calculate price per ml
       const totalVolume = p.totalVolumeUsed || 1;
       const pricePerMl = p.totalSales / totalVolume;
 
@@ -491,9 +477,6 @@ export default function SeasonalForecasting() {
     return products.sort((a, b) => b.totalSales - a.totalSales);
   }, [originalData]);
 
-  // ============================================================
-  // TOP PRODUCTS PER SEASON - SUMMARIZED BY SPECIFIC PRODUCT
-  // ============================================================
   const topProductsBySeason = useMemo(() => {
     if (!computedProductDetails.length) return null;
 
@@ -531,9 +514,6 @@ export default function SeasonalForecasting() {
     };
   }, [computedProductDetails]);
 
-  // ============================================================
-  // FRONTEND CALCULATIONS - STOCK & PRODUCT PERFORMANCE
-  // ============================================================
   const stockRecommendations = useMemo(() => {
     if (!computedProductDetails.length) return [];
 
@@ -634,9 +614,6 @@ export default function SeasonalForecasting() {
     });
   }, [computedProductDetails]);
 
-  // ============================================================
-  // LOAD DATA FROM SUPABASE
-  // ============================================================
   useEffect(() => {
     const loadData = async () => {
       if (!userEmail) {
@@ -682,9 +659,6 @@ export default function SeasonalForecasting() {
     loadData();
   }, [userEmail]);
 
-  // ============================================================
-  // SAVE TO SUPABASE
-  // ============================================================
   useEffect(() => {
     const saveToCloud = async () => {
       if (!userEmail) return;
@@ -727,9 +701,6 @@ export default function SeasonalForecasting() {
     return () => clearTimeout(timeoutId);
   }, [userEmail, uploadedData, uploadedDataName, forecastData, lastGenerated]);
 
-  // ============================================================
-  // EFFECTS
-  // ============================================================
   useEffect(() => {
     const timer = setTimeout(() => setIsVisible(true), 80);
     return () => clearTimeout(timer);
@@ -745,9 +716,6 @@ export default function SeasonalForecasting() {
     }
   }, [salesData]);
 
-  // ============================================================
-  // DATA PROCESSING
-  // ============================================================
   const validateHeaders = (headers: string[]): { valid: boolean; missing: string[] } => {
     const normalizedHeaders = headers.map((h) => h.trim());
     const missing = REQUIRED_HEADERS.filter(
@@ -889,14 +857,11 @@ export default function SeasonalForecasting() {
         );
         const unitsSold = Number(row["Units Sold"] || row["unitsSold"] || 0);
 
-        // Get volume information
         const fullVolume = getProductVolume(product);
         const usedVolume = Number(row["Used Volume"] || row["Volume Used"] || row["Quantity Used"] || 0);
         
-        // Calculate subtotal based on volume used
         let subtotal = sales;
         if (usedVolume > 0 && fullVolume > 0 && sales > 0) {
-          // Calculate price per ml and subtotal based on volume used
           const pricePerMl = sales / fullVolume;
           subtotal = pricePerMl * usedVolume;
         }
@@ -1022,9 +987,6 @@ export default function SeasonalForecasting() {
     }
   };
 
-  // ============================================================
-  // FILE HANDLING
-  // ============================================================
   const processFile = (file: File) => {
     setUploadError("");
     setUploadedData(null);
@@ -1245,9 +1207,6 @@ export default function SeasonalForecasting() {
     showNotification("🗑️ Data cleared successfully", "info");
   };
 
-  // ============================================================
-  // FORECASTING
-  // ============================================================
   const calculateARcoefficients = (data: number[]): {
     phi1: number;
     phi2: number;
@@ -1374,9 +1333,6 @@ export default function SeasonalForecasting() {
     return forecast;
   };
 
-  // ============================================================
-  // GENERATE FORECAST - ONLY MARKETING STRATEGIES
-  // ============================================================
   const generateForecast = async () => {
     if (!salesData.length) {
       setUploadError("No sales data available. Please upload data first.");
@@ -1399,11 +1355,9 @@ export default function SeasonalForecasting() {
 
       const calculatedForecast = calculateARForecast(salesData);
 
-      // Get top products for marketing strategies
       const sortedByUnits = [...computedProductDetails].sort((a, b) => b.totalUnits - a.totalUnits);
       const topProducts = sortedByUnits.slice(0, 5);
 
-      // Build prompt for AI - ONLY MARKETING STRATEGIES
       const prompt = `
 You are an AI marketing strategist. Based on the sales data below, generate creative marketing strategies for each season.
 
@@ -1465,7 +1419,6 @@ Return ONLY valid JSON with this structure:
 
       const aiResult = JSON.parse(cleaned);
 
-      // Combine frontend calculations with AI marketing strategies
       const result = {
         bestSellingProducts: bestSellingProducts,
         slowMovingProducts: slowMovingProducts,
@@ -1496,9 +1449,6 @@ Return ONLY valid JSON with this structure:
     }
   };
 
-  // ============================================================
-  // CHART DATA
-  // ============================================================
   const historicalChartData = useMemo(
     () =>
       salesData.map((row, index) => ({
@@ -1588,9 +1538,6 @@ Return ONLY valid JSON with this structure:
     return areas;
   }, [filteredMonthlyData, chartKey]);
 
-  // ============================================================
-  // SUMMARY STATS
-  // ============================================================
   const totalSales = useMemo(
     () => salesData.reduce((sum, row) => sum + row.sales, 0),
     [salesData]
@@ -1681,7 +1628,6 @@ Return ONLY valid JSON with this structure:
         }
       `}</style>
 
-      {/* HEADER */}
       <header className="overflow-hidden rounded-2xl bg-[#174d32] px-5 py-5 text-white shadow-[0_18px_45px_rgba(23,77,50,0.18)] sm:px-7 sm:py-6">
         <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-start gap-4">
@@ -1728,7 +1674,6 @@ Return ONLY valid JSON with this structure:
         </div>
       </header>
 
-      {/* DATA UPLOAD */}
       <section>
         <Card className="overflow-hidden rounded-2xl border border-emerald-100 bg-white shadow-[0_12px_32px_rgba(20,83,45,0.06)]">
           <CardHeader className="border-b border-emerald-100 bg-[#174d32] h-10 flex items-center px-4">
@@ -1911,7 +1856,6 @@ Return ONLY valid JSON with this structure:
         </Card>
       </section>
 
-      {/* REMOVE DIALOG */}
       {showRemoveDialog && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
           <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl animate-in slide-in-from-bottom-4 duration-300">
@@ -1951,10 +1895,8 @@ Return ONLY valid JSON with this structure:
         </div>
       )}
 
-      {/* SALES DATA DISPLAY */}
       {salesData.length > 0 && (
         <>
-          {/* SUMMARY CARDS */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
             <Card className="border-0 bg-[#174d32] text-white shadow-[0_14px_30px_rgba(23,77,50,0.18)]">
               <CardContent className="py-6">
@@ -2026,7 +1968,6 @@ Return ONLY valid JSON with this structure:
             </Card>
           </div>
 
-          {/* CHART */}
           <Card className="overflow-hidden border border-emerald-100 bg-white shadow-[0_12px_32px_rgba(20,83,45,0.06)]">
             <CardHeader className="border-b border-emerald-100 bg-gradient-to-r from-white to-emerald-50/70">
               <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
@@ -2226,7 +2167,6 @@ Return ONLY valid JSON with this structure:
             </CardContent>
           </Card>
 
-          {/* SEASONAL ANALYSIS */}
           {computedSeasonalData && (
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <Card className="border border-blue-200 border-l-4 border-l-blue-600 bg-blue-50/50 shadow-sm">
@@ -2295,7 +2235,6 @@ Return ONLY valid JSON with this structure:
             </div>
           )}
 
-          {/* TOP PRODUCTS PER SEASON */}
           {topProductsBySeason && (
             <Card className="shadow-lg border-0 overflow-hidden">
               <div className="bg-gradient-to-r from-green-900 to-emerald-600 px-6 py-4">
@@ -2303,7 +2242,6 @@ Return ONLY valid JSON with this structure:
                   <Lightbulb className="w-5 h-5 text-white" />
                   <div>
                     <h3 className="text-lg font-bold text-white">Top Product Per Season</h3>
-                  
                   </div>
                 </div>
               </div>
@@ -2346,7 +2284,6 @@ Return ONLY valid JSON with this structure:
                                 <TableHead style={{ color: '#174d32' }}>Product</TableHead>
                                 <TableHead style={{ color: '#174d32' }}>Total Units Sold</TableHead>
                                 <TableHead style={{ color: '#174d32' }}>Total Revenue</TableHead>
-                                
                               </TableRow>
                             </TableHeader>
                             <TableBody>
@@ -2367,7 +2304,6 @@ Return ONLY valid JSON with this structure:
                                   <TableCell className="font-bold">
                                     ₱{product.revenue.toLocaleString()}
                                   </TableCell>
-                                  
                                 </TableRow>
                               ))}
                             </TableBody>
@@ -2407,7 +2343,6 @@ Return ONLY valid JSON with this structure:
                                 <TableHead style={{ color: '#1d4ed8' }}>Product</TableHead>
                                 <TableHead style={{ color: '#1d4ed8' }}>Total Units Sold</TableHead>
                                 <TableHead style={{ color: '#1d4ed8' }}>Total Revenue</TableHead>
-                      
                               </TableRow>
                             </TableHeader>
                             <TableBody>
@@ -2428,7 +2363,6 @@ Return ONLY valid JSON with this structure:
                                   <TableCell className="font-bold">
                                     ₱{product.revenue.toLocaleString()}
                                   </TableCell>
-                                
                                 </TableRow>
                               ))}
                             </TableBody>
@@ -2446,9 +2380,6 @@ Return ONLY valid JSON with this structure:
             </Card>
           )}
 
-          {/* ============================================================
-              STOCK RECOMMENDATIONS - Always Visible After Save
-              ============================================================ */}
           {isDataSaved && stockRecommendations.length > 0 && (
             <Card className="shadow-lg border-0 overflow-hidden">
               <div className="bg-gradient-to-r from-green-900 to-emerald-600 px-6 py-4">
@@ -2456,7 +2387,6 @@ Return ONLY valid JSON with this structure:
                   <Lightbulb className="w-5 h-5 text-white" />
                   <div>
                     <h3 className="text-lg font-bold text-white">Product Stock Recommendations</h3>
-                  
                   </div>
                 </div>
               </div>
@@ -2500,11 +2430,9 @@ Return ONLY valid JSON with this structure:
                               className={`border-l-4 ${borderColor} ${bgColor} rounded-r-lg p-4`}
                             >
                               <div className="flex items-center gap-3 mb-4 pb-3 border-b border-gray-200">
-                                
                                 <h4 className="text-md font-semibold text-gray-700">
                                   {action} Stock
                                 </h4>
-                                
                               </div>
 
                               <div className="overflow-x-auto">
@@ -2523,7 +2451,6 @@ Return ONLY valid JSON with this structure:
                                       <th className={`text-left px-4 py-2 text-xs font-semibold ${headerText}`}>
                                         Action
                                       </th>
-                                      
                                     </tr>
                                   </thead>
                                   <tbody>
@@ -2551,7 +2478,6 @@ Return ONLY valid JSON with this structure:
                                               {action}
                                             </span>
                                           </td>
-                                          
                                         </tr>
                                       ))
                                     )}
@@ -2581,9 +2507,6 @@ Return ONLY valid JSON with this structure:
             </Card>
           )}
 
-          {/* ============================================================
-              PRODUCT PERFORMANCE - Using frontend calculated data
-              ============================================================ */}
           {(bestSellingProducts.length > 0 || slowMovingProducts.length > 0) && (
             <section className="space-y-4">
               <div className="flex items-center gap-3">
@@ -2592,7 +2515,6 @@ Return ONLY valid JSON with this structure:
                 </div>
                 <div>
                   <h2 className="text-xl font-bold text-gray-900">Product Performance</h2>
-                 
                 </div>
               </div>
               <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
@@ -2617,7 +2539,6 @@ Return ONLY valid JSON with this structure:
                               <p className="text-xs text-gray-500">
                                 {product.unitsSold?.toLocaleString() || 0} units
                               </p>
-                              
                             </div>
                             <Badge className="bg-green-100 text-green-700 text-xs">
                               {product.growth || "N/A"}
@@ -2670,7 +2591,6 @@ Return ONLY valid JSON with this structure:
                                 <p className="text-xs text-gray-500 mt-0.5">
                                   {product.unitsSold?.toLocaleString() || 0} units sold
                                 </p>
-                                
                               </div>
                               <AlertCircle className="size-4 text-orange-500 flex-shrink-0 mt-0.5" />
                             </div>
@@ -2694,7 +2614,6 @@ Return ONLY valid JSON with this structure:
         </>
       )}
 
-      {/* GENERATE FORECAST BUTTON - Only for Marketing Strategies */}
       {salesData.length > 0 && forecastStatus !== "success" && isDataSaved && (
         <div className="flex justify-center rounded-2xl border border-emerald-100 bg-white p-4 shadow-sm">
           <button
@@ -2723,7 +2642,6 @@ Return ONLY valid JSON with this structure:
         </div>
       )}
 
-      {/* SAVE DATA PROMPT */}
       {isDataLoaded && !isDataSaved && salesData.length > 0 && (
         <Card className="border border-emerald-200 bg-emerald-50/70 shadow-sm">
           <CardContent className="py-8">
@@ -2740,7 +2658,6 @@ Return ONLY valid JSON with this structure:
         </Card>
       )}
 
-      {/* EMPTY STATE */}
       {!salesData.length && !uploadedData && (
         <Card className="border-2 border-dashed border-emerald-200 bg-white shadow-sm">
           <CardContent className="flex flex-col items-center justify-center py-16 text-center">
@@ -2760,7 +2677,6 @@ Return ONLY valid JSON with this structure:
         </Card>
       )}
 
-      {/* FORECAST ERROR */}
       {forecastStatus === "error" && (
         <Card className="border-2 border-red-200 bg-red-50">
           <CardContent className="py-8">
@@ -2783,10 +2699,8 @@ Return ONLY valid JSON with this structure:
         </Card>
       )}
 
-      {/* FORECAST RESULTS - Only Marketing Strategies */}
       {forecastData && forecastStatus === "success" && (
         <div id="ai-results" className="space-y-6">
-          {/* Marketing Strategies */}
           {forecastData.marketingStrategies?.length > 0 && (
             <section className="space-y-4">
               <div className="flex items-center gap-3">
@@ -2797,7 +2711,6 @@ Return ONLY valid JSON with this structure:
                   <h2 className="text-xl font-bold text-gray-900 tracking-tight">
                     AI-Generated Marketing Strategies
                   </h2>
-                 
                 </div>
               </div>
               <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
