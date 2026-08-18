@@ -74,11 +74,6 @@ type ColorAnalysis = {
   hex: string;
   dominantColor: string;
   rgb: { r: number; g: number; b: number };
-  consistency: {
-    type: string;
-    viscosity: string;
-    description: string;
-  };
   paintComponents: PaintComponent[];
   applicationGuide: string | {
     steps?: string[];
@@ -824,11 +819,6 @@ Required JSON format:
   "colorHex": "${vision.colorHex}",
   "dominantColor": "${vision.dominantColor}",
   "rgb": ${JSON.stringify(vision.rgb)},
-  "consistency": {
-    "type": "Standard wall paint",
-    "viscosity": "Medium",
-    "description": "Short explanation"
-  },
   "components": [
     {
       "no": 1,
@@ -944,11 +934,6 @@ Required JSON format:
         hex: geminiData.colorHex || geminiData.hex || vision.colorHex || "#808080",
         dominantColor: geminiData.dominantColor || vision.dominantColor || "Unknown",
         rgb: geminiData.rgb || vision.rgb || { r: 128, g: 128, b: 128 },
-        consistency: geminiData.consistency || {
-          type: "—",
-          viscosity: "—",
-          description: vision.notes || "—",
-        },
         paintComponents: normalizedComponents,
         applicationGuide: geminiData.applicationGuide || null,
         stockWarnings: [
@@ -1818,53 +1803,6 @@ Required JSON format:
                 </div>
               </CardContent>
             </Card>
-
-            {colorAnalysis.consistency &&
-              colorAnalysis.consistency.type !== "—" && (
-                <Card className="border-l-4 border-[#174d32] overflow-hidden rounded-2xl border border-emerald-100 bg-white shadow-[0_12px_32px_rgba(20,83,45,0.06)]">
-                  <CardHeader className="border-b border-emerald-100 bg-gradient-to-r from-white to-emerald-50/70">
-                    <CardTitle className="flex items-center gap-2">
-                      <Info className="size-5 text-[#174d32]" />
-                      Recommended Consistency
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-4">
-                      <div className="p-4 bg-gray-50 rounded-lg">
-                        <Label className="text-sm text-gray-500">
-                          Consistency Type
-                        </Label>
-                        <p className="text-xl font-bold text-[#174d32] mt-1">
-                          {colorAnalysis.consistency.type}
-                        </p>
-                      </div>
-                      <div className="p-4 bg-gray-50 rounded-lg">
-                        <Label className="text-sm text-gray-500">
-                          Viscosity Level
-                        </Label>
-                        <p className="text-xl font-bold text-[#174d32] mt-1">
-                          {colorAnalysis.consistency.viscosity}
-                        </p>
-                      </div>
-                    </div>
-                    {colorAnalysis.consistency.description &&
-                      colorAnalysis.consistency.description !==
-                        "—" && (
-                        <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
-                          <p className="text-sm text-gray-700">
-                            <span className="font-semibold">
-                              Note:
-                            </span>{" "}
-                            {
-                              colorAnalysis.consistency
-                                .description
-                            }
-                          </p>
-                        </div>
-                      )}
-                  </CardContent>
-                </Card>
-              )}
 
             {colorAnalysis.applicationGuide && (
               <Card className="border-l-4 border-blue-500 overflow-hidden rounded-2xl border border-blue-100 bg-white shadow-[0_12px_32px_rgba(20,83,45,0.06)]">
