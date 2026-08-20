@@ -237,21 +237,23 @@ const showNotification = (
 
 import { createPortal } from 'react-dom';
 
-// MonthDropdown component - with proper stock display per month
+// MonthDropdown component with proper color coding
 const MonthDropdown = ({ 
   months, 
   badgeClass,
   recommendations,
   onMonthSelect,
   currentStock,
-  setCurrentStock
+  setCurrentStock,
+  actionType
 }: { 
   months: string[], 
   badgeClass: string,
   recommendations?: { month: string; recommendedStock: number; peakUnits: number; peakSales: number }[],
   onMonthSelect?: (month: string, stock: number) => void,
   currentStock?: number,
-  setCurrentStock?: (stock: number) => void
+  setCurrentStock?: (stock: number) => void,
+  actionType?: string
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [selectedMonth, setSelectedMonth] = useState<string>(
@@ -261,13 +263,27 @@ const MonthDropdown = ({
   const validMonths = months.filter(m => m !== "No data" && m !== "");
   const firstMonth = validMonths.length > 0 ? validMonths[0] : "No data";
   
+  // Determine colors based on action type
+  const isIncrease = actionType === "Increase";
+  
+  // Button colors
+  const buttonBgColor = isIncrease ? 'bg-orange-500 hover:bg-orange-600' : 'bg-green-700 hover:bg-green-800';
+  const buttonTextColor = 'text-white';
+  
+  // Dropdown item colors
+  const selectedBgColor = isIncrease ? 'bg-orange-100' : 'bg-green-100';
+  const selectedTextColor = isIncrease ? 'text-orange-700' : 'text-green-700';
+  const selectedStockColor = isIncrease ? 'text-orange-600' : 'text-green-600';
+  const hoverBgColor = isIncrease ? 'hover:bg-orange-50' : 'hover:bg-green-50';
+  const borderColor = isIncrease ? 'border-orange-200' : 'border-green-200';
+  const headerColor = isIncrease ? 'text-orange-600' : 'text-green-600';
+  
   const getStockForMonth = (monthLabel: string): number | null => {
     if (!recommendations) return null;
     const found = recommendations.find(r => r.month === monthLabel);
     return found ? found.recommendedStock : null;
   };
   
-  // Close dropdown when clicking outside
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       const target = e.target as HTMLElement;
@@ -310,7 +326,7 @@ const MonthDropdown = ({
           e.stopPropagation();
           setIsOpen(!isOpen);
         }}
-        className={`${badgeClass} text-xs font-medium whitespace-nowrap px-2 py-1 rounded-full flex items-center gap-1 hover:opacity-80 transition cursor-pointer`}
+        className={`${buttonBgColor} ${buttonTextColor} text-xs font-medium whitespace-nowrap px-2 py-1 rounded-full flex items-center gap-1 hover:opacity-90 transition cursor-pointer`}
         type="button"
       >
         {displayMonth}
@@ -326,7 +342,7 @@ const MonthDropdown = ({
       
       {isOpen && (
         <div 
-          className="absolute z-[99999] bg-white rounded-lg shadow-2xl border border-gray-200 py-1 max-h-64 overflow-y-auto"
+          className={`absolute z-[99999] bg-white rounded-lg shadow-2xl border ${borderColor} py-1 max-h-64 overflow-y-auto`}
           style={{
             position: 'fixed',
             top: 'auto',
@@ -335,7 +351,7 @@ const MonthDropdown = ({
             maxWidth: '280px',
           }}
         >
-          <div className="px-3 py-1.5 text-xs font-semibold text-gray-500 border-b border-gray-100 bg-gray-50 sticky top-0">
+          <div className={`px-3 py-1.5 text-xs font-semibold ${headerColor} border-b ${borderColor} bg-gray-50 sticky top-0`}>
             Select Peak Month
           </div>
           {validMonths.map((month: string, mi: number) => {
@@ -347,20 +363,27 @@ const MonthDropdown = ({
                 onClick={() => handleMonthClick(month)}
                 className={`px-3 py-2 text-xs cursor-pointer border-b border-gray-50 last:border-0 transition-colors ${
                   isSelected 
-                    ? 'bg-green-100 text-green-700 font-medium' 
-                    : 'hover:bg-gray-50 text-gray-700'
+                    ? `${selectedBgColor} ${selectedTextColor} font-medium` 
+                    : `${hoverBgColor} text-gray-700`
                 }`}
               >
                 <div className="flex justify-between items-center">
-                  <span>{month}</span>
+                  <div className="flex items-center gap-2">
+                    {isSelected && (
+                      <span className="text-[10px]">✓</span>
+                    )}
+                    <span>{month}</span>
+                  </div>
                   {stock !== null && (
-                    <span className={`text-xs font-bold ${isSelected ? 'text-green-600' : 'text-gray-500'}`}>
+                    <span className={`text-xs font-bold ${isSelected ? selectedStockColor : 'text-gray-500'}`}>
                       {stock} units
                     </span>
                   )}
                 </div>
                 {isSelected && (
-                  <div className="text-[10px] text-green-600 mt-0.5">✓ Currently selected</div>
+                  <div className={`text-[10px] ${selectedStockColor} mt-0.5`}>
+                    ✓ Currently selected
+                  </div>
                 )}
               </div>
             );
@@ -1532,7 +1555,7 @@ You are an AI marketing strategist. Based on the sales data below, generate crea
 
 SALES DATA:
 - Total Sales: ₱${totalSales.toLocaleString()}
-- Average Monthly Sales: ₱${Math.round(avgSales).toLocaleString()}
+- Average Monthly Paint Sales: ₱${Math.round(avgSales).toLocaleString()}
 - Records: ${salesData.length}
 - Total Products: ${computedProductDetails.length}
 
@@ -2356,7 +2379,7 @@ Return ONLY valid JSON with this structure:
                     </span>
                   </div>
                   <div className="flex justify-between">
-                    <span>Average Monthly Sales</span>
+                    <span>Average Monthly Paint Sales</span>
                     <span className="font-bold">
                       ₱{computedSeasonalData.rainy.averageMonthlySales.toLocaleString()}
                     </span>
@@ -2388,7 +2411,7 @@ Return ONLY valid JSON with this structure:
                     </span>
                   </div>
                   <div className="flex justify-between">
-                    <span>Average Monthly Sales</span>
+                    <span>Average Monthly Paint Sales</span>
                     <span className="font-bold">
                       ₱{computedSeasonalData.dry.averageMonthlySales.toLocaleString()}
                     </span>
@@ -2549,153 +2572,142 @@ Return ONLY valid JSON with this structure:
             </Card>
           )}
 
-          {/* FIXED: Stock Recommendations with working dropdown */}
-          {isDataSaved && stockRecommendations.length > 0 && (
-            <Card className="shadow-lg border-0 overflow-visible">
-              <div className="rounded-t-xl bg-gradient-to-r from-green-900 to-emerald-600 px-6 py-4">
-                <div className="flex items-center gap-3">
-                  <Lightbulb className="w-5 h-5 text-white" />
-                  <div>
-                    <h3 className="text-lg font-bold text-white">Product Stock Recommendations</h3>
-                   
-                  </div>
-                </div>
-              </div>
+        {/* Stock Recommendations with working dropdown */}
+{isDataSaved && stockRecommendations.length > 0 && (
+  <Card className="shadow-lg border-0 overflow-visible">
+    <div className=" rounded-t-2xl bg-gradient-to-r from-green-900 to-emerald-600 px-6 py-4">
+      <div className="flex items-center gap-3">
+        <Lightbulb className="w-5 h-5 text-white" />
+        <div>
+          <h3 className="text-lg font-bold text-white">Product Stock Recommendations</h3>
 
-              <CardContent className="overflow-visible p-4">
-                {(() => {
-                  const groupedByAction = stockRecommendations.reduce((acc: any, category: any) => {
-                    const action = category.action || "Maintain";
-                    if (!acc[action]) acc[action] = [];
-                    acc[action].push(category);
-                    return acc;
-                  }, {});
+        </div>
+      </div>
+    </div>
 
-                  const actionOrder = ["Increase", "Maintain"];
+    <CardContent className="overflow-visible ">
+      {(() => {
+        const groupedByAction = stockRecommendations.reduce((acc: any, category: any) => {
+          const action = category.action || "Maintain";
+          if (!acc[action]) acc[action] = [];
+          acc[action].push(category);
+          return acc;
+        }, {});
 
-                  return (
-                    <div className="space-y-6">
-                      {actionOrder
-                        .filter((action) => groupedByAction[action])
-                        .map((action) => {
-                          const isIncrease = action === "Increase";
-                          const borderColor = isIncrease ? "border-orange-500" : "border-green-900";
-                          const bgColor = isIncrease ? "bg-orange-50/30" : "bg-green-50/30";
-                          const headerBg = isIncrease ? "bg-orange-50/50" : "bg-green-50/50";
-                          const headerText = isIncrease ? "text-orange-700" : "text-green-700";
-                          const rowHover = isIncrease ? "hover:bg-orange-50/30" : "hover:bg-green-50/30";
-                          const productText = isIncrease ? "text-orange-800" : "text-gray-800";
-                          const recommendedText = isIncrease ? "text-orange-600" : "text-green-600";
-                          const actionBadge = isIncrease
-                            ? "bg-orange-100 text-orange-700"
-                            : "bg-green-100 text-green-700";
-                          const peakBadge = isIncrease
-                            ? "bg-orange-200 text-orange-800"
-                            : "bg-green-200 text-green-800";
-                          
-                          const actionLabel = isIncrease ? "Increase before peak month" : "Maintain current stock";
+        const actionOrder = ["Increase", "Maintain"];
 
-                          return (
-                            <div
-                              key={action}
-                              className={`border-2 rounded-lg ${borderColor} ${bgColor} rounded-r-lg p-4 overflow-visible`}
-                            >
-                              <div className="flex items-center gap-3 mb-4 pb-3 border-b border-gray-200">
-                                <h4 className="text-md font-semibold text-gray-700">
-                                  {action} Stock
-                                </h4>
-                              </div>
+        return (
+          <div className="space-y-6">
+            {actionOrder
+              .filter((action) => groupedByAction[action])
+              .map((action) => {
+                const isIncrease = action === "Increase";
+                const borderColor = isIncrease ? "border-orange-500" : "border-green-900";
+                const bgColor = isIncrease ? "bg-orange-50/30" : "bg-green-50/30";
+                const headerBg = isIncrease ? "bg-orange-50/50" : "bg-green-50/50";
+                const headerText = isIncrease ? "text-orange-700" : "text-green-700";
+                const rowHover = isIncrease ? "hover:bg-orange-50/30" : "hover:bg-green-50/30";
+                const productText = isIncrease ? "text-orange-800" : "text-gray-800";
+                const recommendedText = isIncrease ? "text-orange-600" : "text-green-600";
+                const peakBadge = isIncrease
+                  ? "bg-orange-200 text-orange-800"
+                  : "bg-green-200 text-green-800";
+                
+                const actionLabel = isIncrease ? "Increase before peak month" : "Maintain current stock";
 
-                              <div className="overflow-x-auto overflow-visible">
-                                <table className="w-full text-sm table-fixed overflow-visible">
-                                  <thead>
-                                    <tr className={headerBg}>
-                                      <th className={`text-left px-3 py-2 text-xs font-semibold ${headerText} w-[40%]`}>
-                                        Product
-                                      </th>
-                                      <th className={`text-center px-3 py-2 text-xs font-semibold ${headerText} w-[20%]`}>
-                                        Recommended
-                                      </th>
-                                      <th className={`text-center px-3 py-2 text-xs font-semibold ${headerText} w-[20%]`}>
-                                        Peak Month
-                                      </th>
-                                      <th className={`text-left px-3 py-2 text-xs font-semibold ${headerText} w-[20%]`}>
-                                        Action
-                                      </th>
-                                    </tr>
-                                  </thead>
-                                  <tbody>
-
-{groupedByAction[action].map((category: any, idx: number) => {
-  const categoryKey = category.category;
-  const currentStock = productStockStates[categoryKey] !== undefined 
-    ? productStockStates[categoryKey] 
-    : category.defaultStock || 60;
-  
-  const monthLabels = category.items.map((item: any) => item.month);
-  
-  // Create recommendations map with month-specific stock values
-  const recommendationsMap = category.items.map((item: any) => ({
-    month: item.month,
-    recommendedStock: item.recommendedStock, // This should be different per month
-    peakUnits: item.peakUnits,
-    peakSales: item.peakSales,
-  }));
-  
-  const updateStock = (stock: number) => {
-    setProductStockStates(prev => ({
-      ...prev,
-      [categoryKey]: stock
-    }));
-  };
-  
-  return (
-    <tr key={idx} className={`border-b border-gray-100 ${rowHover} transition-colors`}>
-      <td className="px-3 py-3">
-        <span className={`font-medium text-sm ${productText}`}>
-          {category.category}
-        </span>
-      </td>
-      
-      <td className={`text-center px-3 py-3 text-sm font-bold ${recommendedText}`}>
-        {currentStock} units
-      </td>
-      
-      <td className="text-center px-3 py-3">
-        {monthLabels.length > 0 && monthLabels[0] !== "No data" ? (
-          <MonthDropdown 
-            months={monthLabels} 
-            badgeClass={peakBadge}
-            recommendations={recommendationsMap}
-            currentStock={currentStock}
-            setCurrentStock={updateStock}
-          />
-        ) : (
-          <span className="text-xs text-gray-400">No data</span>
-        )}
-      </td>
-      
-      <td className="px-3 py-3">
-        <span className={`px-2 py-1 rounded-full text-xs font-medium ${actionBadge} whitespace-nowrap`}>
-          {actionLabel}
-        </span>
-      </td>
-    </tr>
-  );
-})}
-                                  </tbody>
-                                </table>
-                              </div>
-                            </div>
-                          );
-                        })}
+                return (
+                  <div
+                    key={action}
+                    className={`border-2 rounded-lg ${borderColor} ${bgColor} rounded-r-lg p-4 overflow-visible`}
+                  >
+                    <div className="flex items-center gap-3 mb-4 pb-3 border-b border-gray-200">
+                      <h4 className={`text-md font-semibold ${isIncrease ? 'text-orange-700' : 'text-green-700'}`}>
+                        {actionLabel}
+                      </h4>
                     </div>
-                  );
-                })()}
-              </CardContent>
-            </Card>
-          )}
 
+                    <div className="overflow-x-auto overflow-visible">
+                      <table className="w-full text-sm table-fixed overflow-visible">
+                        <thead>
+                          <tr className={headerBg}>
+                            <th className={`text-left px-3 py-2 text-xs font-semibold ${headerText} w-[45%]`}>
+                              Product
+                            </th>
+                            <th className={`text-center px-3 py-2 text-xs font-semibold ${headerText} w-[25%]`}>
+                              Recommended
+                            </th>
+                            <th className={`text-center px-3 py-2 text-xs font-semibold ${headerText} w-[30%]`}>
+                              Peak Month
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {groupedByAction[action].map((category: any, idx: number) => {
+                            const categoryKey = category.category;
+                            const currentStock = productStockStates[categoryKey] !== undefined 
+                              ? productStockStates[categoryKey] 
+                              : category.defaultStock || 60;
+                            
+                            const monthLabels = category.items.map((item: any) => item.month);
+                            
+                            const recommendationsMap = category.items.map((item: any) => ({
+                              month: item.month,
+                              recommendedStock: item.recommendedStock,
+                              peakUnits: item.peakUnits,
+                              peakSales: item.peakSales,
+                            }));
+                            
+                            const updateStock = (stock: number) => {
+                              setProductStockStates(prev => ({
+                                ...prev,
+                                [categoryKey]: stock
+                              }));
+                            };
+                            
+                            return (
+                              <tr
+                                key={idx}
+                                className={`border-b border-gray-100 ${rowHover} transition-colors`}
+                              >
+                                <td className="px-3 py-3">
+                                  <span className={`font-medium text-sm ${productText}`}>
+                                    {category.category}
+                                  </span>
+                                </td>
+                                
+                                <td className={`text-center px-3 py-3 text-sm font-bold ${recommendedText}`}>
+                                  {currentStock} units
+                                </td>
+                                
+                                <td className="text-center px-3 py-3">
+                                  {monthLabels.length > 0 && monthLabels[0] !== "No data" ? (
+                                    <MonthDropdown 
+                                      months={monthLabels} 
+                                      badgeClass={peakBadge}
+                                      recommendations={recommendationsMap}
+                                      currentStock={currentStock}
+                                      setCurrentStock={updateStock}
+                                      actionType={action}
+                                    />
+                                  ) : (
+                                    <span className="text-xs text-gray-400">No data</span>
+                                  )}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                );
+              })}
+          </div>
+        );
+      })()}
+    </CardContent>
+  </Card>
+)}
           {(bestSellingProducts.length > 0 || slowMovingProducts.length > 0) && (
             <section>
               <div className="bg-gradient-to-r from-green-900 to-emerald-600 rounded-t-2xl px-6 py-4">
