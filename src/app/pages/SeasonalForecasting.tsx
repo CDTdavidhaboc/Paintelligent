@@ -237,51 +237,61 @@ const showNotification = (
 
 import { createPortal } from 'react-dom';
 
-// Dropdown component for month selection - using Portal
-const MonthDropdown = ({ months, badgeClass }: { 
+// MonthDropdown component - with proper stock display per month
+const MonthDropdown = ({ 
+  months, 
+  badgeClass,
+  recommendations,
+  onMonthSelect,
+  currentStock,
+  setCurrentStock
+}: { 
   months: string[], 
-  badgeClass: string 
+  badgeClass: string,
+  recommendations?: { month: string; recommendedStock: number; peakUnits: number; peakSales: number }[],
+  onMonthSelect?: (month: string, stock: number) => void,
+  currentStock?: number,
+  setCurrentStock?: (stock: number) => void
 }) => {
   const [isOpen, setIsOpen] = useState(false);
-  const [position, setPosition] = useState({ top: 0, left: 0 });
-  const buttonRef = useRef<HTMLButtonElement>(null);
+  const [selectedMonth, setSelectedMonth] = useState<string>(
+    months.length > 0 && months[0] !== "No data" && months[0] !== "" ? months[0] : "No data"
+  );
   
-  // Filter out "No data" entries and get valid months
   const validMonths = months.filter(m => m !== "No data" && m !== "");
   const firstMonth = validMonths.length > 0 ? validMonths[0] : "No data";
   
-  const updatePosition = () => {
-    if (buttonRef.current) {
-      const rect = buttonRef.current.getBoundingClientRect();
-      setPosition({
-        top: rect.bottom + 4,
-        left: rect.left + rect.width / 2,
-      });
-    }
+  const getStockForMonth = (monthLabel: string): number | null => {
+    if (!recommendations) return null;
+    const found = recommendations.find(r => r.month === monthLabel);
+    return found ? found.recommendedStock : null;
   };
   
-  useEffect(() => {
-    if (isOpen) {
-      updatePosition();
-      window.addEventListener('scroll', updatePosition);
-      window.addEventListener('resize', updatePosition);
-      return () => {
-        window.removeEventListener('scroll', updatePosition);
-        window.removeEventListener('resize', updatePosition);
-      };
-    }
-  }, [isOpen]);
-  
+  // Close dropdown when clicking outside
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       const target = e.target as HTMLElement;
-      if (!target.closest('.month-dropdown-container')) {
+      if (isOpen && !target.closest('.month-dropdown-container')) {
         setIsOpen(false);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
+  }, [isOpen]);
+  
+  const handleMonthClick = (month: string) => {
+    const stock = getStockForMonth(month);
+    if (stock !== null) {
+      setSelectedMonth(month);
+      if (setCurrentStock) {
+        setCurrentStock(stock);
+      }
+      if (onMonthSelect) {
+        onMonthSelect(month, stock);
+      }
+    }
+    setIsOpen(false);
+  };
   
   if (validMonths.length === 0) {
     return (
@@ -291,17 +301,19 @@ const MonthDropdown = ({ months, badgeClass }: {
     );
   }
   
+  const displayMonth = selectedMonth !== "No data" ? selectedMonth : firstMonth;
+  
   return (
     <div className="month-dropdown-container relative inline-block">
       <button
-        ref={buttonRef}
-        onClick={() => {
-          updatePosition();
+        onClick={(e) => {
+          e.stopPropagation();
           setIsOpen(!isOpen);
         }}
         className={`${badgeClass} text-xs font-medium whitespace-nowrap px-2 py-1 rounded-full flex items-center gap-1 hover:opacity-80 transition cursor-pointer`}
+        type="button"
       >
-        {firstMonth}
+        {displayMonth}
         <svg 
           className={`w-3 h-3 inline-block transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} 
           fill="none" 
@@ -312,41 +324,48 @@ const MonthDropdown = ({ months, badgeClass }: {
         </svg>
       </button>
       
-      {isOpen && createPortal(
+      {isOpen && (
         <div 
-          className="fixed z-[99999] bg-white rounded-lg shadow-2xl border border-gray-200 py-1 max-h-56 overflow-y-auto"
+          className="absolute z-[99999] bg-white rounded-lg shadow-2xl border border-gray-200 py-1 max-h-64 overflow-y-auto"
           style={{
-            top: position.top,
-            left: position.left,
-            transform: 'translateX(-50%)',
-            minWidth: '160px',
-            maxWidth: '220px',
+            position: 'fixed',
+            top: 'auto',
+            left: 'auto',
+            minWidth: '220px',
+            maxWidth: '280px',
           }}
         >
           <div className="px-3 py-1.5 text-xs font-semibold text-gray-500 border-b border-gray-100 bg-gray-50 sticky top-0">
-            All Peak Months ({validMonths.length})
+            Select Peak Month
           </div>
-          {validMonths.map((month: string, mi: number) => (
-            <div
-              key={mi}
-              className={`px-3 py-2 text-xs text-gray-700 hover:bg-gray-100 text-center cursor-default flex items-center justify-center gap-2 border-b border-gray-50 last:border-0 ${
-                mi === 0 ? 'bg-green-50 text-green-700 font-medium' : ''
-              }`}
-            >
-              
-              {mi === 0 ? `${month}` : month}
-            </div>
-          ))}
-          <div 
-            className="absolute -top-2 left-1/2 transform -translate-x-1/2"
-            style={{
-              borderLeft: '8px solid transparent',
-              borderRight: '8px solid transparent',
-              borderBottom: '8px solid white',
-            }}
-          />
-        </div>,
-        document.body
+          {validMonths.map((month: string, mi: number) => {
+            const stock = getStockForMonth(month);
+            const isSelected = selectedMonth === month;
+            return (
+              <div
+                key={mi}
+                onClick={() => handleMonthClick(month)}
+                className={`px-3 py-2 text-xs cursor-pointer border-b border-gray-50 last:border-0 transition-colors ${
+                  isSelected 
+                    ? 'bg-green-100 text-green-700 font-medium' 
+                    : 'hover:bg-gray-50 text-gray-700'
+                }`}
+              >
+                <div className="flex justify-between items-center">
+                  <span>{month}</span>
+                  {stock !== null && (
+                    <span className={`text-xs font-bold ${isSelected ? 'text-green-600' : 'text-gray-500'}`}>
+                      {stock} units
+                    </span>
+                  )}
+                </div>
+                {isSelected && (
+                  <div className="text-[10px] text-green-600 mt-0.5">✓ Currently selected</div>
+                )}
+              </div>
+            );
+          })}
+        </div>
       )}
     </div>
   );
@@ -382,6 +401,11 @@ export default function SeasonalForecasting() {
   const [chartKey, setChartKey] = useState(0);
   const [isVisible, setIsVisible] = useState(false);
   const [showRemoveDialog, setShowRemoveDialog] = useState(false);
+
+  // State for product stock selections - this tracks the currently selected stock for each product
+  const [productStockStates, setProductStockStates] = useState<Record<string, number>>({});
+  // FIXED: Track which month is selected for each product
+  const [productSelectedMonths, setProductSelectedMonths] = useState<Record<string, string>>({});
 
   const CACHE_KEY = "sales_forecast_data";
   const CACHE_TIMESTAMP_KEY = "sales_forecast_timestamp";
@@ -519,8 +543,9 @@ export default function SeasonalForecasting() {
     };
   }, [computedProductDetails]);
 
-  const stockRecommendations = useMemo(() => {
-  if (!computedProductDetails.length) return [];
+// stockRecommendations with month-specific data - FIXED to only show peak months
+const stockRecommendations = useMemo(() => {
+  if (!computedProductDetails.length || !originalData.length) return [];
 
   const sortedByUnits = [...computedProductDetails].sort((a, b) => b.totalUnits - a.totalUnits);
   const avgUnits = computedProductDetails.reduce((sum, p) => sum + p.totalUnits, 0) / computedProductDetails.length;
@@ -535,75 +560,171 @@ export default function SeasonalForecasting() {
 
   const result: any[] = [];
 
-  // Helper to find peak months for a product
-  const findPeakMonths = (productName: string, brand: string) => {
+  const getProductMonthDetails = (productName: string, brand: string) => {
     const productRecords = originalData.filter(
       (r) => r.product === productName && r.brand === brand
     );
     
-    console.log(`Finding peak months for ${brand} ${productName}:`, productRecords.length, "records");
+    if (productRecords.length === 0) {
+      return [];
+    }
     
-    if (productRecords.length === 0) return [];
-    
-    const monthlySales: Record<string, { sales: number; month: string; year: number; units: number }> = {};
+    const monthlyData: Record<string, { 
+      sales: number; 
+      units: number; 
+      month: string; 
+      year: number;
+      monthName: string;
+      fullLabel: string;
+    }> = {};
     
     productRecords.forEach((record) => {
       const monthKey = `${record.month}-${record.year}`;
-      if (!monthlySales[monthKey]) {
-        monthlySales[monthKey] = {
+      const monthShort = record.month.substring(0, 3);
+      
+      if (!monthlyData[monthKey]) {
+        monthlyData[monthKey] = {
           sales: 0,
-          month: record.month.substring(0, 3),
+          units: 0,
+          month: monthShort,
           year: record.year,
-          units: 0
+          monthName: record.month,
+          fullLabel: `${monthShort} ${record.year}`
         };
       }
-      monthlySales[monthKey].sales += record.sales;
-      monthlySales[monthKey].units += record.unitsSold || 0;
+      monthlyData[monthKey].sales += record.sales;
+      monthlyData[monthKey].units += record.unitsSold || 0;
     });
     
-    const sortedMonths = Object.values(monthlySales)
-      .sort((a, b) => b.sales - a.sales);
+    const monthlyArray = Object.values(monthlyData);
+    // Sort by sales to get peak months (highest sales first)
+    const sortedMonths = [...monthlyArray].sort((a, b) => b.sales - a.sales);
     
-    const result = sortedMonths.slice(0, 3).map(m => `${m.month} ${m.year}`);
-    console.log(`Peak months for ${brand} ${productName}:`, result);
-    return result;
+    // FIXED: Only return the top 3 peak months
+    const topPeakMonths = sortedMonths.slice(0, 3);
+    
+    return topPeakMonths.map(month => ({
+      label: month.fullLabel,
+      month: month.month,
+      year: month.year,
+      sales: Math.round(month.sales),
+      units: Math.round(month.units),
+    }));
   };
 
+  const calculateStockForMonth = (peakUnits: number, action: string) => {
+    if (action === "Increase") {
+      return Math.round(Math.max(peakUnits * 2.5, 30) / 5) * 5;
+    } else {
+      return Math.round(Math.max(peakUnits * 1.2, 20) / 5) * 5;
+    }
+  };
+
+  // Process Increase products
   increaseStock.forEach(p => {
-    const peakMonths = findPeakMonths(p.product, p.brand);
-    console.log(`Increase stock - ${p.brand} ${p.product}:`, peakMonths);
+    const monthDetails = getProductMonthDetails(p.product, p.brand);
+    const volumePerUnit = Math.round(p.totalVolumeUsed / (p.totalUnits || 1)) || 3785;
+    const pricePerMl = p.pricePerMl || 0;
+    
+    const monthRecommendations = monthDetails.map(month => {
+      const recommendedStock = calculateStockForMonth(month.units, "Increase");
+      return {
+        month: month.label,
+        peakSales: month.sales,
+        peakUnits: month.units,
+        recommendedStock: recommendedStock,
+      };
+    });
+    
+    if (monthRecommendations.length === 0) {
+      const avgMonthlyUnits = p.totalUnits / (p.months || 1);
+      monthRecommendations.push({
+        month: "No data",
+        peakSales: 0,
+        peakUnits: 0,
+        recommendedStock: Math.round(Math.max(avgMonthlyUnits * 4, 30) / 5) * 5,
+      });
+    }
+    
     result.push({
       category: `${p.brand} ${p.product}`,
-      items: [{
-        name: p.product,
-        recommendedStock: Math.round(p.totalUnits / (p.months || 1) * 4) || 60,
-        action: "Increase",
-        volumePerUnit: Math.round(p.totalVolumeUsed / (p.totalUnits || 1)) || 3785,
-        pricePerMl: p.pricePerMl,
-        peakMonths: peakMonths.length > 0 ? peakMonths : [],
-      }]
+      action: "Increase",
+      volumePerUnit: volumePerUnit,
+      pricePerMl: pricePerMl,
+      items: monthRecommendations,
+      defaultStock: monthRecommendations[0]?.recommendedStock || 60,
+      defaultMonth: monthRecommendations[0]?.month || "No data",
     });
   });
 
+  // Process Maintain products
   maintainStock.forEach(p => {
-    const peakMonths = findPeakMonths(p.product, p.brand);
-    console.log(`Maintain stock - ${p.brand} ${p.product}:`, peakMonths);
+    const monthDetails = getProductMonthDetails(p.product, p.brand);
+    const volumePerUnit = Math.round(p.totalVolumeUsed / (p.totalUnits || 1)) || 3785;
+    const pricePerMl = p.pricePerMl || 0;
+    
+    const monthRecommendations = monthDetails.map(month => {
+      const recommendedStock = calculateStockForMonth(month.units, "Maintain");
+      return {
+        month: month.label,
+        peakSales: month.sales,
+        peakUnits: month.units,
+        recommendedStock: recommendedStock,
+      };
+    });
+    
+    if (monthRecommendations.length === 0) {
+      const avgMonthlyUnits = p.totalUnits / (p.months || 1);
+      monthRecommendations.push({
+        month: "No data",
+        peakSales: 0,
+        peakUnits: 0,
+        recommendedStock: Math.round(Math.max(avgMonthlyUnits * 2, 20) / 5) * 5,
+      });
+    }
+    
     result.push({
       category: `${p.brand} ${p.product}`,
-      items: [{
-        name: p.product,
-        recommendedStock: Math.round(p.totalUnits / (p.months || 1) * 2) || 30,
-        action: "Maintain",
-        volumePerUnit: Math.round(p.totalVolumeUsed / (p.totalUnits || 1)) || 3785,
-        pricePerMl: p.pricePerMl,
-        peakMonths: peakMonths.length > 0 ? peakMonths : [],
-      }]
+      action: "Maintain",
+      volumePerUnit: volumePerUnit,
+      pricePerMl: pricePerMl,
+      items: monthRecommendations,
+      defaultStock: monthRecommendations[0]?.recommendedStock || 30,
+      defaultMonth: monthRecommendations[0]?.month || "No data",
     });
   });
 
-  console.log("Final stockRecommendations:", result);
   return result;
 }, [computedProductDetails, originalData]);
+
+  // Initialize stock states when recommendations change
+  useEffect(() => {
+    if (stockRecommendations.length > 0) {
+      const initialStates: Record<string, number> = {};
+      const initialMonths: Record<string, string> = {};
+      stockRecommendations.forEach((category: any) => {
+        const key = category.category;
+        initialStates[key] = category.defaultStock || 60;
+        initialMonths[key] = category.defaultMonth || "No data";
+      });
+      setProductStockStates(initialStates);
+      setProductSelectedMonths(initialMonths);
+    }
+  }, [stockRecommendations]);
+
+  // FIXED: Function to update stock for a product
+  const updateProductStock = (productKey: string, stock: number, month?: string) => {
+    setProductStockStates(prev => ({
+      ...prev,
+      [productKey]: stock
+    }));
+    if (month) {
+      setProductSelectedMonths(prev => ({
+        ...prev,
+        [productKey]: month
+      }));
+    }
+  };
 
   const bestSellingProducts = useMemo(() => {
     if (!computedProductDetails.length) return [];
@@ -625,46 +746,47 @@ export default function SeasonalForecasting() {
     });
   }, [computedProductDetails]);
 
-const slowMovingProducts = useMemo(() => {
-  if (!computedProductDetails.length) return [];
+  const slowMovingProducts = useMemo(() => {
+    if (!computedProductDetails.length) return [];
 
-  const sortedByUnits = [...computedProductDetails].sort((a, b) => b.totalUnits - a.totalUnits);
-  
-  const avgUnits = computedProductDetails.reduce((sum, p) => sum + p.totalUnits, 0) / computedProductDetails.length;
-  
-  const slowProducts = sortedByUnits.filter(p => {
-    const hasLowUnits = p.totalUnits < 50;
-    const isBelowHalfAverage = p.totalUnits < avgUnits * 0.5;
-    return hasLowUnits && isBelowHalfAverage;
-  }).slice(0, 5); // Changed from 3 to 5
-  
-  if (slowProducts.length === 0) {
-    return [];
-  }
-  
-  return slowProducts.map(p => {
-    let recommendation = '';
+    const sortedByUnits = [...computedProductDetails].sort((a, b) => b.totalUnits - a.totalUnits);
     
-    if (p.totalUnits < 20) {
-      recommendation = 'Consider bundling or aggressive discounts';
-    } else if (p.totalUnits < 35) {
-      recommendation = 'Bundle with popular products or run promotions';
-    } else {
-      recommendation = 'Review pricing and positioning';
+    const avgUnits = computedProductDetails.reduce((sum, p) => sum + p.totalUnits, 0) / computedProductDetails.length;
+    
+    const slowProducts = sortedByUnits.filter(p => {
+      const hasLowUnits = p.totalUnits < 50;
+      const isBelowHalfAverage = p.totalUnits < avgUnits * 0.5;
+      return hasLowUnits && isBelowHalfAverage;
+    }).slice(0, 5);
+    
+    if (slowProducts.length === 0) {
+      return [];
     }
     
-    return {
-      name: `${p.brand} ${p.product}`,
-      unitsSold: p.totalUnits,
-      dryUnits: p.dryUnits || 0,
-      rainyUnits: p.rainyUnits || 0,
-      recommendation: recommendation,
-      totalRevenue: Math.round(p.totalSales),
-      volumeUsed: Math.round(p.totalVolumeUsed),
-      pricePerMl: p.pricePerMl,
-    };
-  });
-}, [computedProductDetails]);
+    return slowProducts.map(p => {
+      let recommendation = '';
+      
+      if (p.totalUnits < 20) {
+        recommendation = 'Consider bundling or aggressive discounts';
+      } else if (p.totalUnits < 35) {
+        recommendation = 'Bundle with popular products or run promotions';
+      } else {
+        recommendation = 'Review pricing and positioning';
+      }
+      
+      return {
+        name: `${p.brand} ${p.product}`,
+        unitsSold: p.totalUnits,
+        dryUnits: p.dryUnits || 0,
+        rainyUnits: p.rainyUnits || 0,
+        recommendation: recommendation,
+        totalRevenue: Math.round(p.totalSales),
+        volumeUsed: Math.round(p.totalVolumeUsed),
+        pricePerMl: p.pricePerMl,
+      };
+    });
+  }, [computedProductDetails]);
+
   useEffect(() => {
     const loadData = async () => {
       if (!userEmail) {
@@ -2427,153 +2549,152 @@ Return ONLY valid JSON with this structure:
             </Card>
           )}
 
-         {isDataSaved && stockRecommendations.length > 0 && (
-  <Card className="shadow-lg border-0 overflow-visible">
-    <div className="bg-gradient-to-r from-green-900 to-emerald-600 px-6 py-4">
-      <div className="flex items-center gap-3">
-        <Lightbulb className="w-5 h-5 text-white" />
-        <div>
-          <h3 className="text-lg font-bold text-white">Product Stock Recommendations</h3>
-          <p className="text-xs text-green-100 mt-0.5">
-            Based on peak sales months from your data
-          </p>
-        </div>
-      </div>
-    </div>
-
-    <CardContent className="overflow-visible p-4">
-      {(() => {
-        const groupedByAction = stockRecommendations.reduce((acc: any, category: any) => {
-          const action = category.items?.[0]?.action || "Maintain";
-          if (!acc[action]) acc[action] = [];
-          acc[action].push(category);
-          return acc;
-        }, {});
-
-        const actionOrder = ["Increase", "Maintain"];
-
-        return (
-          <div className="space-y-6">
-            {actionOrder
-              .filter((action) => groupedByAction[action])
-              .map((action) => {
-                const isIncrease = action === "Increase";
-                const borderColor = isIncrease ? "border-orange-500" : "border-green-900";
-                const bgColor = isIncrease ? "bg-orange-50/30" : "bg-green-50/30";
-                const headerBg = isIncrease ? "bg-orange-50/50" : "bg-green-50/50";
-                const headerText = isIncrease ? "text-orange-700" : "text-green-700";
-                const rowHover = isIncrease ? "hover:bg-orange-50/30" : "hover:bg-green-50/30";
-                const productText = isIncrease ? "text-orange-800" : "text-gray-800";
-                const recommendedText = isIncrease ? "text-orange-600" : "text-green-600";
-                const actionBadge = isIncrease
-                  ? "bg-orange-100 text-orange-700"
-                  : "bg-green-100 text-green-700";
-                const peakBadge = isIncrease
-                  ? "bg-orange-200 text-orange-800"
-                  : "bg-green-200 text-green-800";
-                
-                const actionLabel = isIncrease ? "Increase before peak month" : "Maintain current stock";
-
-                return (
-                  <div
-                    key={action}
-                    className={`border-1 rounded-lg ${borderColor} ${bgColor} rounded-r-lg p-4 overflow-visible`}
-                  >
-                    <div className="flex items-center gap-3 mb-4 pb-3 border-b border-gray-200">
-                      <h4 className="text-md font-semibold text-gray-700">
-                        {action} Stock
-                      </h4>
-                    </div>
-
-                    <div className="overflow-x-auto overflow-visible">
-                      <table className="w-full text-sm table-fixed overflow-visible">
-                        <thead>
-                          <tr className={headerBg}>
-                            <th className={`text-left px-3 py-2 text-xs font-semibold ${headerText} w-[40%]`}>
-                              Product
-                            </th>
-                            <th className={`text-center px-3 py-2 text-xs font-semibold ${headerText} w-[20%]`}>
-                              Recommended
-                            </th>
-                            <th className={`text-center px-3 py-2 text-xs font-semibold ${headerText} w-[20%]`}>
-                              Peak Month
-                            </th>
-                            <th className={`text-left px-3 py-2 text-xs font-semibold ${headerText} w-[20%]`}>
-                              Action
-                            </th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {groupedByAction[action].map((category: any, idx: number) =>
-                            category.items?.map((item: any, i: number) => {
-                              // Create peak month data - filter out "No data"
-                              let allMonths: string[] = [];
-                              
-                              if (item.peakMonths && Array.isArray(item.peakMonths)) {
-                                // Filter out "No data" strings
-                                allMonths = item.peakMonths.filter((m: string) => m !== "No data" && m !== "");
-                              }
-                              
-                              // Log to verify data
-                              console.log(`Item ${idx}-${i}:`, {
-                                category: category.category,
-                                allMonths: allMonths,
-                                raw: item.peakMonths
-                              });
-                              
-                              // Create a unique key for this dropdown
-                              const dropdownKey = `dropdown-${action}-${idx}-${i}`;
-                              
-                              return (
-                                <tr
-                                  key={`${idx}-${i}`}
-                                  className={`border-b border-gray-100 ${rowHover} transition-colors`}
-                                >
-                                  <td className="px-3 py-3">
-                                    <span className={`font-medium text-sm ${productText}`}>
-                                      {category.category || item.name}
-                                    </span>
-                                  </td>
-                                  
-                                  <td className={`text-center px-3 py-3 text-sm font-bold ${recommendedText}`}>
-                                    {item.recommendedStock} units
-                                  </td>
-                                  
-                                  <td className="text-center px-3 py-3">
-                                    {allMonths.length > 0 ? (
-                                      <MonthDropdown 
-                                        key={dropdownKey}
-                                        months={allMonths} 
-                                        badgeClass={peakBadge}
-                                      />
-                                    ) : (
-                                      <span className="text-xs text-gray-400">No data</span>
-                                    )}
-                                  </td>
-                                  
-                                  <td className="px-3 py-3">
-                                    <span
-                                      className={`px-2 py-1 rounded-full text-xs font-medium ${actionBadge} whitespace-nowrap`}
-                                    >
-                                      {actionLabel}
-                                    </span>
-                                  </td>
-                                </tr>
-                              );
-                            })
-                          )}
-                        </tbody>
-                      </table>
-                    </div>
+          {/* FIXED: Stock Recommendations with working dropdown */}
+          {isDataSaved && stockRecommendations.length > 0 && (
+            <Card className="shadow-lg border-0 overflow-visible">
+              <div className="rounded-t-xl bg-gradient-to-r from-green-900 to-emerald-600 px-6 py-4">
+                <div className="flex items-center gap-3">
+                  <Lightbulb className="w-5 h-5 text-white" />
+                  <div>
+                    <h3 className="text-lg font-bold text-white">Product Stock Recommendations</h3>
+                   
                   </div>
-                );
-              })} 
-          </div>
-        );
-      })()}
-    </CardContent>
-  </Card>
-)}
+                </div>
+              </div>
+
+              <CardContent className="overflow-visible p-4">
+                {(() => {
+                  const groupedByAction = stockRecommendations.reduce((acc: any, category: any) => {
+                    const action = category.action || "Maintain";
+                    if (!acc[action]) acc[action] = [];
+                    acc[action].push(category);
+                    return acc;
+                  }, {});
+
+                  const actionOrder = ["Increase", "Maintain"];
+
+                  return (
+                    <div className="space-y-6">
+                      {actionOrder
+                        .filter((action) => groupedByAction[action])
+                        .map((action) => {
+                          const isIncrease = action === "Increase";
+                          const borderColor = isIncrease ? "border-orange-500" : "border-green-900";
+                          const bgColor = isIncrease ? "bg-orange-50/30" : "bg-green-50/30";
+                          const headerBg = isIncrease ? "bg-orange-50/50" : "bg-green-50/50";
+                          const headerText = isIncrease ? "text-orange-700" : "text-green-700";
+                          const rowHover = isIncrease ? "hover:bg-orange-50/30" : "hover:bg-green-50/30";
+                          const productText = isIncrease ? "text-orange-800" : "text-gray-800";
+                          const recommendedText = isIncrease ? "text-orange-600" : "text-green-600";
+                          const actionBadge = isIncrease
+                            ? "bg-orange-100 text-orange-700"
+                            : "bg-green-100 text-green-700";
+                          const peakBadge = isIncrease
+                            ? "bg-orange-200 text-orange-800"
+                            : "bg-green-200 text-green-800";
+                          
+                          const actionLabel = isIncrease ? "Increase before peak month" : "Maintain current stock";
+
+                          return (
+                            <div
+                              key={action}
+                              className={`border-2 rounded-lg ${borderColor} ${bgColor} rounded-r-lg p-4 overflow-visible`}
+                            >
+                              <div className="flex items-center gap-3 mb-4 pb-3 border-b border-gray-200">
+                                <h4 className="text-md font-semibold text-gray-700">
+                                  {action} Stock
+                                </h4>
+                              </div>
+
+                              <div className="overflow-x-auto overflow-visible">
+                                <table className="w-full text-sm table-fixed overflow-visible">
+                                  <thead>
+                                    <tr className={headerBg}>
+                                      <th className={`text-left px-3 py-2 text-xs font-semibold ${headerText} w-[40%]`}>
+                                        Product
+                                      </th>
+                                      <th className={`text-center px-3 py-2 text-xs font-semibold ${headerText} w-[20%]`}>
+                                        Recommended
+                                      </th>
+                                      <th className={`text-center px-3 py-2 text-xs font-semibold ${headerText} w-[20%]`}>
+                                        Peak Month
+                                      </th>
+                                      <th className={`text-left px-3 py-2 text-xs font-semibold ${headerText} w-[20%]`}>
+                                        Action
+                                      </th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+
+{groupedByAction[action].map((category: any, idx: number) => {
+  const categoryKey = category.category;
+  const currentStock = productStockStates[categoryKey] !== undefined 
+    ? productStockStates[categoryKey] 
+    : category.defaultStock || 60;
+  
+  const monthLabels = category.items.map((item: any) => item.month);
+  
+  // Create recommendations map with month-specific stock values
+  const recommendationsMap = category.items.map((item: any) => ({
+    month: item.month,
+    recommendedStock: item.recommendedStock, // This should be different per month
+    peakUnits: item.peakUnits,
+    peakSales: item.peakSales,
+  }));
+  
+  const updateStock = (stock: number) => {
+    setProductStockStates(prev => ({
+      ...prev,
+      [categoryKey]: stock
+    }));
+  };
+  
+  return (
+    <tr key={idx} className={`border-b border-gray-100 ${rowHover} transition-colors`}>
+      <td className="px-3 py-3">
+        <span className={`font-medium text-sm ${productText}`}>
+          {category.category}
+        </span>
+      </td>
+      
+      <td className={`text-center px-3 py-3 text-sm font-bold ${recommendedText}`}>
+        {currentStock} units
+      </td>
+      
+      <td className="text-center px-3 py-3">
+        {monthLabels.length > 0 && monthLabels[0] !== "No data" ? (
+          <MonthDropdown 
+            months={monthLabels} 
+            badgeClass={peakBadge}
+            recommendations={recommendationsMap}
+            currentStock={currentStock}
+            setCurrentStock={updateStock}
+          />
+        ) : (
+          <span className="text-xs text-gray-400">No data</span>
+        )}
+      </td>
+      
+      <td className="px-3 py-3">
+        <span className={`px-2 py-1 rounded-full text-xs font-medium ${actionBadge} whitespace-nowrap`}>
+          {actionLabel}
+        </span>
+      </td>
+    </tr>
+  );
+})}
+                                  </tbody>
+                                </table>
+                              </div>
+                            </div>
+                          );
+                        })}
+                    </div>
+                  );
+                })()}
+              </CardContent>
+            </Card>
+          )}
 
           {(bestSellingProducts.length > 0 || slowMovingProducts.length > 0) && (
             <section>
@@ -2617,50 +2738,46 @@ Return ONLY valid JSON with this structure:
                                 </div>
                               </div>
                             </div>
-                            
                           </div>
                         ))}
                       </CardContent>
                     </Card>
                   )}
 
-               {slowMovingProducts.length > 0 && (
-  <Card className=" border-1 border-orange-300 shadow-lg hover:shadow-xl transition-all duration-300">
-    <CardHeader className="bg-gradient-to-r from-orange-700 to-amber-600 rounded-t-lg border-b border-orange-100 !p-2">
-      <div className="flex items-center gap-2">
-        <div className="w-5 h-5 ml-3 mt-1 rounded-lg bg-orange-500 flex items-center justify-center flex-shrink-0">
-          <TrendingDown className="size-3 text-white" />
-        </div>
-        <CardTitle className="text-sm mt-1 font-semibold text-white">
-          Slow-Moving Products
-        </CardTitle>
-      </div>
-    </CardHeader>
-    <CardContent className="space-y-3">
-      {slowMovingProducts.map((product: any, index: number) => (
-        <div key={index} className="border rounded-lg p-3 hover:shadow-md transition">
-          <div className="flex justify-between items-start">
-            <div>
-              <h4 className="font-semibold text-gray-800 text-sm">{product.name}</h4>
-              <p className="text-xs text-gray-500">
-                {product.unitsSold?.toLocaleString() || 0} units sold
-              </p>
-            </div>
-            <div className="text-right">
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-green-600"> Dry: {product.dryUnits || 0}</span>
-                <span className="text-xs text-blue-600"> Rainy: {product.rainyUnits || 0}</span>
-              </div>
-            </div>
-          </div>
-          <div>
-            
-          </div>
-        </div>
-      ))}
-    </CardContent>
-  </Card>
-)}
+                  {slowMovingProducts.length > 0 && (
+                    <Card className=" border-1 border-orange-300 shadow-lg hover:shadow-xl transition-all duration-300">
+                      <CardHeader className="bg-gradient-to-r from-orange-700 to-amber-600 rounded-t-lg border-b border-orange-100 !p-2">
+                        <div className="flex items-center gap-2">
+                          <div className="w-5 h-5 ml-3 mt-1 rounded-lg bg-orange-500 flex items-center justify-center flex-shrink-0">
+                            <TrendingDown className="size-3 text-white" />
+                          </div>
+                          <CardTitle className="text-sm mt-1 font-semibold text-white">
+                            Slow-Moving Products
+                          </CardTitle>
+                        </div>
+                      </CardHeader>
+                      <CardContent className="space-y-3">
+                        {slowMovingProducts.map((product: any, index: number) => (
+                          <div key={index} className="border rounded-lg p-3 hover:shadow-md transition">
+                            <div className="flex justify-between items-start">
+                              <div>
+                                <h4 className="font-semibold text-gray-800 text-sm">{product.name}</h4>
+                                <p className="text-xs text-gray-500">
+                                  {product.unitsSold?.toLocaleString() || 0} units sold
+                                </p>
+                              </div>
+                              <div className="text-right">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-xs text-green-600"> Dry: {product.dryUnits || 0}</span>
+                                  <span className="text-xs text-blue-600"> Rainy: {product.rainyUnits || 0}</span>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </CardContent>
+                    </Card>
+                  )}
                 </div>
               </div>
             </section>
