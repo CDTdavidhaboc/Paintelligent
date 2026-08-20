@@ -188,117 +188,6 @@ const REQUIRED_HEADERS = [
   "Season",
 ];
 
-const PRODUCT_VOLUMES: Record<string, number> = {
-  "N-1540 DC Flat White GAL": 3785,
-  "N-1540 DC Flat White TIN": 3785,
-  "N-1541 DC Gloss White GAL": 3785,
-  "N-1541 DC Gloss White TIN": 3785,
-  "B-800 FWE Flatwall White GAL": 3785,
-  "B-800 FWE Flatwall White TIN": 3785,
-  "B-710 Permacoat Gloss White GAL": 3785,
-  "B-710 Permacoat Gloss White TIN": 3785,
-  "B-715 Permacoat Semi-Gloss White GAL": 3785,
-  "B-715 Permacoat Semi-Gloss White TIN": 3785,
-  "B-701 Permacoat Flat White GAL": 3785,
-  "B-701 Permacoat Flat White TIN": 3785,
-  "B-600 QDE White GAL": 3785,
-  "B-600 QDE White TIN": 3785,
-  "B-690 QDE Black GAL": 3785,
-  "B-691 QDE Flat Black GAL": 3785,
-  "B-680 QDE Choco Brown GAL": 3785,
-  "B-683 QDE Caramel Brown GAL": 3785,
-  "B-2570 RG Spanish Red GAL": 3785,
-  "B-2550 RG Baguio Green GAL": 3785,
-  "B-7760 Plexibond™ GAL": 3785,
-  "B-7760 Plexibond™ TIN": 3785,
-  "B-1250 Clear Gloss Lacquer GAL": 3785,
-  "B-1254 Lacquer Sanding Sealer GAL": 3785,
-  "B-1700 Acrytex Clear Coat GAL": 3785,
-  "B-58 OBE Spar Varnish GAL": 3785,
-  "B-2705 Oil Wood Stain Maple GAL": 3785,
-  "B-2707 Oil Wood Stain Mahogany GAL": 3785,
-  "B-700 SPC Clear Acrylic Emulsion GAL": 3785,
-  "B-1705 Acrytex Primer GAL": 3785,
-  "B-305 Lacquer Primer Surfacer GAL": 3785,
-  "B-311 OBE Plasolux Glazing Putty GAL": 3785,
-  "B-306 Lacquer Spot Putty GAL": 3785,
-  "CS-88 Solo Flat White Latex GAL": 3785,
-  "CS-88 Solo Flat White Latex TIN": 3785,
-  "CS-99 Solo Gloss White Latex GAL": 3785,
-  "CS-99 Solo Gloss White Latex TIN": 3785,
-  "DV-300 Flat Wall Enamel White GAL": 3785,
-  "DV-400 QDE White GAL": 3785,
-  "DR-6 Durax White GAL": 3785,
-  "DR-5 Durax Black GAL": 3785,
-  "DR-1 Durax International Red GAL": 3785,
-  "DR-2 Durax Lemon Yellow GAL": 3785,
-  "DR-3 Durax Pthalo Blue GAL": 3785,
-  "E-5000 WB EE White GAL": 3785,
-  "E-5100 WB EE Black GAL": 3785,
-  "E-6000 WB EP White GAL": 3785,
-  "E-6100 WB EP Black GAL": 3785,
-  "E-6200 WB EP Gray GAL": 3785,
-  "Domino QDE White GAL": 3785,
-  "Domino QDE Black": 3785,
-  "Domino QDE International Red GAL": 3785,
-  "Roofshield DV-50-13 Light Spanish Red GAL": 3785,
-  "Roofshield DV-50-91 Russet Brown GAL": 3785,
-  "Sun & Rain SR-660 Black GAL": 3785,
-  "Sun & Rain SR-933 Choco Brown GAL": 3785,
-  
-  "B-1250 Clear Gloss Lacquer LT": 1000,
-  "B-1254 Lacquer Sanding Sealer LT": 1000,
-  "B-1700 Acrytex Clear Coat LT": 1000,
-  "B-58 OBE Spar Varnish LT": 1000,
-  "B-2705 Oil Wood Stain Maple LT": 1000,
-  "B-2707 Oil Wood Stain Mahogany LT": 1000,
-  "B-305 Lacquer Primer Surfacer LT": 1000,
-  "B-306 Lacquer Spot Putty LT": 1000,
-  "B-311 OBE Plasolux Glazing Putty LT": 1000,
-  "Acry-Color AC-60 Black LT": 1000,
-  "Acry-Color AC-20 Thalo Blue LT": 1000,
-  "Acry-Color AC-30 Thalo Green LT": 1000,
-  "Acry-Color AC-40 Hansa Yellow LT": 1000,
-  "K-222 Top Coat Rapid Cure K92 LT": 1000,
-  "K-111 K92 Clearcoat Matte": 1000,
-  "WU-001 2K Clearcoat LT": 1000,
-  "WU-002 Mirror Finish 2K Clearcoat LT": 1000,
-  "R-25 Acrylic Thinner LT": 1000,
-  "UT-20 Urethane Thinner LT": 1000,
-  "K-650 K92 Thinner LT": 1000,
-  "FPU-500 Flat Black LT": 1000,
-  "YAKOO 328 Beige Putty w/ Hardener LT": 1000,
-  "YAKOO 380 Putty w/ Hardener LT": 1000,
-  
-  "Acry-Color AC-60 Black 1/4 Liter": 250,
-  "Acry-Color AC-20 Thalo Blue 1/4 Liter": 250,
-  "Acry-Color AC-30 Thalo Green 1/4 Liter": 250,
-  "Acry-Color AC-10 Toluidine Red 1/4 Liter": 250,
-  "Acry-Color AC-91 Burnt Sienna 1/4 Liter": 250,
-  "Acry-Color AC-90 Raw Sienna 1/4 Liter": 250,
-  "Acry-Color AC-92 Raw Umbere 1/4 Liter": 250,
-  "Acry-Color AC-12 Permanent Red 1/4 Liter": 250,
-  "Acry-Color AC-40 Hansa Yellow 1/4 Liter": 250,
-  "Oil Tinting Color TC-60 Lamp Black 1/4 Liter": 250,
-  "Oil Tinting Color TC-93 Burnt Umber 1/4 Liter": 250,
-  "Oil Tinting Color TC-11 Venetian Red 1/4 Liter": 250,
-  "Oil Tinting Color TC-90 Raw Sienna 1/4 Liter": 250,
-  "Oil Tinting Color TC-91 Burnt Sienna 1/4 Liter": 250,
-  "Oil Tinting Color TC-21 Thalo Blue 1/4 Liter": 250,
-  "Oil Tinting Color TC-33 Thanlo Green 1/4 Liter": 250,
-  "Oil Tinting Color TC-10 Bulletin Red 1/4 Liter": 250,
-  "Oil Tinting Color TC-44 Hansa Yellow 1/4 Liter": 250,
-};
-
-const getProductVolume = (productName: string): number => {
-  return PRODUCT_VOLUMES[productName] || 3785;
-};
-
-const calculateSubtotal = (fullPrice: number, usedVolume: number, fullVolume: number): number => {
-  if (fullVolume === 0) return fullPrice;
-  return (usedVolume / fullVolume) * fullPrice;
-};
-
 const showNotification = (
   message: string,
   type: "success" | "error" | "info" = "success"
@@ -346,6 +235,122 @@ const showNotification = (
   }, 3000);
 };
 
+import { createPortal } from 'react-dom';
+
+// Dropdown component for month selection - using Portal
+const MonthDropdown = ({ months, badgeClass }: { 
+  months: string[], 
+  badgeClass: string 
+}) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const [position, setPosition] = useState({ top: 0, left: 0 });
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  
+  // Filter out "No data" entries and get valid months
+  const validMonths = months.filter(m => m !== "No data" && m !== "");
+  const firstMonth = validMonths.length > 0 ? validMonths[0] : "No data";
+  
+  const updatePosition = () => {
+    if (buttonRef.current) {
+      const rect = buttonRef.current.getBoundingClientRect();
+      setPosition({
+        top: rect.bottom + 4,
+        left: rect.left + rect.width / 2,
+      });
+    }
+  };
+  
+  useEffect(() => {
+    if (isOpen) {
+      updatePosition();
+      window.addEventListener('scroll', updatePosition);
+      window.addEventListener('resize', updatePosition);
+      return () => {
+        window.removeEventListener('scroll', updatePosition);
+        window.removeEventListener('resize', updatePosition);
+      };
+    }
+  }, [isOpen]);
+  
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest('.month-dropdown-container')) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+  
+  if (validMonths.length === 0) {
+    return (
+      <div className="month-dropdown-container relative inline-block">
+        <span className="text-xs text-gray-400">No data</span>
+      </div>
+    );
+  }
+  
+  return (
+    <div className="month-dropdown-container relative inline-block">
+      <button
+        ref={buttonRef}
+        onClick={() => {
+          updatePosition();
+          setIsOpen(!isOpen);
+        }}
+        className={`${badgeClass} text-xs font-medium whitespace-nowrap px-2 py-1 rounded-full flex items-center gap-1 hover:opacity-80 transition cursor-pointer`}
+      >
+        {firstMonth}
+        <svg 
+          className={`w-3 h-3 inline-block transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} 
+          fill="none" 
+          stroke="currentColor" 
+          viewBox="0 0 24 24"
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
+      
+      {isOpen && createPortal(
+        <div 
+          className="fixed z-[99999] bg-white rounded-lg shadow-2xl border border-gray-200 py-1 max-h-56 overflow-y-auto"
+          style={{
+            top: position.top,
+            left: position.left,
+            transform: 'translateX(-50%)',
+            minWidth: '160px',
+            maxWidth: '220px',
+          }}
+        >
+          <div className="px-3 py-1.5 text-xs font-semibold text-gray-500 border-b border-gray-100 bg-gray-50 sticky top-0">
+            All Peak Months ({validMonths.length})
+          </div>
+          {validMonths.map((month: string, mi: number) => (
+            <div
+              key={mi}
+              className={`px-3 py-2 text-xs text-gray-700 hover:bg-gray-100 text-center cursor-default flex items-center justify-center gap-2 border-b border-gray-50 last:border-0 ${
+                mi === 0 ? 'bg-green-50 text-green-700 font-medium' : ''
+              }`}
+            >
+              
+              {mi === 0 ? `${month}` : month}
+            </div>
+          ))}
+          <div 
+            className="absolute -top-2 left-1/2 transform -translate-x-1/2"
+            style={{
+              borderLeft: '8px solid transparent',
+              borderRight: '8px solid transparent',
+              borderBottom: '8px solid white',
+            }}
+          />
+        </div>,
+        document.body
+      )}
+    </div>
+  );
+};
 export default function SeasonalForecasting() {
   const { userEmail } = useAuth();
   const [isLoading, setIsLoading] = useState(true);
@@ -515,98 +520,104 @@ export default function SeasonalForecasting() {
   }, [computedProductDetails]);
 
   const stockRecommendations = useMemo(() => {
-    if (!computedProductDetails.length) return [];
+  if (!computedProductDetails.length) return [];
 
-    const sortedByUnits = [...computedProductDetails].sort((a, b) => b.totalUnits - a.totalUnits);
-    const avgUnits = computedProductDetails.reduce((sum, p) => sum + p.totalUnits, 0) / computedProductDetails.length;
+  const sortedByUnits = [...computedProductDetails].sort((a, b) => b.totalUnits - a.totalUnits);
+  const avgUnits = computedProductDetails.reduce((sum, p) => sum + p.totalUnits, 0) / computedProductDetails.length;
 
-    const increaseStock = sortedByUnits
-      .filter(p => p.totalUnits > avgUnits * 1.1)
-      .slice(0, 3);
+  const increaseStock = sortedByUnits
+    .filter(p => p.totalUnits > avgUnits * 1.1)
+    .slice(0, 3);
 
-    const maintainStock = sortedByUnits
-      .filter(p => p.totalUnits >= avgUnits * 0.8 && p.totalUnits <= avgUnits * 1.1)
-      .slice(0, 3);
+  const maintainStock = sortedByUnits
+    .filter(p => p.totalUnits >= avgUnits * 0.8 && p.totalUnits <= avgUnits * 1.1)
+    .slice(0, 3);
 
-    const result: any[] = [];
+  const result: any[] = [];
 
-    increaseStock.forEach(p => {
-      result.push({
-        category: `${p.brand} ${p.product}`,
-        items: [{
-          name: p.product,
-          currentStock: Math.round(p.totalUnits / (p.months || 1) * 2) || 30,
-          recommendedStock: Math.round(p.totalUnits / (p.months || 1) * 4) || 60,
-          action: "Increase",
-          volumePerUnit: Math.round(p.totalVolumeUsed / (p.totalUnits || 1)) || 3785,
-          pricePerMl: p.pricePerMl,
-        }]
-      });
+  // Helper to find peak months for a product
+  const findPeakMonths = (productName: string, brand: string) => {
+    const productRecords = originalData.filter(
+      (r) => r.product === productName && r.brand === brand
+    );
+    
+    console.log(`Finding peak months for ${brand} ${productName}:`, productRecords.length, "records");
+    
+    if (productRecords.length === 0) return [];
+    
+    const monthlySales: Record<string, { sales: number; month: string; year: number; units: number }> = {};
+    
+    productRecords.forEach((record) => {
+      const monthKey = `${record.month}-${record.year}`;
+      if (!monthlySales[monthKey]) {
+        monthlySales[monthKey] = {
+          sales: 0,
+          month: record.month.substring(0, 3),
+          year: record.year,
+          units: 0
+        };
+      }
+      monthlySales[monthKey].sales += record.sales;
+      monthlySales[monthKey].units += record.unitsSold || 0;
     });
-
-    maintainStock.forEach(p => {
-      result.push({
-        category: `${p.brand} ${p.product}`,
-        items: [{
-          name: p.product,
-          currentStock: Math.round(p.totalUnits / (p.months || 1) * 2) || 30,
-          recommendedStock: Math.round(p.totalUnits / (p.months || 1) * 2) || 30,
-          action: "Maintain",
-          volumePerUnit: Math.round(p.totalVolumeUsed / (p.totalUnits || 1)) || 3785,
-          pricePerMl: p.pricePerMl,
-        }]
-      });
-    });
-
+    
+    const sortedMonths = Object.values(monthlySales)
+      .sort((a, b) => b.sales - a.sales);
+    
+    const result = sortedMonths.slice(0, 3).map(m => `${m.month} ${m.year}`);
+    console.log(`Peak months for ${brand} ${productName}:`, result);
     return result;
-  }, [computedProductDetails]);
+  };
+
+  increaseStock.forEach(p => {
+    const peakMonths = findPeakMonths(p.product, p.brand);
+    console.log(`Increase stock - ${p.brand} ${p.product}:`, peakMonths);
+    result.push({
+      category: `${p.brand} ${p.product}`,
+      items: [{
+        name: p.product,
+        recommendedStock: Math.round(p.totalUnits / (p.months || 1) * 4) || 60,
+        action: "Increase",
+        volumePerUnit: Math.round(p.totalVolumeUsed / (p.totalUnits || 1)) || 3785,
+        pricePerMl: p.pricePerMl,
+        peakMonths: peakMonths.length > 0 ? peakMonths : [],
+      }]
+    });
+  });
+
+  maintainStock.forEach(p => {
+    const peakMonths = findPeakMonths(p.product, p.brand);
+    console.log(`Maintain stock - ${p.brand} ${p.product}:`, peakMonths);
+    result.push({
+      category: `${p.brand} ${p.product}`,
+      items: [{
+        name: p.product,
+        recommendedStock: Math.round(p.totalUnits / (p.months || 1) * 2) || 30,
+        action: "Maintain",
+        volumePerUnit: Math.round(p.totalVolumeUsed / (p.totalUnits || 1)) || 3785,
+        pricePerMl: p.pricePerMl,
+        peakMonths: peakMonths.length > 0 ? peakMonths : [],
+      }]
+    });
+  });
+
+  console.log("Final stockRecommendations:", result);
+  return result;
+}, [computedProductDetails, originalData]);
 
   const bestSellingProducts = useMemo(() => {
     if (!computedProductDetails.length) return [];
 
     const sortedByUnits = [...computedProductDetails].sort((a, b) => b.totalUnits - a.totalUnits);
-    return sortedByUnits.slice(0, 5).map(p => ({
-      name: `${p.brand} ${p.product}`,
-      unitsSold: p.totalUnits,
-      growth: `${Math.round((p.drySales / (p.rainySales || 1) - 1) * 100) || 0}%`,
-      totalRevenue: Math.round(p.totalSales),
-      volumeUsed: Math.round(p.totalVolumeUsed),
-      pricePerMl: p.pricePerMl,
-    }));
-  }, [computedProductDetails]);
-
-  const slowMovingProducts = useMemo(() => {
-    if (!computedProductDetails.length) return [];
-
-    const sortedByUnits = [...computedProductDetails].sort((a, b) => b.totalUnits - a.totalUnits);
-    
-    const avgUnits = computedProductDetails.reduce((sum, p) => sum + p.totalUnits, 0) / computedProductDetails.length;
-    
-    const slowProducts = sortedByUnits.filter(p => {
-      const hasLowUnits = p.totalUnits < 50;
-      const isBelowHalfAverage = p.totalUnits < avgUnits * 0.5;
-      return hasLowUnits && isBelowHalfAverage;
-    }).slice(0, 3);
-    
-    if (slowProducts.length === 0) {
-      return [];
-    }
-    
-    return slowProducts.map(p => {
-      let recommendation = '';
-      
-      if (p.totalUnits < 20) {
-        recommendation = 'Consider bundling or aggressive discounts';
-      } else if (p.totalUnits < 35) {
-        recommendation = 'Bundle with popular products or run promotions';
-      } else {
-        recommendation = 'Review pricing and positioning';
-      }
+    return sortedByUnits.slice(0, 5).map(p => {
+      const dryAvg = p.dryMonths > 0 ? p.drySales / p.dryMonths : 0;
+      const rainyAvg = p.rainyMonths > 0 ? p.rainySales / p.rainyMonths : 0;
       
       return {
         name: `${p.brand} ${p.product}`,
         unitsSold: p.totalUnits,
-        recommendation: recommendation,
+        dryUnits: p.dryUnits,
+        rainyUnits: p.rainyUnits,
         totalRevenue: Math.round(p.totalSales),
         volumeUsed: Math.round(p.totalVolumeUsed),
         pricePerMl: p.pricePerMl,
@@ -614,6 +625,46 @@ export default function SeasonalForecasting() {
     });
   }, [computedProductDetails]);
 
+const slowMovingProducts = useMemo(() => {
+  if (!computedProductDetails.length) return [];
+
+  const sortedByUnits = [...computedProductDetails].sort((a, b) => b.totalUnits - a.totalUnits);
+  
+  const avgUnits = computedProductDetails.reduce((sum, p) => sum + p.totalUnits, 0) / computedProductDetails.length;
+  
+  const slowProducts = sortedByUnits.filter(p => {
+    const hasLowUnits = p.totalUnits < 50;
+    const isBelowHalfAverage = p.totalUnits < avgUnits * 0.5;
+    return hasLowUnits && isBelowHalfAverage;
+  }).slice(0, 5); // Changed from 3 to 5
+  
+  if (slowProducts.length === 0) {
+    return [];
+  }
+  
+  return slowProducts.map(p => {
+    let recommendation = '';
+    
+    if (p.totalUnits < 20) {
+      recommendation = 'Consider bundling or aggressive discounts';
+    } else if (p.totalUnits < 35) {
+      recommendation = 'Bundle with popular products or run promotions';
+    } else {
+      recommendation = 'Review pricing and positioning';
+    }
+    
+    return {
+      name: `${p.brand} ${p.product}`,
+      unitsSold: p.totalUnits,
+      dryUnits: p.dryUnits || 0,
+      rainyUnits: p.rainyUnits || 0,
+      recommendation: recommendation,
+      totalRevenue: Math.round(p.totalSales),
+      volumeUsed: Math.round(p.totalVolumeUsed),
+      pricePerMl: p.pricePerMl,
+    };
+  });
+}, [computedProductDetails]);
   useEffect(() => {
     const loadData = async () => {
       if (!userEmail) {
@@ -857,14 +908,10 @@ export default function SeasonalForecasting() {
         );
         const unitsSold = Number(row["Units Sold"] || row["unitsSold"] || 0);
 
-        const fullVolume = getProductVolume(product);
         const usedVolume = Number(row["Used Volume"] || row["Volume Used"] || row["Quantity Used"] || 0);
+        const fullVolume = Number(row["Full Volume"] || row["fullVolume"] || 0);
         
-        let subtotal = sales;
-        if (usedVolume > 0 && fullVolume > 0 && sales > 0) {
-          const pricePerMl = sales / fullVolume;
-          subtotal = pricePerMl * usedVolume;
-        }
+        const subtotal = sales;
 
         const seasonFromCSV = row.Season || row["Season"] || "";
         let season = seasonFromCSV;
@@ -883,8 +930,8 @@ export default function SeasonalForecasting() {
           product: product,
           brand: brand,
           unitsSold: unitsSold,
-          usedVolume: usedVolume > 0 ? usedVolume : fullVolume,
-          fullVolume: fullVolume,
+          usedVolume: usedVolume > 0 ? usedVolume : 0,
+          fullVolume: fullVolume > 0 ? fullVolume : 0,
           subtotal: subtotal,
         };
       });
@@ -1377,7 +1424,7 @@ Rainy Season: ₱${rainyTotal.toLocaleString()} (${rainyData.length} months, Avg
 FORECAST (3 months):
 ${calculatedForecast.map((f, i) => `${f.month}: ₱${f.sales.toLocaleString()} (${f.season})`).join('\n')}
 
-TASK: Generate 5 creative marketing strategies for each season (Dry and Rainy).
+TASK: Generate 5 creative marketing strategies for each season (Dry and Rainy). Use simple words and make sure it is attainable for a small paint center.
 
 Return ONLY valid JSON with this structure:
 {
@@ -1573,7 +1620,7 @@ Return ONLY valid JSON with this structure:
 
   if (isLoading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-[#f3f7f4] p-6">
+      <div className="flex min-h-screen items-center justify-center bg-[#f3f7f4]">
         <div className="rounded-2xl border border-emerald-100 bg-white px-10 py-8 text-center shadow-[0_18px_50px_rgba(20,83,45,0.08)]">
           <Loader2 className="mx-auto size-12 animate-spin text-[#1a4d2e]" />
           <p className="mt-4 text-sm font-medium text-slate-600">
@@ -1628,7 +1675,7 @@ Return ONLY valid JSON with this structure:
         }
       `}</style>
 
-      <header className="overflow-hidden rounded-2xl bg-[#174d32] px-5 py-5 text-white shadow-[0_18px_45px_rgba(23,77,50,0.18)] sm:px-7 sm:py-6">
+      <header className="overflow-hidden rounded-2xl bg-[#174d32] px-5 py-2 text-white shadow-[0_18px_45px_rgba(23,77,50,0.18)] sm:px-7 sm:py-6">
         <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-start gap-4">
             <div className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-white/12 ring-1 ring-white/15">
@@ -1915,7 +1962,7 @@ Return ONLY valid JSON with this structure:
               </CardContent>
             </Card>
 
-            <Card className="border border-green-200 border-l-4 border-l-green-900 bg-green-50/60 shadow-sm">
+            <Card className="border border-green-200 border-2 border-green-900 bg-green-50/60 shadow-sm">
               <CardContent className="py-6">
                 <div className="flex justify-between items-center">
                   <div>
@@ -1941,7 +1988,7 @@ Return ONLY valid JSON with this structure:
               </CardContent>
             </Card>
 
-            <Card className="border border-blue-200 border-l-4 border-l-blue-600 bg-blue-50/60 shadow-sm">
+            <Card className="border border-blue-200 border-2 border-blue-600 bg-blue-50/60 shadow-sm">
               <CardContent className="py-6">
                 <div className="flex justify-between items-center">
                   <div>
@@ -2169,7 +2216,7 @@ Return ONLY valid JSON with this structure:
 
           {computedSeasonalData && (
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <Card className="border border-blue-200 border-l-4 border-l-blue-600 bg-blue-50/50 shadow-sm">
+              <Card className="border border-blue-200 border-2 border-blue-600 bg-blue-50/50 shadow-sm">
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2 text-blue-800">
                     <CloudRain className="w-5 h-5" />
@@ -2201,7 +2248,7 @@ Return ONLY valid JSON with this structure:
                 </CardContent>
               </Card>
 
-              <Card className="border border-green-200 border-l-4 border-l-green-900 bg-green-50/50 shadow-sm">
+              <Card className="border border-green-200 border-2 border-green-900 bg-green-50/50 shadow-sm">
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2 text-green-700">
                     <Sun className="w-5 h-5" />
@@ -2380,234 +2427,241 @@ Return ONLY valid JSON with this structure:
             </Card>
           )}
 
-          {isDataSaved && stockRecommendations.length > 0 && (
-            <Card className="shadow-lg border-0 overflow-hidden">
-              <div className="bg-gradient-to-r from-green-900 to-emerald-600 px-6 py-4">
+         {isDataSaved && stockRecommendations.length > 0 && (
+  <Card className="shadow-lg border-0 overflow-visible">
+    <div className="bg-gradient-to-r from-green-900 to-emerald-600 px-6 py-4">
+      <div className="flex items-center gap-3">
+        <Lightbulb className="w-5 h-5 text-white" />
+        <div>
+          <h3 className="text-lg font-bold text-white">Product Stock Recommendations</h3>
+          <p className="text-xs text-green-100 mt-0.5">
+            Based on peak sales months from your data
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <CardContent className="overflow-visible p-4">
+      {(() => {
+        const groupedByAction = stockRecommendations.reduce((acc: any, category: any) => {
+          const action = category.items?.[0]?.action || "Maintain";
+          if (!acc[action]) acc[action] = [];
+          acc[action].push(category);
+          return acc;
+        }, {});
+
+        const actionOrder = ["Increase", "Maintain"];
+
+        return (
+          <div className="space-y-6">
+            {actionOrder
+              .filter((action) => groupedByAction[action])
+              .map((action) => {
+                const isIncrease = action === "Increase";
+                const borderColor = isIncrease ? "border-orange-500" : "border-green-900";
+                const bgColor = isIncrease ? "bg-orange-50/30" : "bg-green-50/30";
+                const headerBg = isIncrease ? "bg-orange-50/50" : "bg-green-50/50";
+                const headerText = isIncrease ? "text-orange-700" : "text-green-700";
+                const rowHover = isIncrease ? "hover:bg-orange-50/30" : "hover:bg-green-50/30";
+                const productText = isIncrease ? "text-orange-800" : "text-gray-800";
+                const recommendedText = isIncrease ? "text-orange-600" : "text-green-600";
+                const actionBadge = isIncrease
+                  ? "bg-orange-100 text-orange-700"
+                  : "bg-green-100 text-green-700";
+                const peakBadge = isIncrease
+                  ? "bg-orange-200 text-orange-800"
+                  : "bg-green-200 text-green-800";
+                
+                const actionLabel = isIncrease ? "Increase before peak month" : "Maintain current stock";
+
+                return (
+                  <div
+                    key={action}
+                    className={`border-1 rounded-lg ${borderColor} ${bgColor} rounded-r-lg p-4 overflow-visible`}
+                  >
+                    <div className="flex items-center gap-3 mb-4 pb-3 border-b border-gray-200">
+                      <h4 className="text-md font-semibold text-gray-700">
+                        {action} Stock
+                      </h4>
+                    </div>
+
+                    <div className="overflow-x-auto overflow-visible">
+                      <table className="w-full text-sm table-fixed overflow-visible">
+                        <thead>
+                          <tr className={headerBg}>
+                            <th className={`text-left px-3 py-2 text-xs font-semibold ${headerText} w-[40%]`}>
+                              Product
+                            </th>
+                            <th className={`text-center px-3 py-2 text-xs font-semibold ${headerText} w-[20%]`}>
+                              Recommended
+                            </th>
+                            <th className={`text-center px-3 py-2 text-xs font-semibold ${headerText} w-[20%]`}>
+                              Peak Month
+                            </th>
+                            <th className={`text-left px-3 py-2 text-xs font-semibold ${headerText} w-[20%]`}>
+                              Action
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {groupedByAction[action].map((category: any, idx: number) =>
+                            category.items?.map((item: any, i: number) => {
+                              // Create peak month data - filter out "No data"
+                              let allMonths: string[] = [];
+                              
+                              if (item.peakMonths && Array.isArray(item.peakMonths)) {
+                                // Filter out "No data" strings
+                                allMonths = item.peakMonths.filter((m: string) => m !== "No data" && m !== "");
+                              }
+                              
+                              // Log to verify data
+                              console.log(`Item ${idx}-${i}:`, {
+                                category: category.category,
+                                allMonths: allMonths,
+                                raw: item.peakMonths
+                              });
+                              
+                              // Create a unique key for this dropdown
+                              const dropdownKey = `dropdown-${action}-${idx}-${i}`;
+                              
+                              return (
+                                <tr
+                                  key={`${idx}-${i}`}
+                                  className={`border-b border-gray-100 ${rowHover} transition-colors`}
+                                >
+                                  <td className="px-3 py-3">
+                                    <span className={`font-medium text-sm ${productText}`}>
+                                      {category.category || item.name}
+                                    </span>
+                                  </td>
+                                  
+                                  <td className={`text-center px-3 py-3 text-sm font-bold ${recommendedText}`}>
+                                    {item.recommendedStock} units
+                                  </td>
+                                  
+                                  <td className="text-center px-3 py-3">
+                                    {allMonths.length > 0 ? (
+                                      <MonthDropdown 
+                                        key={dropdownKey}
+                                        months={allMonths} 
+                                        badgeClass={peakBadge}
+                                      />
+                                    ) : (
+                                      <span className="text-xs text-gray-400">No data</span>
+                                    )}
+                                  </td>
+                                  
+                                  <td className="px-3 py-3">
+                                    <span
+                                      className={`px-2 py-1 rounded-full text-xs font-medium ${actionBadge} whitespace-nowrap`}
+                                    >
+                                      {actionLabel}
+                                    </span>
+                                  </td>
+                                </tr>
+                              );
+                            })
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                );
+              })} 
+          </div>
+        );
+      })()}
+    </CardContent>
+  </Card>
+)}
+
+          {(bestSellingProducts.length > 0 || slowMovingProducts.length > 0) && (
+            <section>
+              <div className="bg-gradient-to-r from-green-900 to-emerald-600 rounded-t-2xl px-6 py-4">
                 <div className="flex items-center gap-3">
-                  <Lightbulb className="w-5 h-5 text-white" />
+                  <Target className="size-5 text-white" />
                   <div>
-                    <h3 className="text-lg font-bold text-white">Product Stock Recommendations</h3>
+                    <h3 className="text-lg font-bold text-white">Product Performance</h3>
                   </div>
                 </div>
               </div>
-
-              <CardContent>
-                {(() => {
-                  const groupedByAction = stockRecommendations.reduce((acc: any, category: any) => {
-                    const action = category.items?.[0]?.action || "Maintain";
-                    if (!acc[action]) acc[action] = [];
-                    acc[action].push(category);
-                    return acc;
-                  }, {});
-
-                  const actionOrder = ["Increase", "Maintain"];
-
-                  return (
-                    <div className="space-y-6">
-                      {actionOrder
-                        .filter((action) => groupedByAction[action])
-                        .map((action) => {
-                          const isIncrease = action === "Increase";
-                          const borderColor = isIncrease ? "border-orange-500" : "border-green-900";
-                          const bgColor = isIncrease ? "bg-orange-50/30" : "bg-green-50/30";
-                          const dotColor = isIncrease ? "bg-orange-500" : "bg-[#174d32]";
-                          const badgeColor = isIncrease
-                            ? "bg-orange-100 text-orange-700"
-                            : "bg-green-100 text-green-700";
-                          const headerBg = isIncrease ? "bg-orange-50/50" : "bg-green-50/50";
-                          const headerText = isIncrease ? "text-orange-700" : "text-green-700";
-                          const rowHover = isIncrease ? "hover:bg-orange-50/30" : "hover:bg-green-50/30";
-                          const productText = isIncrease ? "text-orange-800" : "text-gray-800";
-                          const currentText = isIncrease ? "text-orange-700" : "text-gray-700";
-                          const recommendedText = isIncrease ? "text-orange-600" : "text-green-600";
-                          const actionBadge = isIncrease
-                            ? "bg-orange-100 text-orange-700"
-                            : "bg-green-100 text-green-700";
-
-                          return (
-                            <div
-                              key={action}
-                              className={`border-l-4 ${borderColor} ${bgColor} rounded-r-lg p-4`}
-                            >
-                              <div className="flex items-center gap-3 mb-4 pb-3 border-b border-gray-200">
-                                <h4 className="text-md font-semibold text-gray-700">
-                                  {action} Stock
-                                </h4>
-                              </div>
-
-                              <div className="overflow-x-auto">
-                                <table className="w-full text-sm">
-                                  <thead>
-                                    <tr className={headerBg}>
-                                      <th className={`text-left px-4 py-2 text-xs font-semibold ${headerText}`}>
-                                        Product
-                                      </th>
-                                      <th className={`text-center px-4 py-2 text-xs font-semibold ${headerText}`}>
-                                        Current
-                                      </th>
-                                      <th className={`text-center px-4 py-2 text-xs font-semibold ${headerText}`}>
-                                        Recommended
-                                      </th>
-                                      <th className={`text-left px-4 py-2 text-xs font-semibold ${headerText}`}>
-                                        Action
-                                      </th>
-                                    </tr>
-                                  </thead>
-                                  <tbody>
-                                    {groupedByAction[action].map((category: any, idx: number) =>
-                                      category.items?.map((item: any, i: number) => (
-                                        <tr
-                                          key={`${idx}-${i}`}
-                                          className={`border-b border-gray-100 ${rowHover} transition-colors`}
-                                        >
-                                          <td className="px-4 py-3">
-                                            <span className={`font-medium text-sm ${productText}`}>
-                                              {category.category || item.name}
-                                            </span>
-                                          </td>
-                                          <td className={`text-center px-4 py-3 text-sm ${currentText}`}>
-                                            {item.currentStock}
-                                          </td>
-                                          <td className={`text-center px-4 py-3 text-sm font-bold ${recommendedText}`}>
-                                            {item.recommendedStock}
-                                          </td>
-                                          <td className="px-4 py-3">
-                                            <span
-                                              className={`px-2 py-1 rounded-full text-xs font-medium ${actionBadge}`}
-                                            >
-                                              {action}
-                                            </span>
-                                          </td>
-                                        </tr>
-                                      ))
-                                    )}
-                                  </tbody>
-                                </table>
-                              </div>
-                            </div>
-                          );
-                        })}
-
-                      <div className="mt-2 pt-3 border-t border-gray-200">
-                        <div className="flex flex-wrap items-center gap-4 text-xs text-gray-500">
-                          <span className="flex items-center gap-1.5">
-                            <span className="w-3 h-3 rounded-full bg-orange-500"></span>
-                            Increase Stock
-                          </span>
-                          <span className="flex items-center gap-1.5">
-                            <span className="w-3 h-3 rounded-full bg-[#174d32]"></span>
-                            Maintain Stock
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })()}
-              </CardContent>
-            </Card>
-          )}
-
-          {(bestSellingProducts.length > 0 || slowMovingProducts.length > 0) && (
-            <section className="space-y-4">
-              <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-xl bg-white flex items-center justify-center shadow-sm">
-                  <Target className="size-5 text-[#1a4d2e]" />
-                </div>
-                <div>
-                  <h2 className="text-xl font-bold text-gray-900">Product Performance</h2>
-                </div>
-              </div>
-              <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-                {bestSellingProducts.length > 0 && (
-                  <Card className="shadow-lg border-0 hover:shadow-xl transition-all duration-300">
-                    <CardHeader className="rounded-t-lg bg-gradient-to-r from-green-900 to-emerald-700 border-b border-green-900 !p-2">
-                      <div className="flex items-center gap-2">
-                        <div className="w-5 h-5 rounded-lg ml-3 mt-1 bg-green-800 flex items-center justify-center flex-shrink-0">
-                          <TrendingUp className="size-3 text-white" />
-                        </div>
-                        <CardTitle className="text-sm mt-1 font-semibold text-white">
-                          Best-Selling Products
-                        </CardTitle>
-                      </div>
-                    </CardHeader>
-                    <CardContent className="space-y-3">
-                      {bestSellingProducts.map((product: any, index: number) => (
-                        <div key={index} className="border rounded-lg p-3 hover:shadow-md transition">
-                          <div className="flex justify-between items-center">
-                            <div>
-                              <h4 className="font-semibold text-gray-800 text-sm">{product.name}</h4>
-                              <p className="text-xs text-gray-500">
-                                {product.unitsSold?.toLocaleString() || 0} units
-                              </p>
-                            </div>
-                            <Badge className="bg-green-100 text-green-700 text-xs">
-                              {product.growth || "N/A"}
-                            </Badge>
+              
+              <div className="bg-white rounded-b-2xl shadow-lg border border-t-0 border-gray-200 p-4">
+                <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+                  {bestSellingProducts.length > 0 && (
+                    <Card className="shadow-lg border-1 border-green-300 hover:shadow-xl transition-all duration-300">
+                      <CardHeader className="bg-gradient-to-r from-green-900 to-emerald-700 rounded-t-lg border-b border-green-900 !p-2">
+                        <div className="flex items-center gap-2">
+                          <div className="w-5 h-5 rounded-lg ml-3 mt-1 bg-green-800 flex items-center justify-center flex-shrink-0">
+                            <TrendingUp className="size-3 text-white" />
                           </div>
-                          <div className="w-full h-1.5 rounded-full bg-gray-200 overflow-hidden mt-2">
-                            <div
-                              className="h-full bg-green-600 rounded-full"
-                              style={{
-                                width: `${Math.min(
-                                  ((product.unitsSold || 0) /
-                                    Math.max(
-                                      ...bestSellingProducts.map(
-                                        (p: any) => p.unitsSold || 1
-                                      )
-                                    )) *
-                                    100,
-                                  100
-                                )}%`,
-                              }}
-                            />
-                          </div>
+                          <CardTitle className="text-sm mt-1 font-semibold text-white">
+                            Best-Selling Products
+                          </CardTitle>
                         </div>
-                      ))}
-                    </CardContent>
-                  </Card>
-                )}
-
-                {slowMovingProducts.length > 0 && (
-                  <Card className="shadow-lg border-0 hover:shadow-xl transition-all duration-300">
-                    <CardHeader className="rounded-t-lg bg-gradient-to-r from-orange-700 to-amber-600 border-b border-orange-100 !p-2">
-                      <div className="flex items-center gap-2">
-                        <div className="w-5 h-5 ml-3 mt-1 rounded-lg bg-orange-500 flex items-center justify-center flex-shrink-0">
-                          <TrendingDown className="size-3 text-white" />
-                        </div>
-                        <CardTitle className="text-sm mt-1 font-semibold text-white">
-                          Slow-Moving Products
-                        </CardTitle>
-                      </div>
-                    </CardHeader>
-                    <CardContent className="space-y-3">
-                      {slowMovingProducts.map((product: any, index: number) => (
-                        <div key={index} className="border rounded-lg p-3 hover:shadow-md transition">
-                          <div className="flex flex-col gap-2">
-                            <div className="flex items-start justify-between gap-2">
-                              <div className="flex-1 min-w-0">
-                                <h4 className="font-semibold text-gray-800 text-sm break-words">
-                                  {product.name}
-                                </h4>
-                                <p className="text-xs text-gray-500 mt-0.5">
-                                  {product.unitsSold?.toLocaleString() || 0} units sold
+                      </CardHeader>
+                      <CardContent className="space-y-3">
+                        {bestSellingProducts.map((product: any, index: number) => (
+                          <div key={index} className="border rounded-lg p-3 hover:shadow-md transition">
+                            <div className="flex justify-between items-start">
+                              <div>
+                                <h4 className="font-semibold text-gray-800 text-sm">{product.name}</h4>
+                                <p className="text-xs text-gray-500">
+                                  {product.unitsSold?.toLocaleString() || 0} units
                                 </p>
                               </div>
-                              <AlertCircle className="size-4 text-orange-500 flex-shrink-0 mt-0.5" />
+                              <div className="text-right">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-xs text-green-600"> Dry: {product.dryUnits || 0}</span>
+                                  <span className="text-xs text-blue-600"> Rainy: {product.rainyUnits || 0}</span>
+                                </div>
+                              </div>
                             </div>
-                            <div className="w-full">
-                              <Badge
-                                variant="secondary"
-                                className="bg-orange-100 text-orange-700 text-xs font-medium px-3 py-1.5 h-auto whitespace-normal break-words"
-                              >
-                                {product.recommendation || "Review needed"}
-                              </Badge>
-                            </div>
+                            
                           </div>
-                        </div>
-                      ))}
-                    </CardContent>
-                  </Card>
-                )}
+                        ))}
+                      </CardContent>
+                    </Card>
+                  )}
+
+               {slowMovingProducts.length > 0 && (
+  <Card className=" border-1 border-orange-300 shadow-lg hover:shadow-xl transition-all duration-300">
+    <CardHeader className="bg-gradient-to-r from-orange-700 to-amber-600 rounded-t-lg border-b border-orange-100 !p-2">
+      <div className="flex items-center gap-2">
+        <div className="w-5 h-5 ml-3 mt-1 rounded-lg bg-orange-500 flex items-center justify-center flex-shrink-0">
+          <TrendingDown className="size-3 text-white" />
+        </div>
+        <CardTitle className="text-sm mt-1 font-semibold text-white">
+          Slow-Moving Products
+        </CardTitle>
+      </div>
+    </CardHeader>
+    <CardContent className="space-y-3">
+      {slowMovingProducts.map((product: any, index: number) => (
+        <div key={index} className="border rounded-lg p-3 hover:shadow-md transition">
+          <div className="flex justify-between items-start">
+            <div>
+              <h4 className="font-semibold text-gray-800 text-sm">{product.name}</h4>
+              <p className="text-xs text-gray-500">
+                {product.unitsSold?.toLocaleString() || 0} units sold
+              </p>
+            </div>
+            <div className="text-right">
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-green-600"> Dry: {product.dryUnits || 0}</span>
+                <span className="text-xs text-blue-600"> Rainy: {product.rainyUnits || 0}</span>
+              </div>
+            </div>
+          </div>
+          <div>
+            
+          </div>
+        </div>
+      ))}
+    </CardContent>
+  </Card>
+)}
+                </div>
               </div>
             </section>
           )}
