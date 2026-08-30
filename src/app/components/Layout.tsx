@@ -21,7 +21,6 @@ import {
   Thermometer,
   Gauge,
   Eye,
-  Compass,
 } from "lucide-react";
 import logo from "@/assets/logo.png";
 
@@ -282,12 +281,12 @@ export default function Layout() {
                       <span className="text-green-300/80">{season.name}</span>
                     </span>
                     
-                    {/* Weather Information - Desktop with Tooltip at Bottom */}
+                    {/* Weather Information - Only shows temperature with hover tooltip */}
                     {weather && !weatherLoading && !weatherError && (
                       <>
                         <span className="w-px h-3 bg-green-500/50 mx-1"></span>
                         
-                        {/* Weather Tooltip Container */}
+                        {/* Weather Tooltip Container - Only shows temperature */}
                         <div className="weather-tooltip-container relative inline-block">
                           <span 
                             className="flex items-center gap-1 text-green-300/80 cursor-help hover:text-green-200 transition-colors"
@@ -301,7 +300,7 @@ export default function Layout() {
                             </span>
                           </span>
 
-                          {/* Tooltip - Displayed BELOW the text */}
+                          {/* Tooltip - Detailed Weather Information (only shows on hover) */}
                           {showWeatherTooltip && (
                             <div className="absolute left-1/2 -translate-x-1/2 top-full mt-2 w-72 bg-[#1a4d2e] text-white rounded-xl shadow-2xl p-4 border border-green-500/20 z-[100] animate-in fade-in slide-in-from-top-2 duration-200">
                               {/* Arrow pointing UP to the text */}
@@ -317,9 +316,7 @@ export default function Layout() {
                                 <div>
                                   <div className="text-lg font-bold">
                                     {Math.round(weather.temp)}°C
-                                    <span className="text-sm font-normal text-green-300/60 ml-2">
-                                      feels like {Math.round(weather.feels_like)}°C
-                                    </span>
+                                    
                                   </div>
                                   <div className="text-sm text-green-300/80 capitalize">
                                     {weather.weather[0]?.description}
@@ -386,19 +383,6 @@ export default function Layout() {
                             </div>
                           )}
                         </div>
-
-                        {/* Compact Weather Info */}
-                        <span className="text-green-300/60 text-[10px] hidden xl:inline">
-                          {weather.weather[0]?.description}
-                        </span>
-                        <span className="flex items-center gap-1 text-green-300/60 text-[10px] hidden xl:flex">
-                          <Wind className="size-3" />
-                          {Math.round(weather.wind_speed)} m/s
-                        </span>
-                        <span className="flex items-center gap-1 text-green-300/60 text-[10px] hidden 2xl:flex">
-                          <Droplets className="size-3" />
-                          {weather.humidity}%
-                        </span>
                       </>
                     )}
                     
@@ -447,25 +431,19 @@ export default function Layout() {
           {/* Mobile Menu */}
           {isMobileMenuOpen && (
             <div className="lg:hidden py-3 space-y-1 border-t border-white/10 animate-in slide-in-from-top-2 duration-200">
-              {/* Mobile Weather Info */}
+              {/* Mobile Weather Info - Only shows on hover/click on mobile */}
               {weather && !weatherLoading && !weatherError && (
-                <div className="px-4 py-2 mb-2 bg-white/5 rounded-lg flex flex-wrap items-center gap-3 text-xs text-white/80">
+                <div 
+                  className="px-4 py-2 mb-2 bg-white/5 rounded-lg flex flex-wrap items-center gap-3 text-xs text-white/80 cursor-help"
+                  onMouseEnter={() => setShowWeatherTooltip(true)}
+                  onMouseLeave={() => setShowWeatherTooltip(false)}
+                  onClick={() => setShowWeatherTooltip(!showWeatherTooltip)}
+                >
                   <span className="flex items-center gap-1.5">
                     {getWeatherIcon(weather.weather[0]?.main || '')}
-                    <span className="font-medium">{Math.round(weather.temp)}°C</span>
-                    <span className="text-white/50 text-[10px]">
-                      {weather.weather[0]?.description}
+                    <span className="font-medium underline decoration-dotted underline-offset-2">
+                      {Math.round(weather.temp)}°C
                     </span>
-                  </span>
-                  <span className="text-white/30">|</span>
-                  <span className="flex items-center gap-1">
-                    <Wind className="size-3 text-white/60" />
-                    {Math.round(weather.wind_speed)} m/s
-                  </span>
-                  <span className="text-white/30">|</span>
-                  <span className="flex items-center gap-1">
-                    <Droplets className="size-3 text-white/60" />
-                    {weather.humidity}%
                   </span>
                 </div>
               )}
