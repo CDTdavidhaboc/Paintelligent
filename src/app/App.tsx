@@ -1,6 +1,7 @@
 // src/app/App.tsx
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "./context/AuthContext";
+import { WeatherProvider } from "./context/WeatherContext";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
 import Layout from "./components/Layout";
@@ -64,13 +65,15 @@ function AppRoutes() {
   );
 }
 
-// ✅ FIXED: AuthProvider wraps BrowserRouter
+// ✅ AuthProvider and WeatherProvider wrap BrowserRouter
 function App() {
   return (
     <AuthProvider>
-      <BrowserRouter>
-        <AppRoutes />
-      </BrowserRouter>
+      <WeatherProvider>
+        <BrowserRouter>
+          <AppRoutes />
+        </BrowserRouter>
+      </WeatherProvider>
     </AuthProvider>
   );
 }
