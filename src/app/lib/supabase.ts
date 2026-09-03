@@ -479,22 +479,6 @@ export const loginUser = async (email: string, password: string) => {
       return { success: false, error: 'Password must be at least 6 characters.' };
     }
 
-    // ============================================================
-    // ✅ COMMENT OUT OR REMOVE THIS VERIFICATION CHECK
-    // ============================================================
-    // const { data: userData, error: userError } = await supabase
-    //   .from('user_data')
-    //   .select('is_verified')
-    //   .eq('email', normalizedEmail)
-    //   .single();
-
-    // if (!userError && userData && userData.is_verified === false) {
-    //   return { 
-    //     success: false, 
-    //     error: 'Please verify your email address first. Check your inbox for the verification code.' 
-    //   };
-    // }
-
     console.log('🔍 Checking if email exists in Auth...');
     const authCheck = await checkAuthUserExists(normalizedEmail);
     
@@ -630,6 +614,7 @@ export const loginUser = async (email: string, password: string) => {
     };
   }
 };
+
 // ============================================================
 // PASSWORD RESET FUNCTIONS
 // ============================================================
@@ -1399,5 +1384,230 @@ export const getProfilePicture = async (email: string) => {
   } catch (error: any) {
     console.error('❌ Error getting profile picture:', error);
     return null;
+  }
+};
+
+// ============================================================
+// PAINT ANALYSIS HISTORY FUNCTIONS
+// ============================================================
+
+export const savePaintAnalysisHistory = async (email: string, analysisData: {
+  image_url?: string;
+  image_name?: string;
+  color_hex: string;
+  dominant_color: string;
+  rgb: { r: number; g: number; b: number };
+  paint_components: any[];
+  application_guide: any;
+  total_price: number;
+  batch_size: number;
+  analysis_date: string;
+  custom_name?: string;
+}) => {
+  console.log('📝 Saving paint analysis history for user:', email);
+  console.log('📊 Data to save:', JSON.stringify(analysisData, null, 2));
+  
+  try {
+    const normalizedEmail = email.toLowerCase().trim();
+    
+    const payload = {
+      email: normalizedEmail,
+      image_url: analysisData.image_url || null,
+      image_name: analysisData.image_name || null,
+      color_hex: analysisData.color_hex,
+      dominant_color: analysisData.dominant_color,
+      rgb: analysisData.rgb,
+      paint_components: analysisData.paint_components,
+      application_guide: analysisData.application_guide,
+      total_price: analysisData.total_price,
+      batch_size: analysisData.batch_size,
+      analysis_date: analysisData.analysis_date || new Date().toISOString(),
+      custom_name: analysisData.custom_name || `${analysisData.dominant_color} - ${analysisData.color_hex}`,
+      created_at: new Date().toISOString(),
+    };
+
+    console.log('📤 Final payload:', JSON.stringify(payload, null, 2));
+
+    const { data, error } = await supabase
+      .from('paint_analysis_history')
+      .insert(payload)
+      .select();
+
+    if (error) {
+      console.error('❌ Supabase Error:', error);
+      throw error;
+    }
+
+    console.log('✅ Paint analysis history saved successfully!', data);
+    return { success: true, data: data?.[0] || null };
+  } catch (error: any) {
+    console.error('❌ Error saving paint analysis history:', error);
+    return { success: false, error: error.message };
+  }
+};
+
+export const getPaintAnalysisHistory = async (email: string) => {
+  console.log('📥 Fetching paint analysis history for user:', email);
+
+  try {
+    const { data, error } = await supabase
+      .from('paint_analysis_history')
+      .select('*')
+      .eq('email', email.toLowerCase().trim())
+      .order('analysis_date', { ascending: false });
+
+    if (error) {
+      console.error('❌ Supabase Error:', error);
+      throw error;
+    }
+
+    console.log(`✅ Found ${data?.length || 0} history items for user`);
+    return { success: true, data: data || [] };
+  } catch (error: any) {
+    console.error('❌ Error getting paint analysis history:', error);
+    return { success: false, error: error.message, data: [] };
+  }
+};
+
+export const getPaintAnalysisById = async (email: string, historyId: string) => {
+  console.log('📥 Fetching paint analysis by ID:', historyId);
+
+  try {
+    const { data, error } = await supabase
+      .from('paint_analysis_history')
+      .select('*')
+      .eq('id', historyId)
+      .eq('email', email.toLowerCase().trim())
+      .maybeSingle();
+
+    if (error) {
+      console.error('❌ Supabase Error:', error);
+      throw error;
+    }
+
+    return { success: true, data: data || null };
+  } catch (error: any) {
+    console.error('❌ Error getting paint analysis:', error);
+    return { success: false, error: error.message, data: null };
+  }
+};
+
+export const deletePaintAnalysisHistory = async (email: string, historyId: string) => {
+  console.log('🗑️ Deleting paint analysis history:', historyId);
+
+  try {
+    const { error } = await supabase
+      .from('paint_analysis_history')
+      .delete()
+      .eq('id', historyId)
+      .eq('email', email.toLowerCase().trim());
+
+    if (error) {
+      console.error('❌ Supabase Error:', error);
+      throw error;
+    }
+
+    console.log('✅ Paint analysis history deleted successfully!');
+    return { success: true };
+  } catch (error: any) {
+    console.error('❌ Error deleting paint analysis history:', error);
+    return { success: false, error: error.message };
+  }
+};
+
+export const clearAllPaintAnalysisHistory = async (email: string) => {
+  console.log('🗑️ Clearing all paint analysis history for user:', email);
+
+  try {
+    const { error } = await supabase
+      .from('paint_analysis_history')
+      .delete()
+      .eq('email', email.toLowerCase().trim());
+
+    if (error) {
+      console.error('❌ Supabase Error:', error);
+      throw error;
+    }
+
+    console.log('✅ All paint analysis history cleared successfully!');
+    return { success: true };
+  } catch (error: any) {
+    console.error('❌ Error clearing paint analysis history:', error);
+    return { success: false, error: error.message };
+  }
+};
+
+// ============================================================
+// UPDATE PAINT ANALYSIS HISTORY
+// ============================================================
+
+export const updatePaintAnalysisHistory = async (email: string, historyId: string, data: {
+  custom_name?: string;
+  image_url?: string;
+  image_name?: string;
+}) => {
+  console.log('📝 Updating paint analysis history:', historyId);
+  console.log('📊 Update data:', data);
+
+  try {
+    const payload: any = {
+      updated_at: new Date().toISOString(),
+    };
+
+    if (data.custom_name !== undefined) payload.custom_name = data.custom_name;
+    if (data.image_url !== undefined) payload.image_url = data.image_url;
+    if (data.image_name !== undefined) payload.image_name = data.image_name;
+
+    const { error } = await supabase
+      .from('paint_analysis_history')
+      .update(payload)
+      .eq('id', historyId)
+      .eq('email', email.toLowerCase().trim());
+
+    if (error) {
+      console.error('❌ Supabase Error:', error);
+      throw error;
+    }
+
+    console.log('✅ Paint analysis history updated successfully!');
+    return { success: true };
+  } catch (error: any) {
+    console.error('❌ Error updating paint analysis history:', error);
+    return { success: false, error: error.message };
+  }
+};
+
+// ============================================================
+// CHECK IF COLOR ALREADY ANALYZED
+// ============================================================
+
+export const findExistingAnalysisByColor = async (email: string, colorHex: string) => {
+  console.log('🔍 Finding existing analysis for color:', colorHex);
+
+  try {
+    const { data, error } = await supabase
+      .from('paint_analysis_history')
+      .select('*')
+      .eq('email', email.toLowerCase().trim())
+      .eq('color_hex', colorHex.toLowerCase())
+      .order('analysis_date', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (error) {
+      console.error('❌ Supabase Error:', error);
+      throw error;
+    }
+
+    if (data) {
+      console.log('✅ Found existing analysis for color:', colorHex);
+    } else {
+      console.log('ℹ️ No existing analysis found for color:', colorHex);
+    }
+
+    return { success: true, data: data || null };
+  } catch (error: any) {
+    console.error('❌ Error finding existing analysis:', error);
+    return { success: false, error: error.message, data: null };
   }
 };

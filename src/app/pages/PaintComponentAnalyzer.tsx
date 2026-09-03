@@ -23,7 +23,6 @@ import {
   AlertTriangle,
   CheckCircle2,
   Loader2,
-  Info,
   Droplet,
   Upload,
   X,
@@ -38,6 +37,11 @@ import {
   Cloud,
   CloudOff,
   Paintbrush,
+  Clock,
+  History,
+  Trash2,
+  Eye,
+  Pencil,
 } from "lucide-react";
 import Papa from "papaparse";
 import { GoogleGenAI } from "@google/genai";
@@ -46,7 +50,13 @@ import { useAuth } from "../context/AuthContext";
 import { 
   savePaintAnalyzerData, 
   getPaintAnalyzerData, 
-  clearPaintAnalyzerData 
+  clearPaintAnalyzerData,
+  savePaintAnalysisHistory,
+  getPaintAnalysisHistory,
+  findExistingAnalysisByColor,
+  deletePaintAnalysisHistory,
+  clearAllPaintAnalysisHistory,
+  updatePaintAnalysisHistory,
 } from "../lib/supabase";
 
 type InventoryItem = Record<string, string>;
@@ -384,9 +394,25 @@ export default function PaintComponentAnalyzer() {
   const [isDataSaved, setIsDataSaved] = useState(false);
 
   const [showRemoveDialog, setShowRemoveDialog] = useState(false);
+  
+  // History states
+  const [analysisHistory, setAnalysisHistory] = useState<any[]>([]);
+  const [showHistory, setShowHistory] = useState(false);
+  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+  const [selectedHistoryItem, setSelectedHistoryItem] = useState<any | null>(null);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null);
+  const [isSavingToHistory, setIsSavingToHistory] = useState(false);
+  const [historyError, setHistoryError] = useState<string | null>(null);
+  
+  // Rename states
+  const [showRenameDialog, setShowRenameDialog] = useState<string | null>(null);
+  const [renameValue, setRenameValue] = useState("");
+  
+  // Track the last saved analysis to prevent duplicate saves
+  const lastSavedAnalysisRef = useRef<string | null>(null);
 
   useEffect(() => {
-    if (showRemoveDialog) {
+    if (showRemoveDialog || showDeleteConfirm || showRenameDialog) {
       document.body.style.overflow = 'hidden';
     } else {
       document.body.style.overflow = 'unset';
@@ -394,8 +420,9 @@ export default function PaintComponentAnalyzer() {
     return () => {
       document.body.style.overflow = 'unset';
     };
-  }, [showRemoveDialog]);
+  }, [showRemoveDialog, showDeleteConfirm, showRenameDialog]);
 
+  // Load user data from Supabase
   useEffect(() => {
     const loadData = async () => {
       if (!userEmail) {
@@ -432,7 +459,6 @@ export default function PaintComponentAnalyzer() {
           }
           
           setSyncStatus("success");
-
         } else {
           setSyncStatus("idle");
           setSyncMessage("No saved data found");
@@ -450,6 +476,14 @@ export default function PaintComponentAnalyzer() {
     loadData();
   }, [userEmail]);
 
+  // Load history on mount and when history panel is opened
+  useEffect(() => {
+    if (userEmail) {
+      loadAnalysisHistory();
+    }
+  }, [userEmail]);
+
+  // Auto-save to cloud
   useEffect(() => {
     const saveToCloud = async () => {
       if (!userEmail) return;
@@ -512,6 +546,221 @@ export default function PaintComponentAnalyzer() {
     return () => window.clearInterval(interval);
   }, [isAnalyzing]);
 
+  // Load analysis history
+  const loadAnalysisHistory = async () => {
+    if (!userEmail) {
+      console.log("❌ No user email, cannot load history");
+      return;
+    }
+    
+    setIsLoadingHistory(true);
+    setHistoryError(null);
+    try {
+      console.log("📥 Loading analysis history for user:", userEmail);
+      const result = await getPaintAnalysisHistory(userEmail);
+      console.log("📊 History result:", result);
+      
+      if (result.success) {
+        setAnalysisHistory(result.data || []);
+        console.log(`✅ Loaded ${result.data?.length || 0} history items`);
+      } else {
+        console.error("❌ Failed to load history:", result.error);
+        setHistoryError(result.error || "Failed to load history");
+        setAnalysisHistory([]);
+      }
+    } catch (error) {
+      console.error("❌ Error loading history:", error);
+      setHistoryError(String(error));
+      setAnalysisHistory([]);
+    } finally {
+      setIsLoadingHistory(false);
+    }
+  };
+
+  // Rename history item
+  const renameHistoryItem = async (id: string, newName: string) => {
+    if (!userEmail) return;
+    
+    try {
+      const result = await updatePaintAnalysisHistory(userEmail, id, { custom_name: newName });
+      if (result.success) {
+        await loadAnalysisHistory();
+        showNotification("✏️ History item renamed", "success");
+      } else {
+        showNotification("Failed to rename history item", "error");
+      }
+    } catch (error) {
+      console.error("Error renaming history:", error);
+      showNotification("Failed to rename history item", "error");
+    } finally {
+      setShowRenameDialog(null);
+      setRenameValue("");
+    }
+  };
+
+  // Save analysis to history with deduplication
+  const saveToHistory = async (analysis: ColorAnalysis) => {
+    if (!userEmail) {
+      console.log("❌ No user email, cannot save to history");
+      return false;
+    }
+    
+    // Check if this exact analysis was already saved (deduplication)
+    const analysisHash = `${analysis.hex}-${analysis.totalPrice}-${analysis.paintComponents.length}`;
+    if (lastSavedAnalysisRef.current === analysisHash) {
+      console.log("⏭️ Skipping duplicate save to history");
+      return true;
+    }
+    
+    setIsSavingToHistory(true);
+    setHistoryError(null);
+    try {
+      console.log("💾 Saving to history for user:", userEmail);
+      console.log("📊 Analysis data:", {
+        hex: analysis.hex,
+        dominantColor: analysis.dominantColor,
+        components: analysis.paintComponents?.length || 0,
+        totalPrice: analysis.totalPrice,
+        batchSize: batchSizeLiters
+      });
+      
+      // Check if this color already exists in history
+      const existing = await findExistingAnalysisByColor(userEmail, analysis.hex);
+      console.log("🔍 Existing check result:", existing);
+      
+      if (existing.success && existing.data) {
+        console.log("✅ Color already exists in history, updating instead of inserting");
+        // Update the existing entry by deleting and re-inserting
+        const deleteResult = await deletePaintAnalysisHistory(userEmail, existing.data.id);
+        if (!deleteResult.success) {
+          console.warn("⚠️ Failed to delete existing history item, will proceed with insert");
+        }
+      }
+      
+      // Prepare the data for saving
+      const historyData = {
+        image_url: uploadedImage || undefined,
+        image_name: uploadedFileName || "No image",
+        color_hex: analysis.hex,
+        dominant_color: analysis.dominantColor,
+        rgb: analysis.rgb,
+        paint_components: analysis.paintComponents,
+        application_guide: analysis.applicationGuide,
+        total_price: analysis.totalPrice,
+        batch_size: batchSizeLiters,
+        analysis_date: new Date().toISOString(),
+        custom_name: `${analysis.dominantColor} - ${analysis.hex}`,
+      };
+      
+      console.log("📤 Saving to history with data:", historyData);
+      
+      const result = await savePaintAnalysisHistory(userEmail, historyData);
+      console.log("📥 Save result:", result);
+      
+      if (result.success) {
+        console.log("✅ Analysis saved to history successfully!");
+        lastSavedAnalysisRef.current = analysisHash;
+        // Refresh history immediately
+        await loadAnalysisHistory();
+        showNotification("💾 Analysis saved to history!", "success");
+        return true;
+      } else {
+        console.error("❌ Failed to save to history:", result.error);
+        setHistoryError(result.error || "Failed to save to history");
+        showNotification("⚠️ Failed to save to history", "error");
+        return false;
+      }
+    } catch (error) {
+      console.error("❌ Error saving to history:", error);
+      setHistoryError(String(error));
+      showNotification("❌ Error saving to history", "error");
+      return false;
+    } finally {
+      setIsSavingToHistory(false);
+    }
+  };
+
+  // Load analysis from history
+  const loadFromHistory = (item: any) => {
+    console.log("📂 Loading from history:", item);
+    
+    setSelectedHistoryItem(item);
+    setShowHistory(false);
+    
+    // Convert history item to ColorAnalysis format
+    const analysis: ColorAnalysis = {
+      hex: item.color_hex,
+      dominantColor: item.dominant_color,
+      rgb: item.rgb,
+      paintComponents: item.paint_components || [],
+      applicationGuide: item.application_guide || null,
+      stockWarnings: [],
+      totalPrice: item.total_price || 0,
+    };
+    
+    console.log("📊 Loaded analysis:", analysis);
+    
+    setColorAnalysis(analysis);
+    setBatchSizeLiters(item.batch_size || 0.1);
+    
+    // If there's an image, load it
+    if (item.image_url) {
+      setUploadedImage(item.image_url);
+      setUploadedFileName(item.image_name || "History item");
+    }
+    
+    showNotification("📂 Loaded from history", "success");
+  };
+
+  // Delete history item
+  const deleteHistoryItem = async (id: string) => {
+    if (!userEmail) return;
+    
+    try {
+      const result = await deletePaintAnalysisHistory(userEmail, id);
+      if (result.success) {
+        await loadAnalysisHistory();
+        if (selectedHistoryItem?.id === id) {
+          setSelectedHistoryItem(null);
+        }
+        showNotification("🗑️ History item deleted", "info");
+      } else {
+        showNotification("Failed to delete history item", "error");
+      }
+    } catch (error) {
+      console.error("Error deleting history:", error);
+      showNotification("Failed to delete history item", "error");
+    } finally {
+      setShowDeleteConfirm(null);
+    }
+  };
+
+  // Clear all history
+  const clearAllHistory = async () => {
+    if (!userEmail) return;
+    
+    try {
+      const result = await clearAllPaintAnalysisHistory(userEmail);
+      if (result.success) {
+        await loadAnalysisHistory();
+        showNotification("🧹 All history cleared", "info");
+      } else {
+        showNotification("Failed to clear history", "error");
+      }
+    } catch (error) {
+      console.error("Error clearing history:", error);
+      showNotification("Failed to clear history", "error");
+    }
+  };
+
+  // Toggle history panel and refresh when opened
+  const toggleHistory = () => {
+    setShowHistory(!showHistory);
+    if (!showHistory) {
+      loadAnalysisHistory();
+    }
+  };
+
   const clearSupabaseData = async () => {
     if (!userEmail) return;
     
@@ -558,6 +807,7 @@ export default function PaintComponentAnalyzer() {
   };
 
   const handleClearSavedData = () => {
+    // Don't clear history when clearing saved data
     setIsDataSaved(false);
     setUploadedData(null);
     setUploadedDataName("");
@@ -569,6 +819,7 @@ export default function PaintComponentAnalyzer() {
   };
 
   const processFile = (file: File) => {
+    // Don't clear history when uploading new file
     setUploadError("");
     setUploadedData(null);
     setUploadedDataName("");
@@ -678,6 +929,7 @@ export default function PaintComponentAnalyzer() {
   };
 
   const handleRemoveData = () => {
+    // Don't clear history when removing data
     setUploadedData(null);
     setUploadedDataName("");
     setUploadError("");
@@ -784,6 +1036,38 @@ Required JSON format:
         confidence: toNumber(visionRaw.confidence, 0),
         notes: visionRaw.notes || "",
       };
+
+      // Check if this color exists in history
+      console.log("🔍 Checking if color exists in history:", vision.colorHex);
+      const existingAnalysis = await findExistingAnalysisByColor(userEmail, vision.colorHex);
+      
+      if (existingAnalysis.success && existingAnalysis.data) {
+        // Load from history
+        const historyItem = existingAnalysis.data;
+        console.log("✅ Color found in history, loading:", historyItem);
+        showNotification("🎨 Color found in history! Loading saved formula...", "info");
+        
+        const analysis: ColorAnalysis = {
+          hex: historyItem.color_hex,
+          dominantColor: historyItem.dominant_color,
+          rgb: historyItem.rgb,
+          paintComponents: historyItem.paint_components || [],
+          applicationGuide: historyItem.application_guide || null,
+          stockWarnings: [],
+          totalPrice: historyItem.total_price || 0,
+        };
+        
+        setColorAnalysis(analysis);
+        setBatchSizeLiters(historyItem.batch_size || 0.1);
+        setLastFetched(new Date());
+        setShowAnalysisComplete(true);
+        showNotification("✅ Loaded from history! No AI analysis needed.", "success");
+        setTimeout(() => setShowAnalysisComplete(false), 1800);
+        setIsAnalyzing(false);
+        return;
+      }
+
+      console.log("🆕 Color not found in history, proceeding with AI analysis");
 
       const filteredInventory = filterInventoryForFormulation(inventory, vision);
 
@@ -948,8 +1232,22 @@ Required JSON format:
       setColorAnalysis(normalized);
       setLastFetched(new Date());
       setShowAnalysisComplete(true);
-      showNotification("✅ Analysis complete! Paint formula generated successfully.", "success");
-
+      
+      // Save to history
+      console.log("📝 Attempting to save to history...");
+      const saved = await saveToHistory(normalized);
+      
+      if (saved) {
+        console.log("✅ Analysis saved to history successfully!");
+        showNotification("✅ Analysis complete! Paint formula saved to history.", "success");
+      } else {
+        console.warn("⚠️ Analysis completed but failed to save to history");
+        showNotification("✅ Analysis complete! (Failed to save to history)", "info");
+      }
+      
+      // Refresh history after saving
+      await loadAnalysisHistory();
+      
       setTimeout(() => setShowAnalysisComplete(false), 1800);
     } catch (err: any) {
       console.error(err);
@@ -980,14 +1278,17 @@ Required JSON format:
       return;
     }
 
+    // When replacing an image, keep the current color analysis in history
+    // but clear it from the UI so the user can analyze a new sample
+    setColorAnalysis(null);
+    setAnalyzeError("");
+
     const reader = new FileReader();
     reader.onload = (ev) => {
       const base64 = ev.target?.result as string;
       setUploadedImage(base64);
       setUploadedFileName(file.name);
       setUploadedFileSize(formatFileSize(file.size));
-      setColorAnalysis(null);
-      setAnalyzeError("");
       showNotification(`📸 Image "${file.name}" uploaded successfully!`, "success");
     };
     reader.readAsDataURL(file);
@@ -1008,6 +1309,7 @@ Required JSON format:
   };
 
   const handleRemoveImage = () => {
+    // Don't clear history when removing image
     setUploadedImage(null);
     setUploadedFileName("");
     setUploadedFileSize("");
@@ -1015,7 +1317,7 @@ Required JSON format:
     setAnalyzeError("");
     if (fileInputRef.current) fileInputRef.current.value = "";
     setShowRemoveDialog(false);
-    showNotification("🗑️ Image removed", "info");
+    showNotification("🗑️ Image removed from view", "info");
   };
 
   const scaledComponents = useMemo(() => {
@@ -1164,6 +1466,7 @@ Required JSON format:
           }
         `}</style>
 
+        {/* Header */}
         <header className="overflow-hidden rounded-2xl bg-[#174d32] px-5 py-5 text-white shadow-[0_18px_45px_rgba(23,77,50,0.18)] sm:px-7 sm:py-6">
           <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-start gap-4">
@@ -1175,36 +1478,169 @@ Required JSON format:
                 <p className="mt-1 text-sm text-emerald-100">Upload a paint sample and get a residential formula from your inventory.</p>
               </div>
             </div>
-            {userEmail && (
-              <div className="flex w-fit items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-1.5 text-xs">
-                {syncStatus === "syncing" && (
-                  <>
-                    <Loader2 className="size-3 animate-spin text-emerald-100" />
-                    <span className="text-emerald-50">Syncing...</span>
-                  </>
-                )}
-                {syncStatus === "success" && (
-                  <>
-                    <Cloud className="size-3 text-emerald-100" />
-                    <span className="text-emerald-50">Cloud synced</span>
-                  </>
-                )}
-                {syncStatus === "error" && (
-                  <>
-                    <CloudOff className="size-3 text-red-200" />
-                    <span className="text-red-100">Sync error</span>
-                  </>
-                )}
-                {syncStatus === "idle" && userEmail && (
-                  <>
-                    <Cloud className="size-3 text-emerald-100/70" />
-                    <span className="text-emerald-100/80">Not synced</span>
-                  </>
-                )}
-              </div>
-            )}
+            <div className="flex items-center gap-3">
+              {userEmail && (
+                <div className="flex w-fit items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-1.5 text-xs">
+                  {syncStatus === "syncing" && (
+                    <>
+                      <Loader2 className="size-3 animate-spin text-emerald-100" />
+                      <span className="text-emerald-50">Syncing...</span>
+                    </>
+                  )}
+                  {syncStatus === "success" && (
+                    <>
+                      <Cloud className="size-3 text-emerald-100" />
+                      <span className="text-emerald-50">Cloud synced</span>
+                    </>
+                  )}
+                  {syncStatus === "error" && (
+                    <>
+                      <CloudOff className="size-3 text-red-200" />
+                      <span className="text-red-100">Sync error</span>
+                    </>
+                  )}
+                  {syncStatus === "idle" && userEmail && (
+                    <>
+                      <Cloud className="size-3 text-emerald-100/70" />
+                      <span className="text-emerald-100/80">Not synced</span>
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
         </header>
+
+     {/* History Panel - Centered with Blur Background */}
+{showHistory && createPortal(
+  <div 
+    className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 animate-fade-in"
+    onClick={(e) => {
+      if (e.target === e.currentTarget) {
+        setShowHistory(false);
+      }
+    }}
+  >
+    <Card className="w-full max-w-2xl max-h-[80vh] overflow-hidden rounded-2xl border border-emerald-100 bg-white shadow-[0_20px_60px_rgba(20,83,45,0.15)] animate-slide-up">
+      <CardHeader className="border-b border-emerald-100 bg-[#174d32] h-10 flex items-center px-4">
+        <div className="flex items-center justify-between w-full">
+          <div className="flex items-center gap-1.5">
+            <History className="size-3.5 text-white" />
+            <CardTitle className="text-md font-medium text-white leading-none">History</CardTitle>
+          </div>
+          <div className="flex items-center gap-1.5">
+            {analysisHistory.length > 0 && (
+              <Button
+                onClick={clearAllHistory}
+                variant="outline"
+                className="border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 hover:text-emerald-800 text-[10px] font-medium h-6 px-2"
+              >
+                <Trash2 className="size-3 mr-1" />
+                Clear
+              </Button>
+            )}
+           
+            <Button
+              onClick={() => setShowHistory(false)}
+              variant="ghost"
+              className="text-white/70 hover:text-white hover:bg-white/10 h-6 w-6 p-0"
+            >
+              <X className="size-4" />
+            </Button>
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent className=" max-h-[calc(80vh-80px)] overflow-y-auto">
+        {isLoadingHistory ? (
+          <div className="flex items-center justify-center py-12">
+            <Loader2 className="size-8 animate-spin text-[#174d32]" />
+            <span className="ml-3 text-sm text-gray-500">Loading history...</span>
+          </div>
+        ) : historyError ? (
+          <div className="text-center py-12">
+            <AlertTriangle className="size-12 text-red-400 mx-auto mb-3" />
+            <p className="text-red-600 font-medium">Error loading history</p>
+            <p className="text-sm text-gray-500 mt-1">{historyError}</p>
+            <Button
+              onClick={loadAnalysisHistory}
+              variant="outline"
+              className="mt-4 border-emerald-200 text-emerald-700 hover:bg-emerald-50"
+            >
+              <RefreshCw className="size-3 mr-2" />
+              Retry
+            </Button>
+          </div>
+        ) : analysisHistory.length === 0 ? (
+          <div className="text-center py-12">
+            <Clock className="size-12 text-gray-300 mx-auto mb-3" />
+            <p className="text-gray-500">No analysis history yet</p>
+            <p className="text-sm text-gray-400 mt-1">Analyze a paint sample to save it here</p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {analysisHistory.map((item) => (
+              <div
+                key={item.id}
+                className={`flex items-center gap-4 p-3 rounded-lg border transition-all duration-200 hover:shadow-md ${
+                  selectedHistoryItem?.id === item.id
+                    ? "border-[#174d32] bg-emerald-50"
+                    : "border-gray-200 bg-white hover:border-emerald-200"
+                }`}
+              >
+                <div
+                  className="w-12 h-12 rounded-lg border-2 border-white shadow-sm flex-shrink-0"
+                  style={{ backgroundColor: item.color_hex }}
+                />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-gray-900 truncate">
+                    {item.custom_name || item.dominant_color}
+                  </p>
+                  <p className="text-xs text-gray-500">
+                    {item.color_hex.toUpperCase()} · {item.paint_components?.length || 0} components
+                  </p>
+                  <p className="text-xs text-gray-400">
+                    {new Date(item.analysis_date).toLocaleDateString()} · ₱{item.total_price?.toFixed(2) || "0.00"}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  <Button
+                    onClick={() => {
+                      loadFromHistory(item);
+                      setShowHistory(false);
+                    }}
+                    variant="outline"
+                    className="border-emerald-200 text-emerald-700 hover:bg-emerald-50 text-xs h-8 px-3"
+                  >
+                    <Eye className="size-3 mr-1" />
+                    Load
+                  </Button>
+                  <Button
+                    onClick={() => {
+                      setShowRenameDialog(item.id);
+                      setRenameValue(item.custom_name || item.dominant_color);
+                    }}
+                    variant="outline"
+                    className="border-blue-200 text-blue-600 hover:bg-blue-50 text-xs h-8 px-2"
+                  >
+                    <Pencil className="size-3" />
+                  </Button>
+                  <Button
+                    onClick={() => setShowDeleteConfirm(item.id)}
+                    variant="outline"
+                    className="border-red-200 text-red-600 hover:bg-red-50 text-xs h-8 px-2"
+                  >
+                    <Trash2 className="size-3" />
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  </div>,
+  document.body
+)}
 
         <section>
           <Card className="overflow-hidden rounded-2xl border border-emerald-100 bg-white shadow-[0_12px_32px_rgba(20,83,45,0.06)]">
@@ -1326,7 +1762,7 @@ Required JSON format:
                           variant="outline"
                           className="border-green-300 text-green-600 hover:bg-red-50 text-xs h-7 px-2"
                         >
-                          <X className="size-3 mr-1" />
+                          <Trash2 className="size-3 mr-1" />
                           Remove
                         </Button>
                       </>
@@ -1345,7 +1781,7 @@ Required JSON format:
                           variant="outline"
                           className="border-green-300 text-green-600 hover:bg-green-50 text-xs h-7 px-2"
                         >
-                          <X className="size-3 mr-1" />
+                          <Trash2 className="size-3 mr-1" />
                           Clear
                         </Button>
                       </>
@@ -1364,6 +1800,7 @@ Required JSON format:
           </Card>
         </section>
 
+        {/* AI Vision Scanner - with History Button inside header */}
         <section>
           <Card className={`overflow-hidden rounded-2xl border shadow-[0_12px_32px_rgba(20,83,45,0.06)] ${isAnalyzerEnabled ? 'border-emerald-100 bg-white' : 'border-gray-200 bg-white/60'}`}>
             <CardHeader className={`border-b ${isAnalyzerEnabled ? 'border-emerald-100 bg-gradient-to-r from-emerald-50/80 via-white to-white' : 'border-gray-200 bg-gray-50'} p-5`}>
@@ -1383,11 +1820,23 @@ Required JSON format:
                     </p>
                   </div>
                 </div>
-                <Badge className={`${isAnalyzerEnabled ? "bg-emerald-700 text-white" : "bg-gray-500 text-white"} text-xs font-medium px-3 py-1 flex-shrink-0`}>
-                  {isAnalyzerEnabled 
-                    ? (uploadedImage ? "IMAGE READY" : "AWAITING SAMPLE")
-                    : "LOCKED"}
-                </Badge>
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  {/* History Button */}
+                  <Button
+                    onClick={toggleHistory}
+                    variant="outline"
+                    className="border-emerald-200 bg-white text-[#174d32] hover:bg-emerald-50 hover:text-[#174d32] text-xs h-7 px-2"
+                    title="View Analysis History"
+                  >
+                    <History className="size-3 mr-1" />
+                    History
+                  </Button>
+                  <Badge className={`${isAnalyzerEnabled ? "bg-emerald-700 text-white" : "bg-gray-500 text-white"} text-xs font-medium px-3 py-1`}>
+                    {isAnalyzerEnabled 
+                      ? (uploadedImage ? "IMAGE READY" : "AWAITING SAMPLE")
+                      : "LOCKED"}
+                  </Badge>
+                </div>
               </div>
             </CardHeader>
 
@@ -1608,7 +2057,7 @@ Required JSON format:
                             disabled={isAnalyzing || !isAnalyzerEnabled}
                             className="h-11 rounded-lg bg-white border-2 border-orange-500 text-orange-600 shadow-sm transition-all duration-200 hover:bg-orange-300 hover:border-orange-300 hover:text-orange-600 hover:shadow-md disabled:opacity-50 disabled:hover:bg-white disabled:hover:text-orange-600 disabled:hover:border-orange-500"
                           >
-                            <X className="mr-2 size-4 text-orange-600" />
+                            <Trash2 className="mr-2 size-4 text-orange-600" />
                             Remove
                           </Button>
                         </div>
@@ -1900,6 +2349,75 @@ Required JSON format:
         )}
       </div>
 
+      {/* Rename Dialog */}
+      {showRenameDialog && createPortal(
+        <div 
+          className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setShowRenameDialog(null);
+              setRenameValue("");
+            }
+          }}
+        >
+          <div className="w-full max-w-md animate-fade-in rounded-2xl bg-white p-6 shadow-2xl">
+            <div className="flex items-start gap-4">
+              <div className="flex size-12 flex-shrink-0 items-center justify-center rounded-full bg-blue-100">
+                <Pencil className="size-6 text-blue-600" />
+              </div>
+              <div className="flex-1">
+                <h3 className="text-lg font-semibold text-gray-900">Rename Analysis</h3>
+                <p className="mt-1 text-sm text-gray-500">
+                  Enter a new name for this saved analysis.
+                </p>
+                <input
+                  type="text"
+                  value={renameValue}
+                  onChange={(e) => setRenameValue(e.target.value)}
+                  className="mt-3 w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#174d32] focus:border-transparent"
+                  placeholder="Enter new name..."
+                  autoFocus
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && renameValue.trim()) {
+                      renameHistoryItem(showRenameDialog, renameValue);
+                    }
+                    if (e.key === 'Escape') {
+                      setShowRenameDialog(null);
+                      setRenameValue("");
+                    }
+                  }}
+                />
+              </div>
+            </div>
+            <div className="mt-6 flex gap-3 justify-end">
+              <Button
+                onClick={() => {
+                  setShowRenameDialog(null);
+                  setRenameValue("");
+                }}
+                variant="outline"
+                className="border-gray-300 text-gray-700 hover:bg-gray-50"
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={() => {
+                  if (renameValue.trim()) {
+                    renameHistoryItem(showRenameDialog, renameValue);
+                  }
+                }}
+                className="bg-[#174d32] hover:bg-green-700 text-white"
+                disabled={!renameValue.trim()}
+              >
+                Save Name
+              </Button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Remove Image Dialog */}
       {showRemoveDialog && createPortal(
         <div 
           className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
@@ -1917,7 +2435,7 @@ Required JSON format:
               <div className="flex-1">
                 <h3 className="text-lg font-semibold text-gray-900">Remove Uploaded Image?</h3>
                 <p className="mt-1 text-sm text-gray-500">
-                  Are you sure you want to remove this uploaded paint sample? This will also clear the analysis results.
+                  This will remove the image from the current view. Your analysis history will be preserved.
                 </p>
               </div>
             </div>
@@ -1934,6 +2452,48 @@ Required JSON format:
                 className="bg-orange-500 hover:bg-orange-600 text-white"
               >
                 Yes, Remove
+              </Button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Delete History Item Dialog */}
+      {showDeleteConfirm && createPortal(
+        <div 
+          className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setShowDeleteConfirm(null);
+            }
+          }}
+        >
+          <div className="w-full max-w-md animate-fade-in rounded-2xl bg-white p-6 shadow-2xl">
+            <div className="flex items-start gap-4">
+              <div className="flex size-12 flex-shrink-0 items-center justify-center rounded-full bg-red-100">
+                <AlertTriangle className="size-6 text-red-600" />
+              </div>
+              <div className="flex-1">
+                <h3 className="text-lg font-semibold text-gray-900">Delete History Item?</h3>
+                <p className="mt-1 text-sm text-gray-500">
+                  This will permanently remove this saved analysis from your history.
+                </p>
+              </div>
+            </div>
+            <div className="mt-6 flex gap-3 justify-end">
+              <Button
+                onClick={() => setShowDeleteConfirm(null)}
+                variant="outline"
+                className="border-gray-300 text-gray-700 hover:bg-gray-50"
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={() => deleteHistoryItem(showDeleteConfirm)}
+                className="bg-red-500 hover:bg-red-600 text-white"
+              >
+                Yes, Delete
               </Button>
             </div>
           </div>
