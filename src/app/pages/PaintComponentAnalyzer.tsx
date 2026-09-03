@@ -394,6 +394,8 @@ export default function PaintComponentAnalyzer() {
   const [isDataSaved, setIsDataSaved] = useState(false);
 
   const [showRemoveDialog, setShowRemoveDialog] = useState(false);
+  const [showRemoveDataDialog, setShowRemoveDataDialog] = useState(false);
+  const [showClearDataDialog, setShowClearDataDialog] = useState(false);
   
   // History states
   const [analysisHistory, setAnalysisHistory] = useState<any[]>([]);
@@ -412,7 +414,7 @@ export default function PaintComponentAnalyzer() {
   const lastSavedAnalysisRef = useRef<string | null>(null);
 
   useEffect(() => {
-    if (showRemoveDialog || showDeleteConfirm || showRenameDialog) {
+    if (showRemoveDialog || showDeleteConfirm || showRenameDialog || showRemoveDataDialog || showClearDataDialog) {
       document.body.style.overflow = 'hidden';
     } else {
       document.body.style.overflow = 'unset';
@@ -420,7 +422,7 @@ export default function PaintComponentAnalyzer() {
     return () => {
       document.body.style.overflow = 'unset';
     };
-  }, [showRemoveDialog, showDeleteConfirm, showRenameDialog]);
+  }, [showRemoveDialog, showDeleteConfirm, showRenameDialog, showRemoveDataDialog, showClearDataDialog]);
 
   // Load user data from Supabase
   useEffect(() => {
@@ -816,6 +818,7 @@ export default function PaintComponentAnalyzer() {
     if (csvInputRef.current) csvInputRef.current.value = "";
     
     clearSupabaseData();
+    setShowClearDataDialog(false);
   };
 
   const processFile = (file: File) => {
@@ -937,6 +940,7 @@ export default function PaintComponentAnalyzer() {
     if (csvInputRef.current) csvInputRef.current.value = "";
     
     clearSupabaseData();
+    setShowRemoveDataDialog(false);
   };
 
   const analyzeWithGemini = async (imageBase64: string | null) => {
@@ -1511,136 +1515,135 @@ Required JSON format:
           </div>
         </header>
 
-     {/* History Panel - Centered with Blur Background */}
-{showHistory && createPortal(
-  <div 
-    className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 animate-fade-in"
-    onClick={(e) => {
-      if (e.target === e.currentTarget) {
-        setShowHistory(false);
-      }
-    }}
-  >
-    <Card className="w-full max-w-2xl max-h-[80vh] overflow-hidden rounded-2xl border border-emerald-100 bg-white shadow-[0_20px_60px_rgba(20,83,45,0.15)] animate-slide-up">
-      <CardHeader className="border-b border-emerald-100 bg-[#174d32] h-10 flex items-center px-4">
-        <div className="flex items-center justify-between w-full">
-          <div className="flex items-center gap-1.5">
-            <History className="size-3.5 text-white" />
-            <CardTitle className="text-md font-medium text-white leading-none">History</CardTitle>
-          </div>
-          <div className="flex items-center gap-1.5">
-            {analysisHistory.length > 0 && (
-              <Button
-                onClick={clearAllHistory}
-                variant="outline"
-                className="border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 hover:text-emerald-800 text-[10px] font-medium h-6 px-2"
-              >
-                <Trash2 className="size-3 mr-1" />
-                Clear
-              </Button>
-            )}
-           
-            <Button
-              onClick={() => setShowHistory(false)}
-              variant="ghost"
-              className="text-white/70 hover:text-white hover:bg-white/10 h-6 w-6 p-0"
-            >
-              <X className="size-4" />
-            </Button>
-          </div>
-        </div>
-      </CardHeader>
-      <CardContent className=" max-h-[calc(80vh-80px)] overflow-y-auto">
-        {isLoadingHistory ? (
-          <div className="flex items-center justify-center py-12">
-            <Loader2 className="size-8 animate-spin text-[#174d32]" />
-            <span className="ml-3 text-sm text-gray-500">Loading history...</span>
-          </div>
-        ) : historyError ? (
-          <div className="text-center py-12">
-            <AlertTriangle className="size-12 text-red-400 mx-auto mb-3" />
-            <p className="text-red-600 font-medium">Error loading history</p>
-            <p className="text-sm text-gray-500 mt-1">{historyError}</p>
-            <Button
-              onClick={loadAnalysisHistory}
-              variant="outline"
-              className="mt-4 border-emerald-200 text-emerald-700 hover:bg-emerald-50"
-            >
-              <RefreshCw className="size-3 mr-2" />
-              Retry
-            </Button>
-          </div>
-        ) : analysisHistory.length === 0 ? (
-          <div className="text-center py-12">
-            <Clock className="size-12 text-gray-300 mx-auto mb-3" />
-            <p className="text-gray-500">No analysis history yet</p>
-            <p className="text-sm text-gray-400 mt-1">Analyze a paint sample to save it here</p>
-          </div>
-        ) : (
-          <div className="space-y-3">
-            {analysisHistory.map((item) => (
-              <div
-                key={item.id}
-                className={`flex items-center gap-4 p-3 rounded-lg border transition-all duration-200 hover:shadow-md ${
-                  selectedHistoryItem?.id === item.id
-                    ? "border-[#174d32] bg-emerald-50"
-                    : "border-gray-200 bg-white hover:border-emerald-200"
-                }`}
-              >
-                <div
-                  className="w-12 h-12 rounded-lg border-2 border-white shadow-sm flex-shrink-0"
-                  style={{ backgroundColor: item.color_hex }}
-                />
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-gray-900 truncate">
-                    {item.custom_name || item.dominant_color}
-                  </p>
-                  <p className="text-xs text-gray-500">
-                    {item.color_hex.toUpperCase()} · {item.paint_components?.length || 0} components
-                  </p>
-                  <p className="text-xs text-gray-400">
-                    {new Date(item.analysis_date).toLocaleDateString()} · ₱{item.total_price?.toFixed(2) || "0.00"}
-                  </p>
+        {/* History Panel - Centered with Blur Background */}
+        {showHistory && createPortal(
+          <div 
+            className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 animate-fade-in"
+            onClick={(e) => {
+              if (e.target === e.currentTarget) {
+                setShowHistory(false);
+              }
+            }}
+          >
+            <Card className="w-full max-w-2xl max-h-[80vh] overflow-hidden rounded-2xl border border-emerald-100 bg-white shadow-[0_20px_60px_rgba(20,83,45,0.15)] animate-slide-up">
+              <CardHeader className="border-b border-emerald-100 bg-[#174d32] h-10 flex items-center px-4">
+                <div className="flex items-center justify-between w-full">
+                  <div className="flex items-center gap-1.5">
+                    <History className="size-3.5 text-white" />
+                    <CardTitle className="text-md font-medium text-white leading-none">History</CardTitle>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    {analysisHistory.length > 0 && (
+                      <Button
+                        onClick={clearAllHistory}
+                        variant="outline"
+                        className="border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 hover:text-emerald-800 text-[10px] font-medium h-6 px-2"
+                      >
+                        <Trash2 className="size-3 mr-1" />
+                        Clear
+                      </Button>
+                    )}
+                    <Button
+                      onClick={() => setShowHistory(false)}
+                      variant="ghost"
+                      className="text-white/70 hover:text-white hover:bg-white/10 h-6 w-6 p-0"
+                    >
+                      <X className="size-4" />
+                    </Button>
+                  </div>
                 </div>
-                <div className="flex items-center gap-2 flex-shrink-0">
-                  <Button
-                    onClick={() => {
-                      loadFromHistory(item);
-                      setShowHistory(false);
-                    }}
-                    variant="outline"
-                    className="border-emerald-200 text-emerald-700 hover:bg-emerald-50 text-xs h-8 px-3"
-                  >
-                    <Eye className="size-3 mr-1" />
-                    Load
-                  </Button>
-                  <Button
-                    onClick={() => {
-                      setShowRenameDialog(item.id);
-                      setRenameValue(item.custom_name || item.dominant_color);
-                    }}
-                    variant="outline"
-                    className="border-blue-200 text-blue-600 hover:bg-blue-50 text-xs h-8 px-2"
-                  >
-                    <Pencil className="size-3" />
-                  </Button>
-                  <Button
-                    onClick={() => setShowDeleteConfirm(item.id)}
-                    variant="outline"
-                    className="border-red-200 text-red-600 hover:bg-red-50 text-xs h-8 px-2"
-                  >
-                    <Trash2 className="size-3" />
-                  </Button>
-                </div>
-              </div>
-            ))}
-          </div>
+              </CardHeader>
+              <CardContent className="p-4 max-h-[calc(80vh-80px)] overflow-y-auto">
+                {isLoadingHistory ? (
+                  <div className="flex items-center justify-center py-12">
+                    <Loader2 className="size-8 animate-spin text-[#174d32]" />
+                    <span className="ml-3 text-sm text-gray-500">Loading history...</span>
+                  </div>
+                ) : historyError ? (
+                  <div className="text-center py-12">
+                    <AlertTriangle className="size-12 text-red-400 mx-auto mb-3" />
+                    <p className="text-red-600 font-medium">Error loading history</p>
+                    <p className="text-sm text-gray-500 mt-1">{historyError}</p>
+                    <Button
+                      onClick={loadAnalysisHistory}
+                      variant="outline"
+                      className="mt-4 border-emerald-200 text-emerald-700 hover:bg-emerald-50"
+                    >
+                      <RefreshCw className="size-3 mr-2" />
+                      Retry
+                    </Button>
+                  </div>
+                ) : analysisHistory.length === 0 ? (
+                  <div className="text-center py-12">
+                    <Clock className="size-12 text-gray-300 mx-auto mb-3" />
+                    <p className="text-gray-500">No analysis history yet</p>
+                    <p className="text-sm text-gray-400 mt-1">Analyze a paint sample to save it here</p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {analysisHistory.map((item) => (
+                      <div
+                        key={item.id}
+                        className={`flex items-center gap-4 p-3 rounded-lg border transition-all duration-200 hover:shadow-md ${
+                          selectedHistoryItem?.id === item.id
+                            ? "border-[#174d32] bg-emerald-50"
+                            : "border-gray-200 bg-white hover:border-emerald-200"
+                        }`}
+                      >
+                        <div
+                          className="w-12 h-12 rounded-lg border-2 border-white shadow-sm flex-shrink-0"
+                          style={{ backgroundColor: item.color_hex }}
+                        />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-semibold text-gray-900 truncate">
+                            {item.custom_name || item.dominant_color}
+                          </p>
+                          <p className="text-xs text-gray-500">
+                            {item.color_hex.toUpperCase()} · {item.paint_components?.length || 0} components
+                          </p>
+                          <p className="text-xs text-gray-400">
+                            {new Date(item.analysis_date).toLocaleDateString()} · ₱{item.total_price?.toFixed(2) || "0.00"}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-2 flex-shrink-0">
+                          <Button
+                            onClick={() => {
+                              loadFromHistory(item);
+                              setShowHistory(false);
+                            }}
+                            variant="outline"
+                            className="border-emerald-200 text-emerald-700 hover:bg-emerald-50 text-xs h-8 px-3"
+                          >
+                            <Eye className="size-3 mr-1" />
+                            Load
+                          </Button>
+                          <Button
+                            onClick={() => {
+                              setShowRenameDialog(item.id);
+                              setRenameValue(item.custom_name || item.dominant_color);
+                            }}
+                            variant="outline"
+                            className="border-blue-200 text-blue-600 hover:bg-blue-50 text-xs h-8 px-2"
+                          >
+                            <Pencil className="size-3" />
+                          </Button>
+                          <Button
+                            onClick={() => setShowDeleteConfirm(item.id)}
+                            variant="outline"
+                            className="border-red-200 text-red-600 hover:bg-red-50 text-xs h-8 px-2"
+                          >
+                            <Trash2 className="size-3" />
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>,
+          document.body
         )}
-      </CardContent>
-    </Card>
-  </div>,
-  document.body
-)}
 
         <section>
           <Card className="overflow-hidden rounded-2xl border border-emerald-100 bg-white shadow-[0_12px_32px_rgba(20,83,45,0.06)]">
@@ -1758,9 +1761,9 @@ Required JSON format:
                           Replace
                         </Button>
                         <Button
-                          onClick={handleRemoveData}
+                          onClick={() => setShowRemoveDataDialog(true)}
                           variant="outline"
-                          className="border-green-300 text-green-600 hover:bg-red-50 text-xs h-7 px-2"
+                          className="border-green-300 text-green-600 hover:bg-green-50 text-xs h-7 px-2"
                         >
                           <Trash2 className="size-3 mr-1" />
                           Remove
@@ -1777,7 +1780,7 @@ Required JSON format:
                           Replace
                         </Button>
                         <Button
-                          onClick={handleClearSavedData}
+                          onClick={() => setShowClearDataDialog(true)}
                           variant="outline"
                           className="border-green-300 text-green-600 hover:bg-green-50 text-xs h-7 px-2"
                         >
@@ -2057,7 +2060,7 @@ Required JSON format:
                             disabled={isAnalyzing || !isAnalyzerEnabled}
                             className="h-11 rounded-lg bg-white border-2 border-orange-500 text-orange-600 shadow-sm transition-all duration-200 hover:bg-orange-300 hover:border-orange-300 hover:text-orange-600 hover:shadow-md disabled:opacity-50 disabled:hover:bg-white disabled:hover:text-orange-600 disabled:hover:border-orange-500"
                           >
-                            <Trash2 className="mr-2 size-4 text-orange-600" />
+                            <Trash2 className="mr-2 size-4 text-red-600" />
                             Remove
                           </Button>
                         </div>
@@ -2349,6 +2352,48 @@ Required JSON format:
         )}
       </div>
 
+      {/* Remove Image Dialog */}
+      {showRemoveDialog && createPortal(
+        <div 
+          className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setShowRemoveDialog(false);
+            }
+          }}
+        >
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl animate-slide-up">
+            <div className="flex items-start gap-4">
+              <div className="flex size-12 flex-shrink-0 items-center justify-center rounded-full bg-orange-100">
+                <AlertTriangle className="size-6 text-orange-600" />
+              </div>
+              <div className="flex-1">
+                <h3 className="text-lg font-semibold text-gray-900">Remove Uploaded Image?</h3>
+                <p className="mt-1 text-sm text-gray-500">
+                  This will remove the image from the current view. Your analysis history will be preserved.
+                </p>
+              </div>
+            </div>
+            <div className="mt-6 flex gap-3 justify-end">
+              <Button
+                onClick={() => setShowRemoveDialog(false)}
+                variant="outline"
+                className="border-gray-300 text-gray-700 hover:bg-gray-50"
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={confirmRemoveImage}
+                className="bg-orange-500 hover:bg-orange-600 text-white"
+              >
+                Yes, Remove
+              </Button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
       {/* Rename Dialog */}
       {showRenameDialog && createPortal(
         <div 
@@ -2360,7 +2405,7 @@ Required JSON format:
             }
           }}
         >
-          <div className="w-full max-w-md animate-fade-in rounded-2xl bg-white p-6 shadow-2xl">
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl animate-slide-up">
             <div className="flex items-start gap-4">
               <div className="flex size-12 flex-shrink-0 items-center justify-center rounded-full bg-blue-100">
                 <Pencil className="size-6 text-blue-600" />
@@ -2417,48 +2462,6 @@ Required JSON format:
         document.body
       )}
 
-      {/* Remove Image Dialog */}
-      {showRemoveDialog && createPortal(
-        <div 
-          className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
-          onClick={(e) => {
-            if (e.target === e.currentTarget) {
-              setShowRemoveDialog(false);
-            }
-          }}
-        >
-          <div className="w-full max-w-md animate-fade-in rounded-2xl bg-white p-6 shadow-2xl">
-            <div className="flex items-start gap-4">
-              <div className="flex size-12 flex-shrink-0 items-center justify-center rounded-full bg-orange-100">
-                <AlertTriangle className="size-6 text-orange-600" />
-              </div>
-              <div className="flex-1">
-                <h3 className="text-lg font-semibold text-gray-900">Remove Uploaded Image?</h3>
-                <p className="mt-1 text-sm text-gray-500">
-                  This will remove the image from the current view. Your analysis history will be preserved.
-                </p>
-              </div>
-            </div>
-            <div className="mt-6 flex gap-3 justify-end">
-              <Button
-                onClick={() => setShowRemoveDialog(false)}
-                variant="outline"
-                className="border-gray-300 text-gray-700 hover:bg-gray-50"
-              >
-                Cancel
-              </Button>
-              <Button
-                onClick={confirmRemoveImage}
-                className="bg-orange-500 hover:bg-orange-600 text-white"
-              >
-                Yes, Remove
-              </Button>
-            </div>
-          </div>
-        </div>,
-        document.body
-      )}
-
       {/* Delete History Item Dialog */}
       {showDeleteConfirm && createPortal(
         <div 
@@ -2469,7 +2472,7 @@ Required JSON format:
             }
           }}
         >
-          <div className="w-full max-w-md animate-fade-in rounded-2xl bg-white p-6 shadow-2xl">
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl animate-slide-up">
             <div className="flex items-start gap-4">
               <div className="flex size-12 flex-shrink-0 items-center justify-center rounded-full bg-red-100">
                 <AlertTriangle className="size-6 text-red-600" />
@@ -2494,6 +2497,90 @@ Required JSON format:
                 className="bg-red-500 hover:bg-red-600 text-white"
               >
                 Yes, Delete
+              </Button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Remove Data Dialog */}
+      {showRemoveDataDialog && createPortal(
+        <div 
+          className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setShowRemoveDataDialog(false);
+            }
+          }}
+        >
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl animate-slide-up">
+            <div className="flex items-start gap-4">
+              <div className="flex size-12 flex-shrink-0 items-center justify-center rounded-full bg-red-100">
+                <AlertTriangle className="size-6 text-red-600" />
+              </div>
+              <div className="flex-1">
+                <h3 className="text-lg font-semibold text-gray-900">Remove Inventory Data?</h3>
+                <p className="mt-1 text-sm text-gray-500">
+                  Are you sure you want to remove this uploaded inventory data? This will also clear the current analysis.
+                </p>
+              </div>
+            </div>
+            <div className="mt-6 flex gap-3 justify-end">
+              <Button
+                onClick={() => setShowRemoveDataDialog(false)}
+                variant="outline"
+                className="border-gray-300 text-gray-700 hover:bg-gray-50"
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={handleRemoveData}
+                className="bg-red-500 hover:bg-red-600 text-white"
+              >
+                Yes, Remove
+              </Button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Clear Data Dialog */}
+      {showClearDataDialog && createPortal(
+        <div 
+          className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setShowClearDataDialog(false);
+            }
+          }}
+        >
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl animate-slide-up">
+            <div className="flex items-start gap-4">
+              <div className="flex size-12 flex-shrink-0 items-center justify-center rounded-full bg-red-100">
+                <AlertTriangle className="size-6 text-red-600" />
+              </div>
+              <div className="flex-1">
+                <h3 className="text-lg font-semibold text-gray-900">Clear Saved Data?</h3>
+                <p className="mt-1 text-sm text-gray-500">
+                  Are you sure you want to clear this saved inventory data? This will also clear the current analysis.
+                </p>
+              </div>
+            </div>
+            <div className="mt-6 flex gap-3 justify-end">
+              <Button
+                onClick={() => setShowClearDataDialog(false)}
+                variant="outline"
+                className="border-gray-300 text-gray-700 hover:bg-gray-50"
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={handleClearSavedData}
+                className="bg-red-500 hover:bg-red-600 text-white"
+              >
+                Yes, Clear
               </Button>
             </div>
           </div>

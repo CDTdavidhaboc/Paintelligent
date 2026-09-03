@@ -2008,10 +2008,10 @@ Return ONLY valid JSON with this structure:
                       <Button
                         onClick={() => setShowRemoveDialog(true)}
                         variant="outline"
-                        className="border-green-300 text-green-600 hover:bg-red-50 text-xs h-7 px-2"
+                        className="border-green-300 text-green-600 hover:bg-green-50 text-xs h-7 px-2"
                       >
-                        <X className="size-3 mr-1" />
-                        Remove
+                        <Trahs2 className="size-3 mr-1" />
+                        Clear
                       </Button>
                     </>
                   ) : (
@@ -2048,44 +2048,53 @@ Return ONLY valid JSON with this structure:
         </Card>
       </section>
 
-      {showRemoveDialog && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl animate-in slide-in-from-bottom-4 duration-300">
-            <div className="flex items-start gap-4">
-              <div className="flex size-12 flex-shrink-0 items-center justify-center rounded-full bg-red-100">
-                <AlertTriangle className="size-6 text-red-600" />
-              </div>
-              <div className="flex-1">
-                <h3 className="text-lg font-semibold text-gray-900">
-                  Remove Uploaded Data?
-                </h3>
-                <p className="mt-1 text-sm text-gray-500">
-                  Are you sure you want to remove this uploaded sales data? This
-                  will also clear all analysis and forecast results.
-                </p>
-              </div>
-            </div>
-            <div className="mt-6 flex gap-3 justify-end">
-              <Button
-                onClick={() => setShowRemoveDialog(false)}
-                variant="outline"
-                className="border-gray-300 text-gray-700 hover:bg-gray-50"
-              >
-                Cancel
-              </Button>
-              <Button
-                onClick={() => {
-                  handleRemoveData();
-                  setShowRemoveDialog(false);
-                }}
-                className="bg-red-600 hover:bg-red-700 text-white"
-              >
-                Yes, Remove
-              </Button>
-            </div>
-          </div>
+     {/* Remove Uploaded Data Dialog */}
+{showRemoveDialog && createPortal(
+  <div 
+    className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 animate-fade-in"
+    onClick={(e) => {
+      if (e.target === e.currentTarget) {
+        setShowRemoveDialog(false);
+      }
+    }}
+  >
+    <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl animate-slide-up">
+      <div className="flex items-start gap-4">
+        <div className="flex size-12 flex-shrink-0 items-center justify-center rounded-full bg-red-100">
+          <AlertTriangle className="size-6 text-red-600" />
         </div>
-      )}
+        <div className="flex-1">
+          <h3 className="text-lg font-semibold text-gray-900">
+            Remove Uploaded Data?
+          </h3>
+          <p className="mt-1 text-sm text-gray-500">
+            Are you sure you want to remove this uploaded sales data? This
+            will also clear all analysis and forecast results.
+          </p>
+        </div>
+      </div>
+      <div className="mt-6 flex gap-3 justify-end">
+        <Button
+          onClick={() => setShowRemoveDialog(false)}
+          variant="outline"
+          className="border-gray-300 text-gray-700 hover:bg-gray-50"
+        >
+          Cancel
+        </Button>
+        <Button
+          onClick={() => {
+            handleRemoveData();
+            setShowRemoveDialog(false);
+          }}
+          className="bg-red-600 hover:bg-red-700 text-white"
+        >
+          Yes, Remove
+        </Button>
+      </div>
+    </div>
+  </div>,
+  document.body
+)}
 
       {salesData.length > 0 && (
         <>
