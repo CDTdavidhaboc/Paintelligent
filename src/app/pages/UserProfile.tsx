@@ -741,7 +741,7 @@ export default function UserProfile() {
                 className={`flex items-center gap-2 rounded-lg px-5 py-2.5 text-sm font-semibold transition-all ${
                   isEditing 
                     ? "bg-white text-red-600 hover:bg-red-100 border-2 border-red-600 hover:text-white hover:bg-red-700" 
-                    : "bg-white text-green-600 border-2 border-green-600 shadow-lg shadow-[#174d32]/20 hover:bg-green-600 hover:text-white hover:shadow-xl"
+                    : "bg-white text-green-800 border-2 border-green-600 shadow-lg shadow-[#174d32]/20 hover:bg-green-600 hover:text-white hover:shadow-xl"
                 }`}
               >
                 {isEditing ? (
