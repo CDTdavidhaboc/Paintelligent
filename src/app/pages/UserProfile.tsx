@@ -660,7 +660,7 @@ export default function UserProfile() {
 
       <div
         className={`
-          user-profile-page min-h-screen space-y-6 bg-[#f3f7f4] px-4 py-5 sm:px-6 lg:px-8 lg:py-7
+          user-profile-page min-h-max space-y-6 bg-[#f3f7f4] px-4 py-5 sm:px-6 lg:px-8 lg:py-7
           transition-all duration-700 ease-out
           ${isVisible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-5"}
         `}
@@ -740,8 +740,8 @@ export default function UserProfile() {
                 onClick={handleEditToggle}
                 className={`flex items-center gap-2 rounded-lg px-5 py-2.5 text-sm font-semibold transition-all ${
                   isEditing 
-                    ? "bg-red-50 text-red-600 hover:bg-red-100" 
-                    : "bg-[#174d32] text-white shadow-lg shadow-[#174d32]/20 hover:-translate-y-0.5 hover:shadow-xl"
+                    ? "bg-white text-red-600 hover:bg-red-100 border-2 border-red-600 hover:text-white hover:bg-red-700" 
+                    : "bg-white text-green-600 border-2 border-green-600 shadow-lg shadow-[#174d32]/20 hover:bg-green-600 hover:text-white hover:shadow-xl"
                 }`}
               >
                 {isEditing ? (
@@ -760,16 +760,16 @@ export default function UserProfile() {
               {isEditing && (
                 <button
                   onClick={handleSave}
-                  className="flex items-center gap-2 rounded-lg bg-emerald-600 px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-emerald-600/20 transition-all hover:-translate-y-0.5 hover:bg-emerald-700 hover:shadow-xl"
+                  className="flex items-center gap-2 rounded-lg bg-white px-5 py-2.5 text-sm font-semibold text-green-600 border-2 border-green-600 shadow-lg transition-all hover:text-white hover:bg-green-700 hover:shadow-xl"
                 >
-                  <Save className="size-4" />
+                  <Save className="size-4  " />
                   Save Changes
                 </button>
               )}
               
               <button
                 onClick={handleLogoutWithConfirmation}
-                className="flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-4 py-2.5 text-sm font-medium text-gray-600 transition-all hover:border-red-200 hover:bg-red-50 hover:text-red-600"
+                className="flex items-center gap-2 rounded-lg border border-gray-200 bg-white border-2 border-yellow-200 px-4 py-2.5 text-sm font-semibold text-gray-600 transition-all hover:border-red-200 hover:bg-red-50 hover:text-white hover:bg-yellow-400 hover:border-yellow-600"
               >
                 <LogOut className="size-4" />
                 Log Out

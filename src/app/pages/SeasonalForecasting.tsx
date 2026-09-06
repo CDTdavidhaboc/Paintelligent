@@ -56,6 +56,7 @@ import {
   Paintbrush,
   Sun,
   ShoppingBag,
+  Trash2,
 } from "lucide-react";
 
 import Papa from "papaparse";
@@ -237,7 +238,7 @@ const showNotification = (
 
 import { createPortal } from 'react-dom';
 
-// MonthDropdown component with proper color coding
+// MonthDropdown component with proper color coding - FIXED positioning
 const MonthDropdown = ({ 
   months, 
   badgeClass,
@@ -342,13 +343,12 @@ const MonthDropdown = ({
       
       {isOpen && (
         <div 
-          className={`absolute z-[99999] bg-white rounded-lg shadow-2xl border ${borderColor} py-1 max-h-64 overflow-y-auto`}
+          className={`absolute z-[99999] bg-white rounded-lg shadow-2xl border ${borderColor} py-1 max-h-64 overflow-y-auto min-w-[180px]`}
           style={{
-            position: 'fixed',
-            top: 'auto',
-            left: 'auto',
-            minWidth: '220px',
-            maxWidth: '280px',
+            top: '100%',
+            left: '50%',
+            transform: 'translateX(-50%)',
+            marginTop: '4px',
           }}
         >
           <div className={`px-3 py-1.5 text-xs font-semibold ${headerColor} border-b ${borderColor} bg-gray-50 sticky top-0`}>
@@ -367,7 +367,7 @@ const MonthDropdown = ({
                     : `${hoverBgColor} text-gray-700`
                 }`}
               >
-                <div className="flex justify-between items-center">
+                <div className="flex justify-between items-center gap-3">
                   <div className="flex items-center gap-2">
                     {isSelected && (
                       <span className="text-[10px]">✓</span>
@@ -393,6 +393,7 @@ const MonthDropdown = ({
     </div>
   );
 };
+
 export default function SeasonalForecasting() {
   const { userEmail } = useAuth();
   const [isLoading, setIsLoading] = useState(true);
@@ -406,6 +407,7 @@ export default function SeasonalForecasting() {
   const [uploadError, setUploadError] = useState("");
   const [isDraggingFile, setIsDraggingFile] = useState(false);
   const [isDataSaved, setIsDataSaved] = useState(false);
+  const [hasData, setHasData] = useState(false);
   const csvInputRef = useRef<HTMLInputElement | null>(null);
 
   const [salesData, setSalesData] = useState<SalesRecord[]>([]);
@@ -826,6 +828,7 @@ const stockRecommendations = useMemo(() => {
             setUploadedDataName(data.sales_data_name || "");
             setIsDataSaved(true);
             processUploadedData(data.sales_data);
+            setHasData(true);
           }
 
           if (data.forecast_data) {
@@ -841,12 +844,14 @@ const stockRecommendations = useMemo(() => {
         } else {
           setSyncStatus("idle");
           setSyncMessage("No saved data found");
+          setHasData(false);
         }
       } catch (error) {
         console.error("Error loading user data:", error);
         setSyncStatus("error");
         setSyncMessage("❌ Failed to load data from cloud");
         showNotification("❌ Failed to load data from cloud", "error");
+        setHasData(false);
       } finally {
         setIsLoading(false);
       }
@@ -1166,6 +1171,7 @@ const stockRecommendations = useMemo(() => {
       localStorage.removeItem(CACHE_DATA_COUNT_KEY);
 
       setUploadError("");
+      setHasData(true);
 
       console.log("Product details computed:", products.length, "unique products");
       console.log("Top 5 products by total sales:", products.slice(0, 5).map(p => 
@@ -1176,6 +1182,7 @@ const stockRecommendations = useMemo(() => {
       console.error("Error processing uploaded data:", error);
       setUploadError("Failed to process data. Please check the file format.");
       showNotification("Failed to process data. Please check the file format.", "error");
+      setHasData(false);
     }
   };
 
@@ -1184,6 +1191,7 @@ const stockRecommendations = useMemo(() => {
     setUploadedData(null);
     setUploadedDataName("");
     setIsDataSaved(false);
+    setHasData(false);
 
     const fileExtension = file.name.split(".").pop()?.toLowerCase();
     const isValidFile =
@@ -1344,6 +1352,7 @@ const stockRecommendations = useMemo(() => {
     setForecastData(null);
     setForecastStatus("idle");
     setLastGenerated(null);
+    setHasData(false);
     if (csvInputRef.current) csvInputRef.current.value = "";
 
     localStorage.removeItem(CACHE_KEY);
@@ -1389,6 +1398,7 @@ const stockRecommendations = useMemo(() => {
     setForecastData(null);
     setForecastStatus("idle");
     setLastGenerated(null);
+    setHasData(false);
     if (csvInputRef.current) csvInputRef.current.value = "";
 
     localStorage.removeItem(CACHE_KEY);
@@ -1782,6 +1792,7 @@ Return ONLY valid JSON with this structure:
         forecast-page min-h-screen space-y-5 bg-[#f3f7f4] px-4 py-5 sm:px-6 lg:px-8 lg:py-7 
         transition-all duration-700 ease-out
         ${isVisible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-5"}
+        ${!hasData && !salesData.length && !uploadedData ? 'h-screen overflow-hidden' : ''}
       `}
     >
       <style>{`
@@ -2010,7 +2021,7 @@ Return ONLY valid JSON with this structure:
                         variant="outline"
                         className="border-green-300 text-green-600 hover:bg-green-50 text-xs h-7 px-2"
                       >
-                        <Trahs2 className="size-3 mr-1" />
+                        <Trash2 className="size-3 mr-1" />
                         Clear
                       </Button>
                     </>

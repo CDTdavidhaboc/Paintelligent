@@ -271,13 +271,15 @@ const findInventoryMatch = (component: any, inventory: any[]) => {
   });
 };
 
+const REQUIRED_HEADERS = ["Product", "Brand", "Category", "Stocks", "Est. Price (PHP)", "Unit Purchase Price"];
+
 const loadInventory = (uploadedData: any[] | null) => {
   if (!uploadedData || uploadedData.length === 0) {
     throw new Error("Please upload a CSV or Excel inventory file first.");
   }
 
   return uploadedData
-    .filter((item) => item.Product || item.Brand || item.Category || item.product || item.brand || item.category)
+    .filter((item) => item.Product || item.Brand || item.Category)
     .map((item) => {
       const parsePrice = (value: any): number => {
         if (!value && value !== 0) return 0;
@@ -318,6 +320,7 @@ const loadInventory = (uploadedData: any[] | null) => {
         weightKg: parseVolume(item["Weight (kg)"] || item["weightKg"] || item["Weight"]),
         estPricePHP: parsePrice(item["Est. Price (PHP)"] || item["estPricePHP"] || item["Price"]),
         availability: item.Availability || item.availability || "Active",
+        unitPurchasePrice: parsePrice(item["Unit Purchase Price"] || item["unitPurchasePrice"] || 0),
       };
     });
 };
@@ -396,6 +399,7 @@ export default function PaintComponentAnalyzer() {
   const [showRemoveDialog, setShowRemoveDialog] = useState(false);
   const [showRemoveDataDialog, setShowRemoveDataDialog] = useState(false);
   const [showClearDataDialog, setShowClearDataDialog] = useState(false);
+  const [showClearAnalysisDialog, setShowClearAnalysisDialog] = useState(false);
   
   // History states
   const [analysisHistory, setAnalysisHistory] = useState<any[]>([]);
@@ -410,11 +414,14 @@ export default function PaintComponentAnalyzer() {
   const [showRenameDialog, setShowRenameDialog] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
   
+  // Track if analysis is from history
+  const [isFromHistory, setIsFromHistory] = useState(false);
+  
   // Track the last saved analysis to prevent duplicate saves
   const lastSavedAnalysisRef = useRef<string | null>(null);
 
   useEffect(() => {
-    if (showRemoveDialog || showDeleteConfirm || showRenameDialog || showRemoveDataDialog || showClearDataDialog) {
+    if (showRemoveDialog || showDeleteConfirm || showRenameDialog || showRemoveDataDialog || showClearDataDialog || showClearAnalysisDialog) {
       document.body.style.overflow = 'hidden';
     } else {
       document.body.style.overflow = 'unset';
@@ -422,7 +429,7 @@ export default function PaintComponentAnalyzer() {
     return () => {
       document.body.style.overflow = 'unset';
     };
-  }, [showRemoveDialog, showDeleteConfirm, showRenameDialog, showRemoveDataDialog, showClearDataDialog]);
+  }, [showRemoveDialog, showDeleteConfirm, showRenameDialog, showRemoveDataDialog, showClearDataDialog, showClearAnalysisDialog]);
 
   // Load user data from Supabase
   useEffect(() => {
@@ -547,6 +554,15 @@ export default function PaintComponentAnalyzer() {
 
     return () => window.clearInterval(interval);
   }, [isAnalyzing]);
+
+  // Clear current analysis from UI
+  const clearCurrentAnalysis = () => {
+    setColorAnalysis(null);
+    setAnalyzeError("");
+    setShowClearAnalysisDialog(false);
+    setIsFromHistory(false);
+    showNotification("🧹 Current analysis cleared", "info");
+  };
 
   // Load analysis history
   const loadAnalysisHistory = async () => {
@@ -688,6 +704,7 @@ export default function PaintComponentAnalyzer() {
     
     setSelectedHistoryItem(item);
     setShowHistory(false);
+    setIsFromHistory(true);
     
     // Convert history item to ColorAnalysis format
     const analysis: ColorAnalysis = {
@@ -815,6 +832,7 @@ export default function PaintComponentAnalyzer() {
     setUploadedDataName("");
     setColorAnalysis(null);
     setAnalyzeError("");
+    setIsFromHistory(false);
     if (csvInputRef.current) csvInputRef.current.value = "";
     
     clearSupabaseData();
@@ -827,6 +845,7 @@ export default function PaintComponentAnalyzer() {
     setUploadedData(null);
     setUploadedDataName("");
     setIsDataSaved(false);
+    setIsFromHistory(false);
 
     const fileExtension = file.name.split('.').pop()?.toLowerCase();
     const isValidFile = fileExtension === 'csv' || fileExtension === 'xlsx' || fileExtension === 'xls';
@@ -850,12 +869,37 @@ export default function PaintComponentAnalyzer() {
           });
 
           const data = result.data.filter((item) => 
-            item.Product || item.product || item.Brand || item.brand || item.Category || item.category
+            Object.keys(item).some(key => item[key] !== undefined && item[key] !== "")
           );
 
           if (data.length === 0) {
             setUploadError("CSV file appears empty or invalid.");
             showNotification("CSV file appears empty or invalid.", "error");
+            return;
+          }
+
+          // Get the actual headers from the CSV
+          const headers = Object.keys(data[0] || {});
+          
+          // Check if ALL required headers exist (exact match)
+          const missingHeaders = REQUIRED_HEADERS.filter(req => !headers.includes(req));
+          
+          if (missingHeaders.length > 0) {
+            setUploadError(`Missing required headers: ${missingHeaders.join(", ")}. Required: ${REQUIRED_HEADERS.join(", ")}`);
+            showNotification(`Missing required headers: ${missingHeaders.join(", ")}`, "error");
+            return;
+          }
+
+          // Validate that we have at least Product, Brand, Category
+          const hasRequired = data.some((item: any) => 
+            (item.Product || item.product) && 
+            (item.Brand || item.brand) && 
+            (item.Category || item.category)
+          );
+
+          if (!hasRequired) {
+            setUploadError("File doesn't have required headers: Product, Brand, Category.");
+            showNotification("File doesn't have required headers: Product, Brand, Category.", "error");
             return;
           }
 
@@ -877,6 +921,7 @@ export default function PaintComponentAnalyzer() {
       return;
     }
 
+    // Excel file processing
     reader.onload = (ev) => {
       try {
         const data = ev.target?.result;
@@ -890,13 +935,28 @@ export default function PaintComponentAnalyzer() {
           return;
         }
 
-        const hasRequiredHeaders = jsonData.some((item: any) => 
-          item.Product || item.product || item.Brand || item.brand || item.Category || item.category
+        // Get the actual headers from the Excel file
+        const headers = Object.keys(jsonData[0] || {});
+        
+        // Check if ALL required headers exist (exact match)
+        const missingHeaders = REQUIRED_HEADERS.filter(req => !headers.includes(req));
+        
+        if (missingHeaders.length > 0) {
+          setUploadError(`Missing required headers: ${missingHeaders.join(", ")}. Required: ${REQUIRED_HEADERS.join(", ")}`);
+          showNotification(`Missing required headers: ${missingHeaders.join(", ")}`, "error");
+          return;
+        }
+
+        // Validate that we have at least Product, Brand, Category
+        const hasRequired = jsonData.some((item: any) => 
+          (item.Product || item.product) && 
+          (item.Brand || item.brand) && 
+          (item.Category || item.category)
         );
 
-        if (!hasRequiredHeaders) {
-          setUploadError("Excel file doesn't have required headers.");
-          showNotification("Excel file doesn't have required headers.", "error");
+        if (!hasRequired) {
+          setUploadError("File doesn't have required headers: Product, Brand, Category.");
+          showNotification("File doesn't have required headers: Product, Brand, Category.", "error");
           return;
         }
 
@@ -937,6 +997,7 @@ export default function PaintComponentAnalyzer() {
     setUploadedDataName("");
     setUploadError("");
     setIsDataSaved(false);
+    setIsFromHistory(false);
     if (csvInputRef.current) csvInputRef.current.value = "";
     
     clearSupabaseData();
@@ -965,6 +1026,7 @@ export default function PaintComponentAnalyzer() {
     setIsAnalyzing(true);
     setAnalyzeError("");
     setColorAnalysis(null);
+    setIsFromHistory(false);
 
     try {
       const inventory = loadInventory(uploadedData);
@@ -1062,6 +1124,7 @@ Required JSON format:
         };
         
         setColorAnalysis(analysis);
+        setIsFromHistory(true);
         setBatchSizeLiters(historyItem.batch_size || 0.1);
         setLastFetched(new Date());
         setShowAnalysisComplete(true);
@@ -1234,6 +1297,7 @@ Required JSON format:
       };
 
       setColorAnalysis(normalized);
+      setIsFromHistory(false);
       setLastFetched(new Date());
       setShowAnalysisComplete(true);
       
@@ -1286,6 +1350,7 @@ Required JSON format:
     // but clear it from the UI so the user can analyze a new sample
     setColorAnalysis(null);
     setAnalyzeError("");
+    setIsFromHistory(false);
 
     const reader = new FileReader();
     reader.onload = (ev) => {
@@ -1319,6 +1384,7 @@ Required JSON format:
     setUploadedFileSize("");
     setColorAnalysis(null);
     setAnalyzeError("");
+    setIsFromHistory(false);
     if (fileInputRef.current) fileInputRef.current.value = "";
     setShowRemoveDialog(false);
     showNotification("🗑️ Image removed from view", "info");
@@ -1704,16 +1770,16 @@ Required JSON format:
                   </div>
                   
                   <div className="mt-3 p-3 bg-green-50 rounded-lg border border-green-200">
-                    <p className="text-xs font-medium text-green-800">Required Headers:</p>
+                    <p className="text-xs font-medium text-green-800">Required Headers (exact match, case-sensitive):</p>
                     <div className="flex flex-wrap gap-1.5 mt-1.5">
-                      <Badge variant="outline" className="text-xs bg-white border-green-300 text-green-700 ">Product</Badge>
-                      <Badge variant="outline" className="text-xs bg-white border-green-300 text-green-700 ">Brand</Badge>
-                      <Badge variant="outline" className="text-xs bg-white border-green-300 text-green-700 ">Category</Badge>
-                      <Badge variant="outline" className="text-xs bg-white border-green-300 text-green-700 ">Stocks</Badge>
-                      <Badge variant="outline" className="text-xs bg-white border-green-300 text-green-700 ">Est. Price (PHP)</Badge>
-                      <Badge variant="outline" className="text-xs bg-white border-green-300 text-green-700 ">Unit Purchase Price</Badge>
+                      <Badge variant="outline" className="text-xs bg-white border-green-300 text-green-700">Product</Badge>
+                      <Badge variant="outline" className="text-xs bg-white border-green-300 text-green-700">Brand</Badge>
+                      <Badge variant="outline" className="text-xs bg-white border-green-300 text-green-700">Category</Badge>
+                      <Badge variant="outline" className="text-xs bg-white border-green-300 text-green-700">Stocks</Badge>
+                      <Badge variant="outline" className="text-xs bg-white border-green-300 text-green-700">Est. Price (PHP)</Badge>
+                      <Badge variant="outline" className="text-xs bg-white border-green-300 text-green-700">Unit Purchase Price</Badge>
                     </div>
-                    <p className="text-[11px] text-green-600 mt-1.5">Headers are case-sensitive (match exactly)</p>
+                    <p className="text-[11px] text-green-600 mt-1.5">Headers are case-sensitive and must match exactly.</p>
                   </div>
                 </div>
               ) : (
@@ -2050,7 +2116,7 @@ Required JSON format:
                             onClick={() => fileInputRef.current?.click()}
                             variant="outline"
                             disabled={isAnalyzing || !isAnalyzerEnabled}
-                            className="h-11 rounded-lg border-2 border-green-950 bg-white text-green-950 shadow-sm transition-all duration-200 hover:bg-green-300 hover:border-green-300 hover:text-green-950 hover:shadow-md disabled:opacity-50 disabled:hover:bg-white disabled:hover:text-green-950 disabled:hover:border-green-950"
+                            className="h-11 rounded-lg border-2 border-green-950 bg-white text-green-950 shadow-sm transition-all duration-200 hover:bg-green-400 hover:border-green-400 hover:text-green-950 hover:shadow-md disabled:opacity-50 disabled:hover:bg-white disabled:hover:text-green-950 disabled:hover:border-green-950"
                           >
                             <Upload className="mr-2 size-4" />
                             Replace
@@ -2058,9 +2124,9 @@ Required JSON format:
                           <Button
                             onClick={handleRemoveWithConfirmation}
                             disabled={isAnalyzing || !isAnalyzerEnabled}
-                            className="h-11 rounded-lg bg-white border-2 border-orange-500 text-orange-600 shadow-sm transition-all duration-200 hover:bg-orange-300 hover:border-orange-300 hover:text-orange-600 hover:shadow-md disabled:opacity-50 disabled:hover:bg-white disabled:hover:text-orange-600 disabled:hover:border-orange-500"
+                            className="h-11 rounded-lg bg-white border-2 border-orange-500 text-orange-600 shadow-sm transition-all duration-200 hover:bg-red-600 hover:border-red-600 hover:text-orange-600 hover:text-white hover:shadow-md disabled:opacity-50 disabled:hover:bg-white disabled:hover:text-orange-600 disabled:hover:border-orange-500"
                           >
-                            <Trash2 className="mr-2 size-4 text-red-600" />
+                            <Trash2 className="mr-2 size-4 " />
                             Remove
                           </Button>
                         </div>
@@ -2095,11 +2161,24 @@ Required JSON format:
                       {colorAnalysis.rgb.g}, {colorAnalysis.rgb.b})
                     </p>
                   </div>
-                  <div className="ml-auto flex items-center gap-2 text-green-700 bg-green-50 px-4 py-2 rounded-lg border border-green-200">
-                    <CheckCircle2 className="size-5" />
-                    <span className="text-sm font-semibold">
-                      Residential AI Analysis Complete
-                    </span>
+                  <div className="ml-auto flex items-center gap-2">
+                    <div className="flex items-center gap-2 text-green-700 bg-green-50 px-4 py-2 rounded-lg border border-green-200">
+                      <CheckCircle2 className="size-5" />
+                      <span className="text-sm font-semibold">
+                        {isFromHistory ? "Loaded from History" : "Residential AI Analysis Complete"}
+                      </span>
+                    </div>
+                    {/* Only show X button if analysis is from history */}
+                    {isFromHistory && (
+                      <Button
+                        onClick={() => setShowClearAnalysisDialog(true)}
+                        variant="ghost"
+                        className="text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-full p-2 h-auto w-auto"
+                        title="Clear current analysis"
+                      >
+                        <X className="size-5" />
+                      </Button>
+                    )}
                   </div>
                 </div>
               </CardContent>
@@ -2387,6 +2466,48 @@ Required JSON format:
                 className="bg-orange-500 hover:bg-orange-600 text-white"
               >
                 Yes, Remove
+              </Button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Clear Analysis Dialog */}
+      {showClearAnalysisDialog && createPortal(
+        <div 
+          className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setShowClearAnalysisDialog(false);
+            }
+          }}
+        >
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl animate-slide-up">
+            <div className="flex items-start gap-4">
+              <div className="flex size-12 flex-shrink-0 items-center justify-center rounded-full bg-orange-100">
+                <AlertTriangle className="size-6 text-orange-600" />
+              </div>
+              <div className="flex-1">
+                <h3 className="text-lg font-semibold text-gray-900">Clear Current Analysis?</h3>
+                <p className="mt-1 text-sm text-gray-500">
+                  This will clear the current analysis from the UI. The analysis will remain saved in your history.
+                </p>
+              </div>
+            </div>
+            <div className="mt-6 flex gap-3 justify-end">
+              <Button
+                onClick={() => setShowClearAnalysisDialog(false)}
+                variant="outline"
+                className="border-gray-300 text-gray-700 hover:bg-gray-50"
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={clearCurrentAnalysis}
+                className="bg-orange-500 hover:bg-orange-600 text-white"
+              >
+                Yes, Clear
               </Button>
             </div>
           </div>
