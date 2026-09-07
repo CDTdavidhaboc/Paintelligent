@@ -1,6 +1,5 @@
 import { useMemo, useState, useEffect, useRef } from "react";
 import type { ChangeEvent, DragEvent } from "react";
-import { salesForecastAI } from "../gemini-service/SalesForecasting";
 
 import {
   Card,
