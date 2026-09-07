@@ -1069,7 +1069,7 @@ Required JSON format:
 `;
 
       const visionResult = await ai.models.generateContent({
-        model: "gemini-2.5-flash",
+        model: "gemini-3.5-flash",
         contents: [
           {
             role: "user",
@@ -1197,7 +1197,7 @@ Required JSON format:
 `;
 
       const formulationResult = await ai.models.generateContent({
-        model: "gemini-2.5-flash",
+        model: "gemini-3.5-flash",
         contents: [
           {
             role: "user",
