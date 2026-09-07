@@ -269,10 +269,10 @@ export default function Layout() {
               <div className="flex items-center gap-2">
                 <img src={logo} alt="Paintelligent" className="h-8 w-auto" />
                 <div className="hidden sm:block">
-                  <p className="text-sm font-medium text-white flex items-center gap-1">
+                  <div className="text-sm font-medium text-white flex items-center gap-1">
                     Hello and welcome, {userName}!
-                  </p>
-                  <p className="text-xs text-green-300 flex items-center gap-2 flex-wrap relative">
+                  </div>
+                  <div className="text-xs text-green-300 flex items-center gap-2 flex-wrap relative">
                     <CalendarDays className="size-3" />
                     {month} {day}, {year}
                     <span className="w-px h-3 bg-green-500/50 mx-1"></span>
@@ -399,7 +399,7 @@ export default function Layout() {
                         Weather unavailable
                       </span>
                     )}
-                  </p>
+                  </div>
                 </div>
               </div>
             </div>

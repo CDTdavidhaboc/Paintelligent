@@ -42,6 +42,7 @@ import {
   Trash2,
   Eye,
   Pencil,
+  Sparkles,
 } from "lucide-react";
 import Papa from "papaparse";
 import { GoogleGenAI } from "@google/genai";
@@ -401,6 +402,10 @@ export default function PaintComponentAnalyzer() {
   const [showClearDataDialog, setShowClearDataDialog] = useState(false);
   const [showClearAnalysisDialog, setShowClearAnalysisDialog] = useState(false);
   
+  // History Match Dialog
+  const [showHistoryMatchDialog, setShowHistoryMatchDialog] = useState(false);
+  const [historyMatchData, setHistoryMatchData] = useState<any | null>(null);
+  
   // History states
   const [analysisHistory, setAnalysisHistory] = useState<any[]>([]);
   const [showHistory, setShowHistory] = useState(false);
@@ -421,7 +426,7 @@ export default function PaintComponentAnalyzer() {
   const lastSavedAnalysisRef = useRef<string | null>(null);
 
   useEffect(() => {
-    if (showRemoveDialog || showDeleteConfirm || showRenameDialog || showRemoveDataDialog || showClearDataDialog || showClearAnalysisDialog) {
+    if (showRemoveDialog || showDeleteConfirm || showRenameDialog || showRemoveDataDialog || showClearDataDialog || showClearAnalysisDialog || showHistoryMatchDialog) {
       document.body.style.overflow = 'hidden';
     } else {
       document.body.style.overflow = 'unset';
@@ -429,7 +434,7 @@ export default function PaintComponentAnalyzer() {
     return () => {
       document.body.style.overflow = 'unset';
     };
-  }, [showRemoveDialog, showDeleteConfirm, showRenameDialog, showRemoveDataDialog, showClearDataDialog, showClearAnalysisDialog]);
+  }, [showRemoveDialog, showDeleteConfirm, showRenameDialog, showRemoveDataDialog, showClearDataDialog, showClearAnalysisDialog, showHistoryMatchDialog]);
 
   // Load user data from Supabase
   useEffect(() => {
@@ -561,7 +566,16 @@ export default function PaintComponentAnalyzer() {
     setAnalyzeError("");
     setShowClearAnalysisDialog(false);
     setIsFromHistory(false);
-    showNotification("🧹 Current analysis cleared", "info");
+    
+    // Also clear the uploaded image when clearing analysis
+    setUploadedImage(null);
+    setUploadedFileName("");
+    setUploadedFileSize("");
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+    
+    showNotification("🧹 Current analysis and image cleared", "info");
   };
 
   // Load analysis history
@@ -840,7 +854,6 @@ export default function PaintComponentAnalyzer() {
   };
 
   const processFile = (file: File) => {
-    // Don't clear history when uploading new file
     setUploadError("");
     setUploadedData(null);
     setUploadedDataName("");
@@ -878,28 +891,23 @@ export default function PaintComponentAnalyzer() {
             return;
           }
 
-          // Get the actual headers from the CSV
           const headers = Object.keys(data[0] || {});
+          console.log("📊 CSV Headers:", headers);
           
-          // Check if ALL required headers exist (exact match)
-          const missingHeaders = REQUIRED_HEADERS.filter(req => !headers.includes(req));
+          // Check if all required headers exist (case-insensitive)
+          const requiredHeaders = ["Product", "Unit Purchase Price", "Est. Price (PHP)", "Stocks", "Category", "Brand"];
+          const missingHeaders = requiredHeaders.filter(req => {
+            return !headers.some(h => h.trim().toLowerCase() === req.toLowerCase());
+          });
           
           if (missingHeaders.length > 0) {
-            setUploadError(`Missing required headers: ${missingHeaders.join(", ")}. Required: ${REQUIRED_HEADERS.join(", ")}`);
-            showNotification(`Missing required headers: ${missingHeaders.join(", ")}`, "error");
-            return;
-          }
-
-          // Validate that we have at least Product, Brand, Category
-          const hasRequired = data.some((item: any) => 
-            (item.Product || item.product) && 
-            (item.Brand || item.brand) && 
-            (item.Category || item.category)
-          );
-
-          if (!hasRequired) {
-            setUploadError("File doesn't have required headers: Product, Brand, Category.");
-            showNotification("File doesn't have required headers: Product, Brand, Category.", "error");
+            const actualHeaders = headers.join(", ");
+            setUploadError(
+              `Missing required headers: ${missingHeaders.join(", ")}. ` +
+              `Required: ${requiredHeaders.join(", ")}. ` +
+              `Found in file: ${actualHeaders || "No headers found"}`
+            );
+            showNotification(`Missing required headers. Found: ${actualHeaders || "No headers found"}`, "error");
             return;
           }
 
@@ -926,8 +934,16 @@ export default function PaintComponentAnalyzer() {
       try {
         const data = ev.target?.result;
         const workbook = XLSX.read(data, { type: 'array' });
-        const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-        const jsonData = XLSX.utils.sheet_to_json(firstSheet);
+        
+        // Try to get the first sheet
+        const firstSheetName = workbook.SheetNames[0];
+        const firstSheet = workbook.Sheets[firstSheetName];
+        
+        // Get all data including empty cells
+        const jsonData = XLSX.utils.sheet_to_json(firstSheet, { 
+          defval: '',  // Use empty string for empty cells
+          blankrows: false 
+        });
 
         if (jsonData.length === 0) {
           setUploadError("Excel file appears empty.");
@@ -935,28 +951,43 @@ export default function PaintComponentAnalyzer() {
           return;
         }
 
-        // Get the actual headers from the Excel file
+        // Get ALL headers including those with empty values
         const headers = Object.keys(jsonData[0] || {});
+        console.log("📊 Excel Headers found:", headers);
+        console.log("📊 First row data:", jsonData[0]);
         
-        // Check if ALL required headers exist (exact match)
-        const missingHeaders = REQUIRED_HEADERS.filter(req => !headers.includes(req));
+        // Check if Brand exists in any form (case-insensitive)
+        const brandHeader = headers.find(h => h.trim().toLowerCase() === 'brand');
+        const productHeader = headers.find(h => h.trim().toLowerCase() === 'product');
         
-        if (missingHeaders.length > 0) {
-          setUploadError(`Missing required headers: ${missingHeaders.join(", ")}. Required: ${REQUIRED_HEADERS.join(", ")}`);
-          showNotification(`Missing required headers: ${missingHeaders.join(", ")}`, "error");
-          return;
+        console.log("📊 Brand header found:", brandHeader || "NOT FOUND");
+        console.log("📊 Product header found:", productHeader || "NOT FOUND");
+        
+        // If Brand is missing, add it as an empty column
+        if (!brandHeader) {
+          console.log("⚠️ Brand column not found. Adding it as empty.");
+          // Add Brand to the data
+          jsonData.forEach((row: any) => {
+            row["Brand"] = "";
+          });
+          // Update headers
+          headers.push("Brand");
         }
 
-        // Validate that we have at least Product, Brand, Category
-        const hasRequired = jsonData.some((item: any) => 
-          (item.Product || item.product) && 
-          (item.Brand || item.brand) && 
-          (item.Category || item.category)
-        );
-
-        if (!hasRequired) {
-          setUploadError("File doesn't have required headers: Product, Brand, Category.");
-          showNotification("File doesn't have required headers: Product, Brand, Category.", "error");
+        // Check required headers (case-insensitive)
+        const requiredHeaders = ["Product", "Unit Purchase Price", "Est. Price (PHP)", "Stocks", "Category", "Brand"];
+        const missingHeaders = requiredHeaders.filter(req => {
+          return !headers.some(h => h.trim().toLowerCase() === req.toLowerCase());
+        });
+        
+        if (missingHeaders.length > 0) {
+          const actualHeaders = headers.join(", ");
+          setUploadError(
+            `Missing required headers: ${missingHeaders.join(", ")}. ` +
+            `Required: ${requiredHeaders.join(", ")}. ` +
+            `Found in file: ${actualHeaders || "No headers found"}`
+          );
+          showNotification(`Missing required headers. Found: ${actualHeaders || "No headers found"}`, "error");
           return;
         }
 
@@ -966,6 +997,7 @@ export default function PaintComponentAnalyzer() {
         setAnalyzeError("");
         showNotification(`📂 File "${file.name}" loaded successfully! ${jsonData.length} rows found.`, "success");
       } catch (err: any) {
+        console.error("❌ Error processing Excel:", err);
         setUploadError(`Failed to process Excel file: ${err.message}`);
         showNotification(`Failed to process Excel file: ${err.message}`, "error");
       }
@@ -1004,6 +1036,7 @@ export default function PaintComponentAnalyzer() {
     setShowRemoveDataDialog(false);
   };
 
+  // Enhanced analyzeWithGemini with RGB similarity matching and dialog
   const analyzeWithGemini = async (imageBase64: string | null) => {
     if (!imageBase64) {
       setAnalyzeError("Please upload a paint color image first.");
@@ -1035,6 +1068,7 @@ export default function PaintComponentAnalyzer() {
         throw new Error("No products found in the inventory.");
       }
 
+      // STEP 1: AI Vision - Detect the color from image
       const visionPrompt = `
 You are Paintelligent Vision Agent, a professional residential paint color analyzer.
 
@@ -1064,7 +1098,7 @@ Required JSON format:
   "finish": "gloss/semi-gloss/matte/unknown",
   "paintType": "wall paint/latex/enamel/acrylic/unknown",
   "confidence": 0,
-  "notes": "short explanation"
+  "notes": "short explanation. Include 2 sentences max"
 }
 `;
 
@@ -1103,39 +1137,63 @@ Required JSON format:
         notes: visionRaw.notes || "",
       };
 
-      // Check if this color exists in history
-      console.log("🔍 Checking if color exists in history:", vision.colorHex);
-      const existingAnalysis = await findExistingAnalysisByColor(userEmail, vision.colorHex);
+      console.log("🎨 Detected color:", vision);
+
+      // STEP 2: Check for similar color in history (RGB matching)
+      console.log("🔍 Checking for similar color in history...");
+      
+      // First try exact hex match
+      let existingAnalysis = await findExistingAnalysisByColor(userEmail, vision.colorHex);
+      
+      // If not found, try RGB similarity matching
+      if (!existingAnalysis.success || !existingAnalysis.data) {
+        console.log("🔄 No exact match found, checking for similar colors by RGB...");
+        
+        // Load all history
+        const allHistory = await getPaintAnalysisHistory(userEmail);
+        
+        if (allHistory.success && allHistory.data && allHistory.data.length > 0) {
+          const RGB_TOLERANCE = 25; // RGB tolerance (0-255)
+          let bestMatch = null;
+          let bestMatchDiff = Infinity;
+          
+          for (const item of allHistory.data) {
+            if (item.rgb) {
+              const rDiff = Math.abs(item.rgb.r - vision.rgb.r);
+              const gDiff = Math.abs(item.rgb.g - vision.rgb.g);
+              const bDiff = Math.abs(item.rgb.b - vision.rgb.b);
+              const totalDiff = rDiff + gDiff + bDiff;
+              
+              // Check if all RGB values are within tolerance
+              if (rDiff <= RGB_TOLERANCE && gDiff <= RGB_TOLERANCE && bDiff <= RGB_TOLERANCE) {
+                if (totalDiff < bestMatchDiff) {
+                  bestMatchDiff = totalDiff;
+                  bestMatch = item;
+                }
+              }
+            }
+          }
+          
+          if (bestMatch) {
+            console.log(`✅ Found similar color in history! RGB diff: ${bestMatchDiff}`);
+            existingAnalysis = { success: true, data: bestMatch };
+          }
+        }
+      }
       
       if (existingAnalysis.success && existingAnalysis.data) {
-        // Load from history
+        // Show dialog instead of immediately loading
         const historyItem = existingAnalysis.data;
-        console.log("✅ Color found in history, loading:", historyItem);
-        showNotification("🎨 Color found in history! Loading saved formula...", "info");
-        
-        const analysis: ColorAnalysis = {
-          hex: historyItem.color_hex,
-          dominantColor: historyItem.dominant_color,
-          rgb: historyItem.rgb,
-          paintComponents: historyItem.paint_components || [],
-          applicationGuide: historyItem.application_guide || null,
-          stockWarnings: [],
-          totalPrice: historyItem.total_price || 0,
-        };
-        
-        setColorAnalysis(analysis);
-        setIsFromHistory(true);
-        setBatchSizeLiters(historyItem.batch_size || 0.1);
-        setLastFetched(new Date());
-        setShowAnalysisComplete(true);
-        showNotification("✅ Loaded from history! No AI analysis needed.", "success");
-        setTimeout(() => setShowAnalysisComplete(false), 1800);
+        console.log("✅ Color found in history, showing dialog:", historyItem);
+        setHistoryMatchData(historyItem);
+        setShowHistoryMatchDialog(true);
         setIsAnalyzing(false);
         return;
       }
 
       console.log("🆕 Color not found in history, proceeding with AI analysis");
 
+      // STEP 3: Proceed with full AI formulation (only if not found in history)
       const filteredInventory = filterInventoryForFormulation(inventory, vision);
 
       if (filteredInventory.length === 0) {
@@ -1301,8 +1359,8 @@ Required JSON format:
       setLastFetched(new Date());
       setShowAnalysisComplete(true);
       
-      // Save to history
-      console.log("📝 Attempting to save to history...");
+      // Save to history (only for new analyses)
+      console.log("📝 Saving new analysis to history...");
       const saved = await saveToHistory(normalized);
       
       if (saved) {
@@ -2431,6 +2489,101 @@ Required JSON format:
         )}
       </div>
 
+      {/* History Match Found Dialog */}
+      {showHistoryMatchDialog && historyMatchData && createPortal(
+        <div 
+          className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-fade-in"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setShowHistoryMatchDialog(false);
+              setHistoryMatchData(null);
+            }
+          }}
+        >
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl animate-slide-up">
+            <div className="flex items-start gap-4">
+              <div className="flex items-center gap-3 flex-shrink-0">
+                <div 
+                  className="w-14 h-14 rounded-xl border-2 border-white shadow-lg flex-shrink-0"
+                  style={{ backgroundColor: historyMatchData.color_hex }}
+                />
+              
+              </div>
+              <div className="flex-1 min-w-0">
+                <h3 className="text-lg font-semibold text-gray-900">
+                  Color Found in History!
+                </h3>
+                <p className="mt-1 text-sm text-gray-600">
+                  The same color  for <strong className="text-[#174d32]">{historyMatchData.dominant_color}</strong> 
+                  <span className="text-gray-400"> ({historyMatchData.color_hex.toUpperCase()})</span> was found in your history.
+                </p>
+                <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-gray-500">
+                  <span className="bg-gray-100 px-2 py-0.5 rounded-full">{historyMatchData.paint_components?.length || 0} components</span>
+                  
+                </div>
+                <p className="mt-2 text-xs text-green-600 bg-green-50 px-3 py-1.5 rounded-lg border border-green-100">
+                  Want to load this saved formula instead of using AI analysis?
+                </p>
+              </div>
+            </div>
+            <div className="mt-6 flex gap-3 justify-end">
+              <Button
+                onClick={() => {
+                  setShowHistoryMatchDialog(false);
+                  setHistoryMatchData(null);
+                  setIsAnalyzing(false);
+                }}
+                variant="outline"
+                className="border-gray-300 text-gray-700 hover:bg-gray-50"
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={() => {
+                  // Load from history
+                  const item = historyMatchData;
+                  console.log("✅ Loading from history:", item);
+                  
+                  const analysis: ColorAnalysis = {
+                    hex: item.color_hex,
+                    dominantColor: item.dominant_color,
+                    rgb: item.rgb,
+                    paintComponents: item.paint_components || [],
+                    applicationGuide: item.application_guide || null,
+                    stockWarnings: [],
+                    totalPrice: item.total_price || 0,
+                  };
+                  
+                  setColorAnalysis(analysis);
+                  setIsFromHistory(true);
+                  setBatchSizeLiters(item.batch_size || 0.1);
+                  setLastFetched(new Date());
+                  setShowAnalysisComplete(true);
+                  
+                  // If there's an image in history, load it
+                  if (item.image_url) {
+                    setUploadedImage(item.image_url);
+                    setUploadedFileName(item.image_name || "History item");
+                  }
+                  
+                  showNotification("✅ Loaded from history! No AI analysis needed.", "success");
+                  setTimeout(() => setShowAnalysisComplete(false), 1800);
+                  
+                  setShowHistoryMatchDialog(false);
+                  setHistoryMatchData(null);
+                  setIsAnalyzing(false);
+                }}
+                className="bg-[#174d32] hover:bg-green-700 text-white"
+              >
+                
+                Yes, Load it!
+              </Button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
       {/* Remove Image Dialog */}
       {showRemoveDialog && createPortal(
         <div 
@@ -2485,13 +2638,13 @@ Required JSON format:
         >
           <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl animate-slide-up">
             <div className="flex items-start gap-4">
-              <div className="flex size-12 flex-shrink-0 items-center justify-center rounded-full bg-orange-100">
-                <AlertTriangle className="size-6 text-orange-600" />
+              <div className="flex size-12 flex-shrink-0 items-center justify-center rounded-full bg-red-100">
+                <AlertTriangle className="size-6 text-red-600" />
               </div>
               <div className="flex-1">
                 <h3 className="text-lg font-semibold text-gray-900">Clear Current Analysis?</h3>
                 <p className="mt-1 text-sm text-gray-500">
-                  This will clear the current analysis from the UI. The analysis will remain saved in your history.
+                  This will clear the current analysis and remove the uploaded image from view. The analysis will remain saved in your history.
                 </p>
               </div>
             </div>
@@ -2505,7 +2658,7 @@ Required JSON format:
               </Button>
               <Button
                 onClick={clearCurrentAnalysis}
-                className="bg-orange-500 hover:bg-orange-600 text-white"
+                className="bg-red-500 hover:bg-red-600 text-white"
               >
                 Yes, Clear
               </Button>
