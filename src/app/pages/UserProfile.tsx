@@ -769,7 +769,7 @@ export default function UserProfile() {
               
               <button
                 onClick={handleLogoutWithConfirmation}
-                className="flex items-center gap-2 rounded-lg border border-gray-200 bg-white border-2 border-yellow-200 px-4 py-2.5 text-sm font-semibold text-gray-600 transition-all hover:border-red-200 hover:bg-red-50 hover:text-white hover:bg-yellow-400 hover:border-yellow-600"
+                className="flex items-center gap-2 rounded-lg border border-gray-200 bg-white border-2 border-yellow-400 px-4 py-2.5 text-sm font-semibold text-gray-600 transition-all hover:border-red-200 hover:bg-red-50 hover:text-white hover:bg-yellow-400 hover:border-yellow-400"
               >
                 <LogOut className="size-4" />
                 Log Out

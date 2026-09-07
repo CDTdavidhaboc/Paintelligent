@@ -1829,10 +1829,10 @@ Required JSON format:
                         <Button
                           onClick={() => setShowRemoveDataDialog(true)}
                           variant="outline"
-                          className="border-green-300 text-green-600 hover:bg-green-50 text-xs h-7 px-2"
+                          className="border-red-300 text-red-600 hover:bg-red-50 text-xs h-7 px-2"
                         >
                           <Trash2 className="size-3 mr-1" />
-                          Remove
+                          Clear
                         </Button>
                       </>
                     ) : (
@@ -1848,7 +1848,7 @@ Required JSON format:
                         <Button
                           onClick={() => setShowClearDataDialog(true)}
                           variant="outline"
-                          className="border-green-300 text-green-600 hover:bg-green-50 text-xs h-7 px-2"
+                          className="border-red-300 text-red-600 hover:bg-red-50 text-xs h-7 px-2"
                         >
                           <Trash2 className="size-3 mr-1" />
                           Clear
@@ -2443,8 +2443,8 @@ Required JSON format:
         >
           <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl animate-slide-up">
             <div className="flex items-start gap-4">
-              <div className="flex size-12 flex-shrink-0 items-center justify-center rounded-full bg-orange-100">
-                <AlertTriangle className="size-6 text-orange-600" />
+              <div className="flex size-12 flex-shrink-0 items-center justify-center rounded-full bg-red-100">
+                <AlertTriangle className="size-6 text-red-600" />
               </div>
               <div className="flex-1">
                 <h3 className="text-lg font-semibold text-gray-900">Remove Uploaded Image?</h3>
@@ -2463,7 +2463,7 @@ Required JSON format:
               </Button>
               <Button
                 onClick={confirmRemoveImage}
-                className="bg-orange-500 hover:bg-orange-600 text-white"
+                className="bg-red-500 hover:bg-red-600 text-white"
               >
                 Yes, Remove
               </Button>

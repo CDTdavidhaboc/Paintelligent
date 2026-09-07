@@ -238,7 +238,7 @@ const showNotification = (
 
 import { createPortal } from 'react-dom';
 
-// MonthDropdown component with proper color coding - FIXED positioning
+// MonthDropdown component with proper color coding - FIXED positioning with PORTAL
 const MonthDropdown = ({ 
   months, 
   badgeClass,
@@ -260,6 +260,8 @@ const MonthDropdown = ({
   const [selectedMonth, setSelectedMonth] = useState<string>(
     months.length > 0 && months[0] !== "No data" && months[0] !== "" ? months[0] : "No data"
   );
+  const [dropdownPosition, setDropdownPosition] = useState<{ top: number; left: number } | null>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
   
   const validMonths = months.filter(m => m !== "No data" && m !== "");
   const firstMonth = validMonths.length > 0 ? validMonths[0] : "No data";
@@ -290,6 +292,7 @@ const MonthDropdown = ({
       const target = e.target as HTMLElement;
       if (isOpen && !target.closest('.month-dropdown-container')) {
         setIsOpen(false);
+        setDropdownPosition(null);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
@@ -308,11 +311,27 @@ const MonthDropdown = ({
       }
     }
     setIsOpen(false);
+    setDropdownPosition(null);
+  };
+
+  const handleButtonClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (isOpen) {
+      setIsOpen(false);
+      setDropdownPosition(null);
+    } else {
+      const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+      setDropdownPosition({
+        top: rect.bottom + 4,
+        left: rect.left + rect.width / 2,
+      });
+      setIsOpen(true);
+    }
   };
   
   if (validMonths.length === 0) {
     return (
-      <div className="month-dropdown-container relative inline-block">
+      <div className="month-dropdown-container relative inline-block" style={{ overflow: 'visible' }}>
         <span className="text-xs text-gray-400">No data</span>
       </div>
     );
@@ -321,13 +340,11 @@ const MonthDropdown = ({
   const displayMonth = selectedMonth !== "No data" ? selectedMonth : firstMonth;
   
   return (
-    <div className="month-dropdown-container relative inline-block">
+    <div className="month-dropdown-container relative inline-block" style={{ overflow: 'visible' }}>
       <button
-        onClick={(e) => {
-          e.stopPropagation();
-          setIsOpen(!isOpen);
-        }}
-        className={`${buttonBgColor} ${buttonTextColor} text-xs font-medium whitespace-nowrap px-2 py-1 rounded-full flex items-center gap-1 hover:opacity-90 transition cursor-pointer`}
+        ref={buttonRef}
+        onClick={handleButtonClick}
+        className={`${buttonBgColor} ${buttonTextColor} text-xs font-medium whitespace-nowrap px-2 py-1 rounded-full flex items-center gap-1 hover:opacity-90 transition cursor-pointer relative z-10`}
         type="button"
       >
         {displayMonth}
@@ -341,14 +358,15 @@ const MonthDropdown = ({
         </svg>
       </button>
       
-      {isOpen && (
+      {isOpen && dropdownPosition && createPortal(
         <div 
-          className={`absolute z-[99999] bg-white rounded-lg shadow-2xl border ${borderColor} py-1 max-h-64 overflow-y-auto min-w-[180px]`}
+          className="fixed bg-white rounded-lg shadow-2xl border py-1 max-h-64 overflow-y-auto min-w-[180px]"
           style={{
-            top: '100%',
-            left: '50%',
+            top: dropdownPosition.top,
+            left: dropdownPosition.left,
             transform: 'translateX(-50%)',
-            marginTop: '4px',
+            zIndex: 999999,
+            borderColor: isIncrease ? '#fbd38d' : '#86efac',
           }}
         >
           <div className={`px-3 py-1.5 text-xs font-semibold ${headerColor} border-b ${borderColor} bg-gray-50 sticky top-0`}>
@@ -388,7 +406,8 @@ const MonthDropdown = ({
               </div>
             );
           })}
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
@@ -408,6 +427,7 @@ export default function SeasonalForecasting() {
   const [isDraggingFile, setIsDraggingFile] = useState(false);
   const [isDataSaved, setIsDataSaved] = useState(false);
   const [hasData, setHasData] = useState(false);
+  const [isGenerating, setIsGenerating] = useState(false);
   const csvInputRef = useRef<HTMLInputElement | null>(null);
 
   const [salesData, setSalesData] = useState<SalesRecord[]>([]);
@@ -834,6 +854,7 @@ const stockRecommendations = useMemo(() => {
           if (data.forecast_data) {
             setForecastData(data.forecast_data);
             setForecastStatus("success");
+            setLastGenerated(new Date(data.last_fetched || Date.now()).toLocaleString());
           }
 
           if (data.last_fetched) {
@@ -859,6 +880,13 @@ const stockRecommendations = useMemo(() => {
 
     loadData();
   }, [userEmail]);
+
+  // Auto-generate forecast when data is saved
+  useEffect(() => {
+    if (isDataSaved && salesData.length > 0 && forecastStatus === "idle" && !isGenerating) {
+      generateForecast();
+    }
+  }, [isDataSaved, salesData]);
 
   useEffect(() => {
     const saveToCloud = async () => {
@@ -1331,7 +1359,7 @@ const stockRecommendations = useMemo(() => {
       setIsDataSaved(true);
       setUploadError("");
       showNotification(
-        "✅ Data saved successfully! Seasonal analysis is now available.",
+        "✅ Data saved successfully! Generating marketing strategies...",
         "success"
       );
     } catch (err) {
@@ -1353,6 +1381,7 @@ const stockRecommendations = useMemo(() => {
     setForecastStatus("idle");
     setLastGenerated(null);
     setHasData(false);
+    setIsGenerating(false);
     if (csvInputRef.current) csvInputRef.current.value = "";
 
     localStorage.removeItem(CACHE_KEY);
@@ -1399,6 +1428,7 @@ const stockRecommendations = useMemo(() => {
     setForecastStatus("idle");
     setLastGenerated(null);
     setHasData(false);
+    setIsGenerating(false);
     if (csvInputRef.current) csvInputRef.current.value = "";
 
     localStorage.removeItem(CACHE_KEY);
@@ -1407,6 +1437,7 @@ const stockRecommendations = useMemo(() => {
 
     clearSupabaseData();
     showNotification("🗑️ Data cleared successfully", "info");
+    setShowRemoveDialog(false);
   };
 
   const calculateARcoefficients = (data: number[]): {
@@ -1543,6 +1574,7 @@ const stockRecommendations = useMemo(() => {
     }
 
     setForecastStatus("loading");
+    setIsGenerating(true);
 
     try {
       const totalSales = salesData.reduce((sum, r) => sum + r.sales, 0);
@@ -1579,7 +1611,7 @@ Rainy Season: ₱${rainyTotal.toLocaleString()} (${rainyData.length} months, Avg
 FORECAST (3 months):
 ${calculatedForecast.map((f, i) => `${f.month}: ₱${f.sales.toLocaleString()} (${f.season})`).join('\n')}
 
-TASK: Generate 5 creative marketing strategies for each season (Dry and Rainy). Use simple words and make sure it is attainable for a small paint center.
+TASK: Generate 5 creative marketing strategies for each season (Dry and Rainy). Use simple words and make sure it is attainable for a small paint center. Do not make the title font bold.
 
 Return ONLY valid JSON with this structure:
 {
@@ -1643,11 +1675,13 @@ Return ONLY valid JSON with this structure:
       setForecastStatus("success");
       const date = new Date();
       setLastGenerated(date.toLocaleString());
-      showNotification("✅ Forecast generated successfully!", "success");
+      showNotification("✅ Marketing strategies generated successfully!", "success");
     } catch (error) {
       console.error("AI Generation Error:", error);
       setForecastStatus("error");
-      showNotification("Failed to generate forecast. Please try again.", "error");
+      showNotification("Failed to generate strategies. Please try again.", "error");
+    } finally {
+      setIsGenerating(false);
     }
   };
 
@@ -1829,6 +1863,19 @@ Return ONLY valid JSON with this structure:
         .forecast-page [data-slot="table-row"]:hover {
           background: rgb(240 253 244 / 0.7);
         }
+        /* Ensure dropdowns are not clipped */
+        .forecast-page [data-slot="card-content"] {
+          overflow: visible !important;
+        }
+        .forecast-page .overflow-x-auto {
+          overflow: visible !important;
+        }
+        .forecast-page table {
+          overflow: visible !important;
+        }
+        .forecast-page tbody tr td {
+          overflow: visible !important;
+        }
       `}</style>
 
       <header className="overflow-hidden rounded-2xl bg-[#174d32] px-5 py-2 text-white shadow-[0_18px_45px_rgba(23,77,50,0.18)] sm:px-7 sm:py-6">
@@ -1893,7 +1940,7 @@ Return ONLY valid JSON with this structure:
             </div>
           </CardHeader>
 
-          <CardContent>
+          <CardContent className="overflow-visible">
             <input
               ref={csvInputRef}
               type="file"
@@ -1970,83 +2017,78 @@ Return ONLY valid JSON with this structure:
               </div>
             ) : (
               <div className="space-y-2">
-                <div className={`flex items-center justify-between p-2 rounded-lg border transition-all duration-300 ${
-                  isDataSaved
-                    ? "bg-gray-50 border-gray-200 opacity-70"
-                    : "bg-green-50 border-green-200"
-                }`}>
-                  <div className="flex items-center gap-3">
-                    <div className={`flex size-8 items-center justify-center rounded-lg text-white ${
-                      isDataSaved ? "bg-gray-400" : "bg-[#174d32]"
-                    }`}>
-                      {uploadedDataName.endsWith(".csv") ? (
-                        <File className="size-4" />
-                      ) : (
-                        <FileSpreadsheet className="size-4" />
-                      )}
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium text-gray-900 truncate max-w-[150px]">
-                        {uploadedDataName}
-                      </p>
-                      <p className="text-xs text-gray-500">
-                        {uploadedData.length} rows • {computedProductDetails.length} products
-                      </p>
-                    </div>
-                  </div>
-                  {!isDataSaved && (
-                    <Button
-                      onClick={handleSaveData}
-                      className="bg-[#174d32] hover:bg-green-700 text-white text-xs h-7 px-2"
-                    >
-                      <Save className="size-3 mr-1" />
-                      Save & Enable
-                    </Button>
-                  )}
-                </div>
+  <div className={`flex items-center justify-between p-2 rounded-lg border transition-all duration-300 ${
+    isDataSaved
+      ? "bg-gray-50 border-gray-200 opacity-70"
+      : "bg-green-50 border-green-200"
+  }`}>
+    <div className="flex items-center gap-3">
+      <div className={`flex size-8 items-center justify-center rounded-lg text-white ${
+        isDataSaved ? "bg-gray-400" : "bg-[#174d32]"
+      }`}>
+        {uploadedDataName.endsWith(".csv") ? (
+          <File className="size-4" />
+        ) : (
+          <FileSpreadsheet className="size-4" />
+        )}
+      </div>
+      <div>
+        <p className={`text-sm font-medium truncate max-w-[150px] ${
+          isDataSaved ? "text-gray-900" : "text-gray-900"
+        }`}>
+          {uploadedDataName}
+        </p>
+        <p className={`text-xs ${
+          isDataSaved ? "text-gray-400" : "text-gray-500"
+        }`}>
+          {uploadedData.length} rows
+        </p>
+      </div>
+    </div>
+    {!isDataSaved && (
+      <Button
+        onClick={handleSaveData}
+        className="bg-[#174d32] hover:bg-green-700 text-white text-xs h-7 px-2"
+      >
+        <Save className="size-3 mr-1" />
+        Save & Enable
+      </Button>
+    )}
+    {isDataSaved && forecastStatus === "loading" && (
+      <div className="flex items-center gap-2 text-xs text-gray-500">
+        <Loader2 className="size-3 animate-spin" />
+        Generating strategies...
+      </div>
+    )}
+  </div>
 
-                <div className="flex items-center gap-2">
-                  {!isDataSaved ? (
-                    <>
-                      <Button
-                        onClick={() => csvInputRef.current?.click()}
-                        variant="outline"
-                        className="border-green-300 text-green-600 hover:bg-green-50 text-xs h-7 px-2"
-                      >
-                        <RefreshCw className="size-3 mr-1" />
-                        Replace
-                      </Button>
-                      <Button
-                        onClick={() => setShowRemoveDialog(true)}
-                        variant="outline"
-                        className="border-green-300 text-green-600 hover:bg-green-50 text-xs h-7 px-2"
-                      >
-                        <Trash2 className="size-3 mr-1" />
-                        Clear
-                      </Button>
-                    </>
-                  ) : (
-                    <>
-                      <Button
-                        onClick={() => csvInputRef.current?.click()}
-                        variant="outline"
-                        className="border-green-300 text-green-600 hover:bg-green-50 text-xs h-7 px-2"
-                      >
-                        <RefreshCw className="size-3 mr-1" />
-                        Replace
-                      </Button>
-                      <Button
-                        onClick={handleClearSavedData}
-                        variant="outline"
-                        className="border-green-300 text-green-600 hover:bg-green-50 text-xs h-7 px-2"
-                      >
-                        <X className="size-3 mr-1" />
-                        Clear
-                      </Button>
-                    </>
-                  )}
-                </div>
-              </div>
+  <div className="flex items-center gap-2">
+    <Button
+      onClick={() => csvInputRef.current?.click()}
+      variant="outline"
+      className={`text-xs h-7 px-2 ${
+        isDataSaved
+          ? "border-green-300 text-green-600 hover:bg-green-50"
+          : "border-green-300 text-green-600 hover:bg-green-50"
+      }`}
+    >
+      <RefreshCw className="size-3 mr-1" />
+      Replace
+    </Button>
+    <Button
+      onClick={() => setShowRemoveDialog(true)}
+      variant="outline"
+      className={`text-xs h-7 px-2 ${
+        isDataSaved
+          ? "border-red-300 text-red-600 hover:bg-red-50"
+          : "border-red-300 text-red-600 hover:bg-red-50"
+      }`}
+    >
+      <Trash2 className="size-3 mr-1" />
+      Clear
+    </Button>
+  </div>
+</div>
             )}
 
             {uploadError && (
@@ -2059,53 +2101,52 @@ Return ONLY valid JSON with this structure:
         </Card>
       </section>
 
-     {/* Remove Uploaded Data Dialog */}
-{showRemoveDialog && createPortal(
-  <div 
-    className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 animate-fade-in"
-    onClick={(e) => {
-      if (e.target === e.currentTarget) {
-        setShowRemoveDialog(false);
-      }
-    }}
-  >
-    <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl animate-slide-up">
-      <div className="flex items-start gap-4">
-        <div className="flex size-12 flex-shrink-0 items-center justify-center rounded-full bg-red-100">
-          <AlertTriangle className="size-6 text-red-600" />
-        </div>
-        <div className="flex-1">
-          <h3 className="text-lg font-semibold text-gray-900">
-            Remove Uploaded Data?
-          </h3>
-          <p className="mt-1 text-sm text-gray-500">
-            Are you sure you want to remove this uploaded sales data? This
-            will also clear all analysis and forecast results.
-          </p>
-        </div>
-      </div>
-      <div className="mt-6 flex gap-3 justify-end">
-        <Button
-          onClick={() => setShowRemoveDialog(false)}
-          variant="outline"
-          className="border-gray-300 text-gray-700 hover:bg-gray-50"
-        >
-          Cancel
-        </Button>
-        <Button
-          onClick={() => {
-            handleRemoveData();
-            setShowRemoveDialog(false);
+      {/* Remove Uploaded Data Dialog */}
+      {showRemoveDialog && createPortal(
+        <div 
+          className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 animate-fade-in"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setShowRemoveDialog(false);
+            }
           }}
-          className="bg-red-600 hover:bg-red-700 text-white"
         >
-          Yes, Remove
-        </Button>
-      </div>
-    </div>
-  </div>,
-  document.body
-)}
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl animate-slide-up">
+            <div className="flex items-start gap-4">
+              <div className="flex size-12 flex-shrink-0 items-center justify-center rounded-full bg-red-100">
+                <AlertTriangle className="size-6 text-red-600" />
+              </div>
+              <div className="flex-1">
+                <h3 className="text-lg font-semibold text-gray-900">
+                  Clear Uploaded Data?
+                </h3>
+                <p className="mt-1 text-sm text-gray-500">
+                  Are you sure you want to clear this uploaded sales data? This
+                  will also remove all analysis and forecast results.
+                </p>
+              </div>
+            </div>
+            <div className="mt-6 flex gap-3 justify-end">
+              <Button
+                onClick={() => setShowRemoveDialog(false)}
+                variant="outline"
+                className="border-gray-300 text-gray-700 hover:bg-gray-50"
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={() => {
+                  handleClearSavedData();
+                }}
+                className="bg-red-600 hover:bg-red-700 text-white"
+              >
+                Yes, Clear Data
+              </Button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
 
       {salesData.length > 0 && (
         <>
@@ -2593,228 +2634,228 @@ Return ONLY valid JSON with this structure:
           )}
 
         {/* Stock Recommendations with working dropdown */}
-{isDataSaved && stockRecommendations.length > 0 && (
-  <Card className="shadow-lg border-0 overflow-visible">
-    <div className=" rounded-t-2xl bg-gradient-to-r from-green-900 to-emerald-600 px-6 py-4">
-      <div className="flex items-center gap-3">
-        <Lightbulb className="w-5 h-5 text-white" />
-        <div>
-          <h3 className="text-lg font-bold text-white">Product Stock Recommendations</h3>
+        {isDataSaved && stockRecommendations.length > 0 && (
+          <Card className="shadow-lg border-0 overflow-visible">
+            <div className="rounded-t-2xl bg-gradient-to-r from-green-900 to-emerald-600 px-6 py-4">
+              <div className="flex items-center gap-3">
+                <Lightbulb className="w-5 h-5 text-white" />
+                <div>
+                  <h3 className="text-lg font-bold text-white">Product Stock Recommendations</h3>
+                </div>
+              </div>
+            </div>
 
-        </div>
-      </div>
-    </div>
+            <CardContent className="overflow-visible">
+              {(() => {
+                const groupedByAction = stockRecommendations.reduce((acc: any, category: any) => {
+                  const action = category.action || "Maintain";
+                  if (!acc[action]) acc[action] = [];
+                  acc[action].push(category);
+                  return acc;
+                }, {});
 
-    <CardContent className="overflow-visible ">
-      {(() => {
-        const groupedByAction = stockRecommendations.reduce((acc: any, category: any) => {
-          const action = category.action || "Maintain";
-          if (!acc[action]) acc[action] = [];
-          acc[action].push(category);
-          return acc;
-        }, {});
-
-        const actionOrder = ["Increase", "Maintain"];
-
-        return (
-          <div className="space-y-6">
-            {actionOrder
-              .filter((action) => groupedByAction[action])
-              .map((action) => {
-                const isIncrease = action === "Increase";
-                const borderColor = isIncrease ? "border-orange-500" : "border-green-900";
-                const bgColor = isIncrease ? "bg-orange-50/30" : "bg-green-50/30";
-                const headerBg = isIncrease ? "bg-orange-50/50" : "bg-green-50/50";
-                const headerText = isIncrease ? "text-orange-700" : "text-green-700";
-                const rowHover = isIncrease ? "hover:bg-orange-50/30" : "hover:bg-green-50/30";
-                const productText = isIncrease ? "text-orange-800" : "text-gray-800";
-                const recommendedText = isIncrease ? "text-orange-600" : "text-green-600";
-                const peakBadge = isIncrease
-                  ? "bg-orange-200 text-orange-800"
-                  : "bg-green-200 text-green-800";
-                
-                const actionLabel = isIncrease ? "Increase before peak month" : "Maintain current stock";
+                const actionOrder = ["Increase", "Maintain"];
 
                 return (
-                  <div
-                    key={action}
-                    className={`border-2 rounded-lg ${borderColor} ${bgColor} rounded-r-lg p-4 overflow-visible`}
-                  >
-                    <div className="flex items-center gap-3 mb-4 pb-3 border-b border-gray-200">
-                      <h4 className={`text-md font-semibold ${isIncrease ? 'text-orange-700' : 'text-green-700'}`}>
-                        {actionLabel}
-                      </h4>
-                    </div>
+                  <div className="space-y-6">
+                    {actionOrder
+                      .filter((action) => groupedByAction[action])
+                      .map((action) => {
+                        const isIncrease = action === "Increase";
+                        const borderColor = isIncrease ? "border-orange-500" : "border-green-900";
+                        const bgColor = isIncrease ? "bg-orange-50/30" : "bg-green-50/30";
+                        const headerBg = isIncrease ? "bg-orange-50/50" : "bg-green-50/50";
+                        const headerText = isIncrease ? "text-orange-700" : "text-green-700";
+                        const rowHover = isIncrease ? "hover:bg-orange-50/30" : "hover:bg-green-50/30";
+                        const productText = isIncrease ? "text-orange-800" : "text-gray-800";
+                        const recommendedText = isIncrease ? "text-orange-600" : "text-green-600";
+                        const peakBadge = isIncrease
+                          ? "bg-orange-200 text-orange-800"
+                          : "bg-green-200 text-green-800";
+                        
+                        const actionLabel = isIncrease ? "Increase before peak month" : "Maintain current stock";
 
-                    <div className="overflow-x-auto overflow-visible">
-                      <table className="w-full text-sm table-fixed overflow-visible">
-                        <thead>
-                          <tr className={headerBg}>
-                            <th className={`text-left px-3 py-2 text-xs font-semibold ${headerText} w-[45%]`}>
-                              Product
-                            </th>
-                            <th className={`text-center px-3 py-2 text-xs font-semibold ${headerText} w-[25%]`}>
-                              Recommended
-                            </th>
-                            <th className={`text-center px-3 py-2 text-xs font-semibold ${headerText} w-[30%]`}>
-                              Peak Month
-                            </th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {groupedByAction[action].map((category: any, idx: number) => {
-                            const categoryKey = category.category;
-                            const currentStock = productStockStates[categoryKey] !== undefined 
-                              ? productStockStates[categoryKey] 
-                              : category.defaultStock || 60;
-                            
-                            const monthLabels = category.items.map((item: any) => item.month);
-                            
-                            const recommendationsMap = category.items.map((item: any) => ({
-                              month: item.month,
-                              recommendedStock: item.recommendedStock,
-                              peakUnits: item.peakUnits,
-                              peakSales: item.peakSales,
-                            }));
-                            
-                            const updateStock = (stock: number) => {
-                              setProductStockStates(prev => ({
-                                ...prev,
-                                [categoryKey]: stock
-                              }));
-                            };
-                            
-                            return (
-                              <tr
-                                key={idx}
-                                className={`border-b border-gray-100 ${rowHover} transition-colors`}
-                              >
-                                <td className="px-3 py-3">
-                                  <span className={`font-medium text-sm ${productText}`}>
-                                    {category.category}
-                                  </span>
-                                </td>
-                                
-                                <td className={`text-center px-3 py-3 text-sm font-bold ${recommendedText}`}>
-                                  {currentStock} units
-                                </td>
-                                
-                                <td className="text-center px-3 py-3">
-                                  {monthLabels.length > 0 && monthLabels[0] !== "No data" ? (
-                                    <MonthDropdown 
-                                      months={monthLabels} 
-                                      badgeClass={peakBadge}
-                                      recommendations={recommendationsMap}
-                                      currentStock={currentStock}
-                                      setCurrentStock={updateStock}
-                                      actionType={action}
-                                    />
-                                  ) : (
-                                    <span className="text-xs text-gray-400">No data</span>
-                                  )}
-                                </td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
+                        return (
+                          <div
+                            key={action}
+                            className={`border-2 rounded-lg ${borderColor} ${bgColor} rounded-r-lg p-4 overflow-visible`}
+                          >
+                            <div className="flex items-center gap-3 mb-4 pb-3 border-b border-gray-200">
+                              <h4 className={`text-md font-semibold ${isIncrease ? 'text-orange-700' : 'text-green-700'}`}>
+                                {actionLabel}
+                              </h4>
+                            </div>
+
+                            <div className="overflow-x-auto overflow-visible">
+                              <table className="w-full text-sm table-fixed overflow-visible">
+                                <thead>
+                                  <tr className={headerBg}>
+                                    <th className={`text-left px-3 py-2 text-xs font-semibold ${headerText} w-[45%]`}>
+                                      Product
+                                    </th>
+                                    <th className={`text-center px-3 py-2 text-xs font-semibold ${headerText} w-[25%]`}>
+                                      Recommended
+                                    </th>
+                                    <th className={`text-center px-3 py-2 text-xs font-semibold ${headerText} w-[30%]`}>
+                                      Peak Month
+                                    </th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {groupedByAction[action].map((category: any, idx: number) => {
+                                    const categoryKey = category.category;
+                                    const currentStock = productStockStates[categoryKey] !== undefined 
+                                      ? productStockStates[categoryKey] 
+                                      : category.defaultStock || 60;
+                                    
+                                    const monthLabels = category.items.map((item: any) => item.month);
+                                    
+                                    const recommendationsMap = category.items.map((item: any) => ({
+                                      month: item.month,
+                                      recommendedStock: item.recommendedStock,
+                                      peakUnits: item.peakUnits,
+                                      peakSales: item.peakSales,
+                                    }));
+                                    
+                                    const updateStock = (stock: number) => {
+                                      setProductStockStates(prev => ({
+                                        ...prev,
+                                        [categoryKey]: stock
+                                      }));
+                                    };
+                                    
+                                    return (
+                                      <tr
+                                        key={idx}
+                                        className={`border-b border-gray-100 ${rowHover} transition-colors overflow-visible`}
+                                      >
+                                        <td className="px-3 py-3">
+                                          <span className={`font-medium text-sm ${productText}`}>
+                                            {category.category}
+                                          </span>
+                                        </td>
+                                        
+                                        <td className={`text-center px-3 py-3 text-sm font-bold ${recommendedText}`}>
+                                          {currentStock} units
+                                        </td>
+                                        
+                                        <td className="text-center px-3 py-3 overflow-visible relative">
+                                          {monthLabels.length > 0 && monthLabels[0] !== "No data" ? (
+                                            <MonthDropdown 
+                                              months={monthLabels} 
+                                              badgeClass={peakBadge}
+                                              recommendations={recommendationsMap}
+                                              currentStock={currentStock}
+                                              setCurrentStock={updateStock}
+                                              actionType={action}
+                                            />
+                                          ) : (
+                                            <span className="text-xs text-gray-400">No data</span>
+                                          )}
+                                        </td>
+                                      </tr>
+                                    );
+                                  })}
+                                </tbody>
+                              </table>
+                            </div>
+                          </div>
+                        );
+                      })}
                   </div>
                 );
-              })}
-          </div>
-        );
-      })()}
-    </CardContent>
-  </Card>
-)}
-          {(bestSellingProducts.length > 0 || slowMovingProducts.length > 0) && (
-            <section>
-              <div className="bg-gradient-to-r from-green-900 to-emerald-600 rounded-t-2xl px-6 py-4">
-                <div className="flex items-center gap-3">
-                  <Target className="size-5 text-white" />
-                  <div>
-                    <h3 className="text-lg font-bold text-white">Product Performance</h3>
-                  </div>
+              })()}
+            </CardContent>
+          </Card>
+        )}
+        
+        {(bestSellingProducts.length > 0 || slowMovingProducts.length > 0) && (
+          <section>
+            <div className="bg-gradient-to-r from-green-900 to-emerald-600 rounded-t-2xl px-6 py-4">
+              <div className="flex items-center gap-3">
+                <Target className="size-5 text-white" />
+                <div>
+                  <h3 className="text-lg font-bold text-white">Product Performance</h3>
                 </div>
               </div>
-              
-              <div className="bg-white rounded-b-2xl shadow-lg border border-t-0 border-gray-200 p-4">
-                <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-                  {bestSellingProducts.length > 0 && (
-                    <Card className="shadow-lg border-1 border-green-300 hover:shadow-xl transition-all duration-300">
-                      <CardHeader className="bg-gradient-to-r from-green-900 to-emerald-700 rounded-t-lg border-b border-green-900 !p-2">
-                        <div className="flex items-center gap-2">
-                          <div className="w-5 h-5 rounded-lg ml-3 mt-1 bg-green-800 flex items-center justify-center flex-shrink-0">
-                            <TrendingUp className="size-3 text-white" />
-                          </div>
-                          <CardTitle className="text-sm mt-1 font-semibold text-white">
-                            Best-Selling Products
-                          </CardTitle>
+            </div>
+            
+            <div className="bg-white rounded-b-2xl shadow-lg border border-t-0 border-gray-200 p-4">
+              <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+                {bestSellingProducts.length > 0 && (
+                  <Card className="shadow-lg border-1 border-green-300 hover:shadow-xl transition-all duration-300">
+                    <CardHeader className="bg-gradient-to-r from-green-900 to-emerald-700 rounded-t-lg border-b border-green-900 !p-2">
+                      <div className="flex items-center gap-2">
+                        <div className="w-5 h-5 rounded-lg ml-3 mt-1 bg-green-800 flex items-center justify-center flex-shrink-0">
+                          <TrendingUp className="size-3 text-white" />
                         </div>
-                      </CardHeader>
-                      <CardContent className="space-y-3">
-                        {bestSellingProducts.map((product: any, index: number) => (
-                          <div key={index} className="border rounded-lg p-3 hover:shadow-md transition">
-                            <div className="flex justify-between items-start">
-                              <div>
-                                <h4 className="font-semibold text-gray-800 text-sm">{product.name}</h4>
-                                <p className="text-xs text-gray-500">
-                                  {product.unitsSold?.toLocaleString() || 0} units
-                                </p>
-                              </div>
-                              <div className="text-right">
-                                <div className="flex items-center gap-2">
-                                  <span className="text-xs text-green-600"> Dry: {product.dryUnits || 0}</span>
-                                  <span className="text-xs text-blue-600"> Rainy: {product.rainyUnits || 0}</span>
-                                </div>
+                        <CardTitle className="text-sm mt-1 font-semibold text-white">
+                          Best-Selling Products
+                        </CardTitle>
+                      </div>
+                    </CardHeader>
+                    <CardContent className="space-y-3">
+                      {bestSellingProducts.map((product: any, index: number) => (
+                        <div key={index} className="border rounded-lg p-3 hover:shadow-md transition">
+                          <div className="flex justify-between items-start">
+                            <div>
+                              <h4 className="font-semibold text-gray-800 text-sm">{product.name}</h4>
+                              <p className="text-xs text-gray-500">
+                                {product.unitsSold?.toLocaleString() || 0} units
+                              </p>
+                            </div>
+                            <div className="text-right">
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs text-green-600"> Dry: {product.dryUnits || 0}</span>
+                                <span className="text-xs text-blue-600"> Rainy: {product.rainyUnits || 0}</span>
                               </div>
                             </div>
                           </div>
-                        ))}
-                      </CardContent>
-                    </Card>
-                  )}
+                        </div>
+                      ))}
+                    </CardContent>
+                  </Card>
+                )}
 
-                  {slowMovingProducts.length > 0 && (
-                    <Card className=" border-1 border-orange-300 shadow-lg hover:shadow-xl transition-all duration-300">
-                      <CardHeader className="bg-gradient-to-r from-orange-700 to-amber-600 rounded-t-lg border-b border-orange-100 !p-2">
-                        <div className="flex items-center gap-2">
-                          <div className="w-5 h-5 ml-3 mt-1 rounded-lg bg-orange-500 flex items-center justify-center flex-shrink-0">
-                            <TrendingDown className="size-3 text-white" />
-                          </div>
-                          <CardTitle className="text-sm mt-1 font-semibold text-white">
-                            Slow-Moving Products
-                          </CardTitle>
+                {slowMovingProducts.length > 0 && (
+                  <Card className=" border-1 border-orange-300 shadow-lg hover:shadow-xl transition-all duration-300">
+                    <CardHeader className="bg-gradient-to-r from-orange-700 to-amber-600 rounded-t-lg border-b border-orange-100 !p-2">
+                      <div className="flex items-center gap-2">
+                        <div className="w-5 h-5 ml-3 mt-1 rounded-lg bg-orange-500 flex items-center justify-center flex-shrink-0">
+                          <TrendingDown className="size-3 text-white" />
                         </div>
-                      </CardHeader>
-                      <CardContent className="space-y-3">
-                        {slowMovingProducts.map((product: any, index: number) => (
-                          <div key={index} className="border rounded-lg p-3 hover:shadow-md transition">
-                            <div className="flex justify-between items-start">
-                              <div>
-                                <h4 className="font-semibold text-gray-800 text-sm">{product.name}</h4>
-                                <p className="text-xs text-gray-500">
-                                  {product.unitsSold?.toLocaleString() || 0} units sold
-                                </p>
-                              </div>
-                              <div className="text-right">
-                                <div className="flex items-center gap-2">
-                                  <span className="text-xs text-green-600"> Dry: {product.dryUnits || 0}</span>
-                                  <span className="text-xs text-blue-600"> Rainy: {product.rainyUnits || 0}</span>
-                                </div>
+                        <CardTitle className="text-sm mt-1 font-semibold text-white">
+                          Slow-Moving Products
+                        </CardTitle>
+                      </div>
+                    </CardHeader>
+                    <CardContent className="space-y-3">
+                      {slowMovingProducts.map((product: any, index: number) => (
+                        <div key={index} className="border rounded-lg p-3 hover:shadow-md transition">
+                          <div className="flex justify-between items-start">
+                            <div>
+                              <h4 className="font-semibold text-gray-800 text-sm">{product.name}</h4>
+                              <p className="text-xs text-gray-500">
+                                {product.unitsSold?.toLocaleString() || 0} units sold
+                              </p>
+                            </div>
+                            <div className="text-right">
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs text-green-600"> Dry: {product.dryUnits || 0}</span>
+                                <span className="text-xs text-blue-600"> Rainy: {product.rainyUnits || 0}</span>
                               </div>
                             </div>
                           </div>
-                        ))}
-                      </CardContent>
-                    </Card>
-                  )}
-                </div>
+                        </div>
+                      ))}
+                    </CardContent>
+                  </Card>
+                )}
               </div>
-            </section>
-          )}
-        </>
+            </div>
+          </section>
+        )}
+      </>
       )}
 
       {salesData.length > 0 && forecastStatus !== "success" && isDataSaved && (
