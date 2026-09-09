@@ -115,6 +115,7 @@ interface SeasonProduct {
   revenue: number;
   totalRevenue: number;
   volumeUsed: number;
+  rank?: number; // Add rank property
 }
 
 const MONTH_NAMES = [
@@ -556,43 +557,80 @@ export default function SeasonalForecasting() {
     return products.sort((a, b) => b.totalSales - a.totalSales);
   }, [originalData]);
 
-  const topProductsBySeason = useMemo(() => {
-    if (!computedProductDetails.length) return null;
+const topProductsBySeason = useMemo(() => {
+  if (!computedProductDetails.length) return null;
 
-    const dryTop5 = computedProductDetails
-      .filter((p) => p.drySales > 0)
-      .sort((a, b) => b.dryUnits - a.dryUnits)
-      .slice(0, 5)
-      .map((p) => ({
-        productKey: p.productKey,
-        name: p.product,
-        brand: p.brand,
-        totalUnits: p.dryUnits,
-        revenue: Math.round(p.drySales),
-        totalRevenue: Math.round(p.drySales),
-        volumeUsed: Math.round(p.totalVolumeUsed / p.months * p.dryMonths / (p.dryMonths || 1)),
-      }));
+  // Helper function to rank items with ties
+  const rankItemsWithTies = (items: any[], getUnits: (item: any) => number) => {
+    // Sort by units descending
+    const sorted = [...items].sort((a, b) => getUnits(b) - getUnits(a));
+    
+    // Add rank with ties
+    let rank = 1;
+    let i = 0;
+    while (i < sorted.length) {
+      let j = i;
+      // Find all items with same units
+      while (j < sorted.length && getUnits(sorted[j]) === getUnits(sorted[i])) {
+        j++;
+      }
+      // Assign same rank to all tied items
+      for (let k = i; k < j; k++) {
+        (sorted[k] as any).rank = rank;
+      }
+      // Skip to next group
+      i = j;
+      // Increment rank by 1 for each unique rank (tie counts as 1)
+      rank += 1;
+    }
+    return sorted;
+  };
 
-    const rainyTop5 = computedProductDetails
-      .filter((p) => p.rainySales > 0)
-      .sort((a, b) => b.rainyUnits - a.rainyUnits)
-      .slice(0, 5)
-      .map((p) => ({
-        productKey: p.productKey,
-        name: p.product,
-        brand: p.brand,
-        totalUnits: p.rainyUnits,
-        revenue: Math.round(p.rainySales),
-        totalRevenue: Math.round(p.rainySales),
-        volumeUsed: Math.round(p.totalVolumeUsed / p.months * p.rainyMonths / (p.rainyMonths || 1)),
-      }));
+  // Dry season top products with proper ranking
+  const dryProducts = computedProductDetails
+    .filter((p) => p.dryUnits > 0)
+    .map(p => ({
+      productKey: p.productKey,
+      name: p.product,
+      brand: p.brand,
+      totalUnits: p.dryUnits,
+      revenue: Math.round(p.drySales),
+      totalRevenue: Math.round(p.drySales),
+      volumeUsed: Math.round(p.totalVolumeUsed / p.months * p.dryMonths / (p.dryMonths || 1)),
+      units: p.dryUnits,
+    }));
 
-    return {
-      dry: dryTop5,
-      rainy: rainyTop5,
-    };
-  }, [computedProductDetails]);
+  const rankedDry = rankItemsWithTies(dryProducts, (item) => item.units);
+  
+  // Get unique ranks and take top 5 unique ranks
+  const uniqueRanks = [...new Set(rankedDry.map(item => item.rank))].slice(0, 5);
+  const topDryProducts = rankedDry.filter(item => uniqueRanks.includes(item.rank));
 
+  // Rainy season top products with proper ranking
+  const rainyProducts = computedProductDetails
+    .filter((p) => p.rainyUnits > 0)
+    .map(p => ({
+      productKey: p.productKey,
+      name: p.product,
+      brand: p.brand,
+      totalUnits: p.rainyUnits,
+      revenue: Math.round(p.rainySales),
+      totalRevenue: Math.round(p.rainySales),
+      volumeUsed: Math.round(p.totalVolumeUsed / p.months * p.rainyMonths / (p.rainyMonths || 1)),
+      units: p.rainyUnits,
+    }));
+
+  const rankedRainy = rankItemsWithTies(rainyProducts, (item) => item.units);
+  
+  // Get unique ranks and take top 5 unique ranks
+  const uniqueRanksRainy = [...new Set(rankedRainy.map(item => item.rank))].slice(0, 5);
+  const topRainyProducts = rankedRainy.filter(item => uniqueRanksRainy.includes(item.rank));
+
+  return {
+    dry: topDryProducts,
+    rainy: topRainyProducts,
+  };
+}, [computedProductDetails]);
   // stockRecommendations with month-specific data - FIXED to only show peak months
   const stockRecommendations = useMemo(() => {
     if (!computedProductDetails.length || !originalData.length) return [];
@@ -2517,123 +2555,177 @@ Return ONLY valid JSON with this structure:
                   </TabsList>
                   </div>
 
-                  <TabsContent value="dry">
-                    <Card className="border border-green-200 bg-green-50/30 shadow-sm">
-                      <CardHeader className="border-b border-green-100">
-                        <div className="flex justify-between items-center">
-                          <div>
-                            <CardTitle className="flex items-center gap-2 text-lg text-green-800">
-                              <Sun className="size-5" />
-                              Dry Season
-                            </CardTitle>
-                            <CardDescription>November – May</CardDescription>
-                          </div>
-                          <Badge className="bg-[#174d32] text-white">
-                            {topProductsBySeason.dry.length} Products
-                          </Badge>
-                        </div>
-                      </CardHeader>
-                      <CardContent>
-                        {topProductsBySeason.dry.length > 0 ? (
-                          <Table>
-                            <TableHeader>
-                              <TableRow>
-                                <TableHead className="w-16" style={{ color: '#174d32' }}>Rank</TableHead>
-                                <TableHead style={{ color: '#174d32' }}>Brand</TableHead>
-                                <TableHead style={{ color: '#174d32' }}>Product</TableHead>
-                                <TableHead style={{ color: '#174d32' }}>Total Units Sold</TableHead>
-                                <TableHead style={{ color: '#174d32' }}>Total Revenue</TableHead>
-                              </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                              {topProductsBySeason.dry.map((product: SeasonProduct, index: number) => (
-                                <TableRow key={product.productKey} className="hover:bg-gray-50 transition-colors">
-                                  <TableCell>
-                                    <Badge className="bg-[#174d32]">#{index + 1}</Badge>
-                                  </TableCell>
-                                  <TableCell>
-                                    <p className="font-semibold text-sm">{product.brand}</p>
-                                  </TableCell>
-                                  <TableCell>
-                                    <p className="font-medium text-sm">{product.name}</p>
-                                  </TableCell>
-                                  <TableCell className="font-medium">
-                                    {product.totalUnits.toLocaleString()}
-                                  </TableCell>
-                                  <TableCell className="font-bold">
-                                    ₱{product.revenue.toLocaleString()}
-                                  </TableCell>
-                                </TableRow>
-                              ))}
-                            </TableBody>
-                          </Table>
-                        ) : (
-                          <div className="text-center py-8 text-gray-500">
-                            <p>No products found for Dry season.</p>
-                          </div>
-                        )}
-                      </CardContent>
-                    </Card>
-                  </TabsContent>
+                <TabsContent value="dry">
+  <Card className="border border-green-200 bg-green-50/30 shadow-sm">
+    <CardHeader className="border-b border-green-100">
+      <div className="flex justify-between items-center">
+        <div>
+          <CardTitle className="flex items-center gap-2 text-lg text-green-800">
+            <Sun className="size-5" />
+            Dry Season
+          </CardTitle>
+          <CardDescription>November – May</CardDescription>
+        </div>
+        <Badge className="bg-[#174d32] text-white">
+          {topProductsBySeason.dry.length} Products
+        </Badge>
+      </div>
+    </CardHeader>
+    <CardContent>
+      {topProductsBySeason.dry.length > 0 ? (
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead className="w-16" style={{ color: '#174d32' }}>Rank</TableHead>
+              <TableHead style={{ color: '#174d32' }}>Brand</TableHead>
+              <TableHead style={{ color: '#174d32' }}>Product</TableHead>
+              <TableHead style={{ color: '#174d32' }}>Total Units Sold</TableHead>
+              <TableHead style={{ color: '#174d32' }}>Total Revenue</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {(() => {
+              let currentRank = '';
+              let rowSpan = 0;
+              let rankRows: any[] = [];
+              
+              // Group rows by rank
+              const groupedByRank = topProductsBySeason.dry.reduce((acc: any, product: any) => {
+                const rank = product.rank;
+                if (!acc[rank]) acc[rank] = [];
+                acc[rank].push(product);
+                return acc;
+              }, {});
+              
+              // Build rows with rowspan
+              const rows: any[] = [];
+              Object.keys(groupedByRank).sort((a, b) => Number(a) - Number(b)).forEach(rank => {
+                const products = groupedByRank[rank];
+                products.forEach((product: any, index: number) => {
+                  rows.push({
+                    ...product,
+                    rankDisplay: index === 0 ? `#${rank}` : null,
+                    rowSpan: index === 0 ? products.length : 0
+                  });
+                });
+              });
+              
+              return rows.map((product: any) => (
+                <TableRow key={product.productKey} className="hover:bg-gray-50 transition-colors">
+                  <TableCell>
+                    {product.rankDisplay && (
+                      <Badge className="bg-[#174d32]">{product.rankDisplay}</Badge>
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    <p className="font-semibold text-sm">{product.brand}</p>
+                  </TableCell>
+                  <TableCell>
+                    <p className="font-medium text-sm">{product.name}</p>
+                  </TableCell>
+                  <TableCell className="font-medium">
+                    {product.totalUnits.toLocaleString()}
+                  </TableCell>
+                  <TableCell className="font-bold">
+                    ₱{product.revenue.toLocaleString()}
+                  </TableCell>
+                </TableRow>
+              ));
+            })()}
+          </TableBody>
+        </Table>
+      ) : (
+        <div className="text-center py-8 text-gray-500">
+          <p>No products found for Dry season.</p>
+        </div>
+      )}
+    </CardContent>
+  </Card>
+</TabsContent>
 
-                  <TabsContent value="rainy">
-                    <Card className="border border-blue-200 bg-blue-50/30 shadow-sm">
-                      <CardHeader className="border-b border-blue-100">
-                        <div className="flex justify-between items-center">
-                          <div>
-                            <CardTitle className="flex items-center gap-2 text-lg text-blue-800">
-                              <CloudRain className="size-5" />
-                              Rainy Season
-                            </CardTitle>
-                            <CardDescription>June – October</CardDescription>
-                          </div>
-                          <Badge className="bg-blue-700 text-white">
-                            {topProductsBySeason.rainy.length} Products
-                          </Badge>
-                        </div>
-                      </CardHeader>
-                      <CardContent>
-                        {topProductsBySeason.rainy.length > 0 ? (
-                          <Table>
-                            <TableHeader>
-                              <TableRow>
-                                <TableHead className="w-16" style={{ color: '#1d4ed8' }}>Rank</TableHead>
-                                <TableHead style={{ color: '#1d4ed8' }}>Brand</TableHead>
-                                <TableHead style={{ color: '#1d4ed8' }}>Product</TableHead>
-                                <TableHead style={{ color: '#1d4ed8' }}>Total Units Sold</TableHead>
-                                <TableHead style={{ color: '#1d4ed8' }}>Total Revenue</TableHead>
-                              </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                              {topProductsBySeason.rainy.map((product: SeasonProduct, index: number) => (
-                                <TableRow key={product.productKey} className="hover:bg-gray-50 transition-colors">
-                                  <TableCell>
-                                    <Badge className="bg-blue-700">#{index + 1}</Badge>
-                                  </TableCell>
-                                  <TableCell>
-                                    <p className="font-semibold text-sm">{product.brand}</p>
-                                  </TableCell>
-                                  <TableCell>
-                                    <p className="font-medium text-sm">{product.name}</p>
-                                  </TableCell>
-                                  <TableCell className="font-medium">
-                                    {product.totalUnits.toLocaleString()}
-                                  </TableCell>
-                                  <TableCell className="font-bold">
-                                    ₱{product.revenue.toLocaleString()}
-                                  </TableCell>
-                                </TableRow>
-                              ))}
-                            </TableBody>
-                          </Table>
-                        ) : (
-                          <div className="text-center py-8 text-gray-500">
-                            <p>No products found for Rainy season.</p>
-                          </div>
-                        )}
-                      </CardContent>
-                    </Card>
-                  </TabsContent>
+                <TabsContent value="rainy">
+  <Card className="border border-blue-200 bg-blue-50/30 shadow-sm">
+    <CardHeader className="border-b border-blue-100">
+      <div className="flex justify-between items-center">
+        <div>
+          <CardTitle className="flex items-center gap-2 text-lg text-blue-800">
+            <CloudRain className="size-5" />
+            Rainy Season
+          </CardTitle>
+          <CardDescription>June – October</CardDescription>
+        </div>
+        <Badge className="bg-blue-700 text-white">
+          {topProductsBySeason.rainy.length} Products
+        </Badge>
+      </div>
+    </CardHeader>
+    <CardContent>
+      {topProductsBySeason.rainy.length > 0 ? (
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead className="w-16" style={{ color: '#1d4ed8' }}>Rank</TableHead>
+              <TableHead style={{ color: '#1d4ed8' }}>Brand</TableHead>
+              <TableHead style={{ color: '#1d4ed8' }}>Product</TableHead>
+              <TableHead style={{ color: '#1d4ed8' }}>Total Units Sold</TableHead>
+              <TableHead style={{ color: '#1d4ed8' }}>Total Revenue</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {(() => {
+              // Group rows by rank
+              const groupedByRank = topProductsBySeason.rainy.reduce((acc: any, product: any) => {
+                const rank = product.rank;
+                if (!acc[rank]) acc[rank] = [];
+                acc[rank].push(product);
+                return acc;
+              }, {});
+              
+              // Build rows with rowspan
+              const rows: any[] = [];
+              Object.keys(groupedByRank).sort((a, b) => Number(a) - Number(b)).forEach(rank => {
+                const products = groupedByRank[rank];
+                products.forEach((product: any, index: number) => {
+                  rows.push({
+                    ...product,
+                    rankDisplay: index === 0 ? `#${rank}` : null,
+                    rowSpan: index === 0 ? products.length : 0
+                  });
+                });
+              });
+              
+              return rows.map((product: any) => (
+                <TableRow key={product.productKey} className="hover:bg-gray-50 transition-colors">
+                  <TableCell>
+                    {product.rankDisplay && (
+                      <Badge className="bg-blue-700">{product.rankDisplay}</Badge>
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    <p className="font-semibold text-sm">{product.brand}</p>
+                  </TableCell>
+                  <TableCell>
+                    <p className="font-medium text-sm">{product.name}</p>
+                  </TableCell>
+                  <TableCell className="font-medium">
+                    {product.totalUnits.toLocaleString()}
+                  </TableCell>
+                  <TableCell className="font-bold">
+                    ₱{product.revenue.toLocaleString()}
+                  </TableCell>
+                </TableRow>
+              ));
+            })()}
+          </TableBody>
+        </Table>
+      ) : (
+        <div className="text-center py-8 text-gray-500">
+          <p>No products found for Rainy season.</p>
+        </div>
+      )}
+    </CardContent>
+  </Card>
+</TabsContent>
                 </Tabs>
               </CardContent>
             </Card>
