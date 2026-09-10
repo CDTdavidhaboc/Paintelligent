@@ -514,25 +514,41 @@ const SeasonDonutChart = ({
   season,
   topUnits,
   topRevenue,
+  otherUnits,
+  totalUnits,
 }: {
   products: { productKey: string; name: string; brand: string; units: number; revenue: number; percentShare: number }[];
   season: "dry" | "rainy";
   topUnits: number;
   topRevenue: number;
+  otherUnits: number;
+  totalUnits: number;
 }) => {
   const isDry = season === "dry";
   const colors = isDry ? DRY_DONUT_COLORS : RAINY_DONUT_COLORS;
+  const otherColor = isDry ? "#d1d5db" : "#cbd5e1"; // neutral grey for "Other Products"
 
-  const chartData = useMemo(
-    () =>
-      products.map((p) => ({
-        name: `${p.brand} ${p.name}`.trim(),
-        value: p.units,
-        revenue: p.revenue,
-        percentShare: p.percentShare,
-      })),
-    [products]
-  );
+  const chartData = useMemo(() => {
+    const base = products.map((p) => ({
+      name: `${p.brand} ${p.name}`.trim(),
+      value: p.units,
+      revenue: p.revenue,
+      percentShare: p.percentShare,
+      isOther: false,
+    }));
+
+    if (otherUnits > 0) {
+      base.push({
+        name: "Other Products",
+        value: otherUnits,
+        revenue: 0,
+        percentShare: totalUnits > 0 ? (otherUnits / totalUnits) * 100 : 0,
+        isOther: true,
+      });
+    }
+
+    return base;
+  }, [products, otherUnits, totalUnits]);
 
   if (chartData.length === 0) {
     return (
@@ -545,7 +561,7 @@ const SeasonDonutChart = ({
     );
   }
 
-  const totalUnits = chartData.reduce((sum, d) => sum + d.value, 0);
+  const grandTotal = chartData.reduce((sum, d) => sum + d.value, 0);
 
   return (
     <div className="w-full">
@@ -592,8 +608,11 @@ const SeasonDonutChart = ({
               strokeWidth={2}
               isAnimationActive={false}
             >
-              {chartData.map((_, index) => (
-                <Cell key={`cell-${index}`} fill={colors[index % colors.length]} />
+              {chartData.map((entry, index) => (
+                <Cell
+                  key={`cell-${index}`}
+                  fill={entry.isOther ? otherColor : colors[index % colors.length]}
+                />
               ))}
             </Pie>
             <Tooltip
@@ -604,16 +623,36 @@ const SeasonDonutChart = ({
                 fontSize: 12,
               }}
               formatter={(value: number, name: string, entry: any) => {
-                const pct = totalUnits > 0 ? (value / totalUnits) * 100 : 0;
+                const pct = grandTotal > 0 ? (value / grandTotal) * 100 : 0;
                 const rev = entry?.payload?.revenue ?? 0;
-                return [
-                  `${value.toLocaleString()} units (${pct.toFixed(1)}%) • ₱${rev.toLocaleString()}`,
-                  name,
-                ];
+                const label = entry?.payload?.isOther
+                  ? `${value.toLocaleString()} units (${pct.toFixed(1)}%) — remaining products`
+                  : `${value.toLocaleString()} units (${pct.toFixed(1)}%) • ₱${rev.toLocaleString()}`;
+                return [label, name];
               }}
             />
           </PieChart>
         </ResponsiveContainer>
+      </div>
+
+      {/* Custom legend strip */}
+      <div className="mt-3 flex flex-wrap items-center justify-center gap-3 text-[11px]">
+        <div className="flex items-center gap-1.5">
+          <span
+            className="inline-block size-2.5 rounded-full"
+            style={{ backgroundColor: colors[0] }}
+          />
+          <span className="text-gray-600">Top contributors</span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <span
+            className="inline-block size-2.5 rounded-full"
+            style={{ backgroundColor: otherColor }}
+          />
+          <span className="text-gray-600">
+            Other products ({totalUnits > 0 ? ((otherUnits / totalUnits) * 100).toFixed(1) : "0"}%)
+          </span>
+        </div>
       </div>
     </div>
   );
@@ -858,120 +897,111 @@ export default function SeasonalForecasting() {
     };
   }, [computedProductDetails]);
 
-// ============ STOCK RECOMMENDATIONS — REAL, DATA-DRIVEN ============
-// Each product is classified as Increase / Maintain / Reduce based on its
-// own historical demand trend and peak-vs-average ratio. Recommended stock
-// per month is derived from that month's actual units sold × an action
-// multiplier, rounded to the nearest 5.
-const stockRecommendations = useMemo(() => {
-  if (!computedProductDetails.length || !originalData.length) return [];
+  // ============ STOCK RECOMMENDATIONS — REAL, DATA-DRIVEN ============
+  const stockRecommendations = useMemo(() => {
+    if (!computedProductDetails.length || !originalData.length) return [];
 
-  const result: any[] = [];
+    const result: any[] = [];
 
-  // Collect each product's monthly units history, sorted chronologically
-  const getProductMonthlyHistory = (productName: string, brand: string) => {
-    const records = originalData.filter(
-      (r) => r.product === productName && r.brand === brand
-    );
-    if (records.length === 0) return [];
+    const getProductMonthlyHistory = (productName: string, brand: string) => {
+      const records = originalData.filter(
+        (r) => r.product === productName && r.brand === brand
+      );
+      if (records.length === 0) return [];
 
-    const map: Record<
-      string,
-      { month: string; year: number; monthIndex: number; units: number; sales: number }
-    > = {};
+      const map: Record<
+        string,
+        { month: string; year: number; monthIndex: number; units: number; sales: number }
+      > = {};
 
-    records.forEach((rec) => {
-      const short = rec.month.substring(0, 3);
-      const mi = MONTH_NAMES.indexOf(short);
-      if (mi === -1) return;
-      const key = `${rec.year}-${String(mi + 1).padStart(2, "0")}`;
-      if (!map[key]) {
-        map[key] = {
-          month: short,
-          year: rec.year,
-          monthIndex: mi,
-          units: 0,
-          sales: 0,
-        };
+      records.forEach((rec) => {
+        const short = rec.month.substring(0, 3);
+        const mi = MONTH_NAMES.indexOf(short);
+        if (mi === -1) return;
+        const key = `${rec.year}-${String(mi + 1).padStart(2, "0")}`;
+        if (!map[key]) {
+          map[key] = {
+            month: short,
+            year: rec.year,
+            monthIndex: mi,
+            units: 0,
+            sales: 0,
+          };
+        }
+        map[key].units += rec.unitsSold || 0;
+        map[key].sales += rec.sales || 0;
+      });
+
+      return Object.values(map).sort((a, b) => {
+        if (a.year !== b.year) return a.year - b.year;
+        return a.monthIndex - b.monthIndex;
+      });
+    };
+
+    const classify = (history: { units: number }[]) => {
+      const unitsArr = history.map((h) => h.units).filter((u) => u >= 0);
+      if (unitsArr.length === 0) {
+        return { action: "Maintain", avg: 0, peak: 0, trendRatio: 1 };
       }
-      map[key].units += rec.unitsSold || 0;
-      map[key].sales += rec.sales || 0;
+
+      const total = unitsArr.reduce((s, u) => s + u, 0);
+      const avg = total / unitsArr.length;
+      const peak = Math.max(...unitsArr);
+      const peakRatio = avg > 0 ? peak / avg : 1;
+
+      const last3 = unitsArr.slice(-3);
+      const earlier = unitsArr.slice(0, Math.max(1, unitsArr.length - 3));
+      const last3Avg = last3.reduce((s, u) => s + u, 0) / Math.max(1, last3.length);
+      const earlierAvg = earlier.reduce((s, u) => s + u, 0) / Math.max(1, earlier.length);
+      const trendRatio = earlierAvg > 0 ? last3Avg / earlierAvg : 1;
+
+      let action: "Increase" | "Maintain" | "Reduce" = "Maintain";
+      if (trendRatio >= 1.15 || peakRatio >= 1.3) {
+        action = "Increase";
+      } else if (trendRatio <= 0.7 && peakRatio < 1.2) {
+        action = "Reduce";
+      }
+      return { action, avg, peak, trendRatio };
+    };
+
+    const recommend = (units: number, action: string) => {
+      let target: number;
+      if (action === "Increase") target = units * 1.25;
+      else if (action === "Reduce") target = units * 0.75;
+      else target = units * 1.1;
+
+      const floor = action === "Increase" ? 30 : action === "Reduce" ? 10 : 20;
+      return Math.max(Math.round(Math.max(target, floor) / 5) * 5, floor);
+    };
+
+    computedProductDetails.forEach((p) => {
+      const history = getProductMonthlyHistory(p.product, p.brand);
+      if (history.length === 0) return;
+
+      const { action, avg, peak } = classify(history);
+
+      const items = history.map((h) => ({
+        month: `${h.month} ${h.year}`,
+        peakSales: Math.round(h.sales),
+        peakUnits: h.units,
+        recommendedStock: recommend(h.units, action),
+      }));
+
+      result.push({
+        category: `${p.brand} ${p.product}`,
+        action,
+        avgUnits: Math.round(avg),
+        peakUnits: Math.round(peak),
+        items,
+        defaultStock: items[items.length - 1]?.recommendedStock || 30,
+        defaultMonth: items[items.length - 1]?.month || "No data",
+      });
     });
 
-    return Object.values(map).sort((a, b) => {
-      if (a.year !== b.year) return a.year - b.year;
-      return a.monthIndex - b.monthIndex;
-    });
-  };
-
-  // Classify each product based on trend + peak ratio
-  const classify = (history: { units: number }[]) => {
-    const unitsArr = history.map((h) => h.units).filter((u) => u >= 0);
-    if (unitsArr.length === 0) {
-      return { action: "Maintain", avg: 0, peak: 0, trendRatio: 1 };
-    }
-
-    const total = unitsArr.reduce((s, u) => s + u, 0);
-    const avg = total / unitsArr.length;
-    const peak = Math.max(...unitsArr);
-    const peakRatio = avg > 0 ? peak / avg : 1;
-
-    // Split into earlier vs last 3 for trend
-    const last3 = unitsArr.slice(-3);
-    const earlier = unitsArr.slice(0, Math.max(1, unitsArr.length - 3));
-    const last3Avg = last3.reduce((s, u) => s + u, 0) / Math.max(1, last3.length);
-    const earlierAvg = earlier.reduce((s, u) => s + u, 0) / Math.max(1, earlier.length);
-    const trendRatio = earlierAvg > 0 ? last3Avg / earlierAvg : 1;
-
-    let action: "Increase" | "Maintain" | "Reduce" = "Maintain";
-    if (trendRatio >= 1.15 || peakRatio >= 1.3) {
-      action = "Increase";
-    } else if (trendRatio <= 0.7 && peakRatio < 1.2) {
-      action = "Reduce";
-    }
-    return { action, avg, peak, trendRatio };
-  };
-
-  // Compute recommended stock for a given month's units
-  const recommend = (units: number, action: string) => {
-    let target: number;
-    if (action === "Increase") target = units * 1.25;
-    else if (action === "Reduce") target = units * 0.75;
-    else target = units * 1.1;
-
-    const floor = action === "Increase" ? 30 : action === "Reduce" ? 10 : 20;
-    return Math.max(Math.round(Math.max(target, floor) / 5) * 5, floor);
-  };
-
-  computedProductDetails.forEach((p) => {
-    const history = getProductMonthlyHistory(p.product, p.brand);
-    if (history.length === 0) return;
-
-    const { action, avg, peak } = classify(history);
-
-    const items = history.map((h) => ({
-      month: `${h.month} ${h.year}`,
-      peakSales: Math.round(h.sales),
-      peakUnits: h.units,
-      recommendedStock: recommend(h.units, action),
-    }));
-
-    result.push({
-      category: `${p.brand} ${p.product}`,
-      action,
-      avgUnits: Math.round(avg),
-      peakUnits: Math.round(peak),
-      items,
-      defaultStock: items[items.length - 1]?.recommendedStock || 30,
-      defaultMonth: items[items.length - 1]?.month || "No data",
-    });
-  });
-
-  return result;
-}, [computedProductDetails, originalData]);
+    return result;
+  }, [computedProductDetails, originalData]);
 
   // ============ PER-MONTH UNITS SOLD PER PRODUCT ============
-  // Keyed by BOTH "Brand Product" (space) and "Brand-Product" (hyphen)
   const perMonthUnitsByProduct = useMemo(() => {
     const bucket: Record<string, Record<string, { month: string; monthIndex: number; year: number; units: number }>> = {};
 
@@ -1067,122 +1097,139 @@ const stockRecommendations = useMemo(() => {
     }
   };
 
- // ============ BEST-SELLING PRODUCTS ============
-// A product is best-selling if it sold 100+ UNITS in the last 12 months.
-// If the uploaded data covers less than a year, we use the whole span.
-const bestSellingProducts = useMemo(() => {
-  if (!computedProductDetails.length || !originalData.length) return [];
+  // ============ BEST-SELLING PRODUCTS ============
+  // A product is best-selling if it sold 100+ UNITS in the last 12 months.
+  const bestSellingProducts = useMemo(() => {
+    if (!computedProductDetails.length || !originalData.length) return [];
 
-  const BEST_UNIT_THRESHOLD = 100; // >= 100 units in the last year = best-selling
+    const BEST_UNIT_THRESHOLD = 100;
 
-  // Determine the most recent period present in the data
-  let maxYear = 0;
-  let maxMonthIdx = -1;
-  originalData.forEach((rec) => {
-    const mi = MONTH_NAMES.indexOf(rec.month.substring(0, 3));
-    if (mi === -1) return;
-    if (rec.year > maxYear || (rec.year === maxYear && mi > maxMonthIdx)) {
-      maxYear = rec.year;
-      maxMonthIdx = mi;
-    }
-  });
-
-  if (maxYear === 0) return [];
-
-  // Define cutoff = (maxYear, maxMonthIdx) minus 11 months
-  // This gives a 12-month window (current month + previous 11).
-  const MONTHS_WINDOW = 12;
-  const cutoffOrdinal = maxYear * 12 + maxMonthIdx - (MONTHS_WINDOW - 1);
-
-  // Sum units per product within the last 12 months
-  const unitsInWindow: Record<string, number> = {};
-  const metaByProduct: Record<
-    string,
-    { name: string; dryUnits: number; rainyUnits: number; totalRevenue: number; volumeUsed: number; pricePerMl: number }
-  > = {};
-
-  originalData.forEach((rec) => {
-    const mi = MONTH_NAMES.indexOf(rec.month.substring(0, 3));
-    if (mi === -1) return;
-    const ordinal = rec.year * 12 + mi;
-    if (ordinal < cutoffOrdinal) return; // outside the last-12-months window
-
-    const key = `${rec.brand || ""}-${rec.product || ""}`;
-    unitsInWindow[key] = (unitsInWindow[key] || 0) + (rec.unitsSold || 0);
-  });
-
-  // Attach metadata + dry/rainy split for display
-  computedProductDetails.forEach((p) => {
-    metaByProduct[p.productKey] = {
-      name: `${p.brand} ${p.product}`,
-      dryUnits: p.dryUnits || 0,
-      rainyUnits: p.rainyUnits || 0,
-      totalRevenue: Math.round(p.totalSales),
-      volumeUsed: Math.round(p.totalVolumeUsed),
-      pricePerMl: p.pricePerMl,
-    };
-  });
-
-  // Flag products whose units-in-window meet the best-seller threshold
-  const flagged = Object.entries(unitsInWindow)
-    .filter(([key, units]) => units >= BEST_UNIT_THRESHOLD && metaByProduct[key])
-    .sort((a, b) => b[1] - a[1]) // highest units first
-    .map(([key, units]) => {
-      const meta = metaByProduct[key];
-      return {
-        name: meta.name,
-        unitsSold: units,               // units in the last 12 months
-        dryUnits: meta.dryUnits,
-        rainyUnits: meta.rainyUnits,
-        totalRevenue: meta.totalRevenue,
-        volumeUsed: meta.volumeUsed,
-        pricePerMl: meta.pricePerMl,
-      };
+    let maxYear = 0;
+    let maxMonthIdx = -1;
+    originalData.forEach((rec) => {
+      const mi = MONTH_NAMES.indexOf(rec.month.substring(0, 3));
+      if (mi === -1) return;
+      if (rec.year > maxYear || (rec.year === maxYear && mi > maxMonthIdx)) {
+        maxYear = rec.year;
+        maxMonthIdx = mi;
+      }
     });
 
-  return flagged;
-}, [computedProductDetails, originalData]);
+    if (maxYear === 0) return [];
 
-  const slowMovingProducts = useMemo(() => {
-    if (!computedProductDetails.length) return [];
+    const MONTHS_WINDOW = 12;
+    const cutoffOrdinal = maxYear * 12 + maxMonthIdx - (MONTHS_WINDOW - 1);
 
-    const sortedByUnits = [...computedProductDetails].sort((a, b) => b.totalUnits - a.totalUnits);
-    
-    const avgUnits = computedProductDetails.reduce((sum, p) => sum + p.totalUnits, 0) / computedProductDetails.length;
-    
-    const slowProducts = sortedByUnits.filter(p => {
-      const hasLowUnits = p.totalUnits < 50;
-      const isBelowHalfAverage = p.totalUnits < avgUnits * 0.5;
-      return hasLowUnits && isBelowHalfAverage;
-    }).slice(0, 5);
-    
-    if (slowProducts.length === 0) {
-      return [];
-    }
-    
-    return slowProducts.map(p => {
-      let recommendation = '';
-      
-      if (p.totalUnits < 20) {
-        recommendation = 'Consider bundling or aggressive discounts';
-      } else if (p.totalUnits < 35) {
-        recommendation = 'Bundle with popular products or run promotions';
-      } else {
-        recommendation = 'Review pricing and positioning';
-      }
-      
-      return {
+    const unitsInWindow: Record<string, number> = {};
+    const metaByProduct: Record<
+      string,
+      { name: string; dryUnits: number; rainyUnits: number; totalRevenue: number; volumeUsed: number; pricePerMl: number }
+    > = {};
+
+    originalData.forEach((rec) => {
+      const mi = MONTH_NAMES.indexOf(rec.month.substring(0, 3));
+      if (mi === -1) return;
+      const ordinal = rec.year * 12 + mi;
+      if (ordinal < cutoffOrdinal) return;
+
+      const key = `${rec.brand || ""}-${rec.product || ""}`;
+      unitsInWindow[key] = (unitsInWindow[key] || 0) + (rec.unitsSold || 0);
+    });
+
+    computedProductDetails.forEach((p) => {
+      metaByProduct[p.productKey] = {
         name: `${p.brand} ${p.product}`,
-        unitsSold: p.totalUnits,
         dryUnits: p.dryUnits || 0,
         rainyUnits: p.rainyUnits || 0,
-        recommendation: recommendation,
         totalRevenue: Math.round(p.totalSales),
         volumeUsed: Math.round(p.totalVolumeUsed),
         pricePerMl: p.pricePerMl,
       };
     });
-  }, [computedProductDetails]);
+
+    return Object.entries(unitsInWindow)
+      .filter(([key, units]) => units >= BEST_UNIT_THRESHOLD && metaByProduct[key])
+      .sort((a, b) => b[1] - a[1])
+      .map(([key, units]) => {
+        const meta = metaByProduct[key];
+        return {
+          name: meta.name,
+          unitsSold: units,
+          dryUnits: meta.dryUnits,
+          rainyUnits: meta.rainyUnits,
+          totalRevenue: meta.totalRevenue,
+          volumeUsed: meta.volumeUsed,
+          pricePerMl: meta.pricePerMl,
+        };
+      });
+  }, [computedProductDetails, originalData]);
+
+  // ============ SLOW-MOVING PRODUCTS ============
+  // A product is slow-moving if it sold < 10 UNITS in the last 12 months.
+  const slowMovingProducts = useMemo(() => {
+    if (!computedProductDetails.length || !originalData.length) return [];
+
+    const SLOW_UNIT_THRESHOLD = 10;
+
+    let maxYear = 0;
+    let maxMonthIdx = -1;
+    originalData.forEach((rec) => {
+      const mi = MONTH_NAMES.indexOf(rec.month.substring(0, 3));
+      if (mi === -1) return;
+      if (rec.year > maxYear || (rec.year === maxYear && mi > maxMonthIdx)) {
+        maxYear = rec.year;
+        maxMonthIdx = mi;
+      }
+    });
+
+    if (maxYear === 0) return [];
+
+    const MONTHS_WINDOW = 12;
+    const cutoffOrdinal = maxYear * 12 + maxMonthIdx - (MONTHS_WINDOW - 1);
+
+    const unitsInWindow: Record<string, number> = {};
+    const metaByProduct: Record<
+      string,
+      { name: string; dryUnits: number; rainyUnits: number; totalRevenue: number; volumeUsed: number; pricePerMl: number }
+    > = {};
+
+    originalData.forEach((rec) => {
+      const mi = MONTH_NAMES.indexOf(rec.month.substring(0, 3));
+      if (mi === -1) return;
+      const ordinal = rec.year * 12 + mi;
+      if (ordinal < cutoffOrdinal) return;
+
+      const key = `${rec.brand || ""}-${rec.product || ""}`;
+      unitsInWindow[key] = (unitsInWindow[key] || 0) + (rec.unitsSold || 0);
+    });
+
+    computedProductDetails.forEach((p) => {
+      metaByProduct[p.productKey] = {
+        name: `${p.brand} ${p.product}`,
+        dryUnits: p.dryUnits || 0,
+        rainyUnits: p.rainyUnits || 0,
+        totalRevenue: Math.round(p.totalSales),
+        volumeUsed: Math.round(p.totalVolumeUsed),
+        pricePerMl: p.pricePerMl,
+      };
+    });
+
+    return Object.entries(unitsInWindow)
+      .filter(([key, units]) => units < SLOW_UNIT_THRESHOLD && metaByProduct[key])
+      .sort((a, b) => a[1] - b[1])
+      .map(([key, units]) => {
+        const meta = metaByProduct[key];
+        return {
+          name: meta.name,
+          unitsSold: units,
+          dryUnits: meta.dryUnits,
+          rainyUnits: meta.rainyUnits,
+          totalRevenue: meta.totalRevenue,
+          volumeUsed: meta.volumeUsed,
+          pricePerMl: meta.pricePerMl,
+        };
+      });
+  }, [computedProductDetails, originalData]);
 
   useEffect(() => {
     const loadData = async () => {
@@ -2825,165 +2872,169 @@ Return ONLY valid JSON with this structure:
               </div>
 
               <CardContent>
-               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-  {/* RAINY SEASON (NOW LEFT) */}
-  <div className="rounded-xl border border-blue-200 bg-blue-50/30 shadow-sm overflow-hidden flex flex-col">
-    <div className="px-4 py-3 border-b border-blue-100 bg-blue-50/60 flex items-center justify-between">
-      <div className="flex items-center gap-2">
-        <CloudRain className="size-4 text-blue-800" />
-        <div>
-          <h4 className="text-sm font-semibold text-blue-800 leading-tight">
-            {productViewMode === "list"
-              ? "Rainy Season — Top Contributors"
-              : "Rainy Season — Product Units Share"}
-          </h4>
-          <p className="text-[11px] text-blue-700/80 leading-tight">
-            June – October
-          </p>
-        </div>
-      </div>
-      <Badge className="bg-blue-100 text-blue-800 text-[10px]">
-        {topProductsBySeason.rainy.list.length} products
-      </Badge>
-    </div>
-
-    <div className="p-4" style={{ height: 400 }}>
-      {productViewMode === "list" ? (
-        topProductsBySeason.rainy.list.length > 0 ? (
-          <div className="season-table-scroll overflow-y-auto rounded-lg border border-blue-100 h-full">
-            <Table>
-              <TableHeader className="sticky top-0 z-10 bg-white shadow-sm">
-                <TableRow>
-                  <TableHead className="w-14 bg-white" style={{ color: '#1d4ed8' }}>Rank</TableHead>
-                  <TableHead className="bg-white" style={{ color: '#1d4ed8' }}>Product</TableHead>
-                  <TableHead className="bg-white text-right" style={{ color: '#1d4ed8' }}>Units</TableHead>
-                  <TableHead className="bg-white text-right" style={{ color: '#1d4ed8' }}>Revenue</TableHead>
-                  <TableHead className="bg-white text-right" style={{ color: '#1d4ed8' }}>%</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {topProductsBySeason.rainy.list.map((product: any) => (
-                  <TableRow key={product.productKey} className="hover:bg-gray-50 transition-colors">
-                    <TableCell>
-                      <Badge className="bg-blue-700">#{product.rank}</Badge>
-                    </TableCell>
-                    <TableCell>
-                      <p className="font-semibold text-sm">{product.brand}</p>
-                      <p className="text-xs text-gray-500">{product.name}</p>
-                    </TableCell>
-                    <TableCell className="text-right font-medium">
-                      {product.units.toLocaleString()}
-                    </TableCell>
-                    <TableCell className="text-right font-bold">
-                      ₱{product.revenue.toLocaleString()}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <Badge className="bg-blue-100 text-blue-800">
-                        {product.percentShare.toFixed(1)}%
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  {/* RAINY SEASON (LEFT) */}
+                  <div className="rounded-xl border border-blue-200 bg-blue-50/30 shadow-sm overflow-hidden flex flex-col">
+                    <div className="px-4 py-3 border-b border-blue-100 bg-blue-50/60 flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <CloudRain className="size-4 text-blue-800" />
+                        <div>
+                          <h4 className="text-sm font-semibold text-blue-800 leading-tight">
+                            {productViewMode === "list"
+                              ? "Rainy Season — Top Contributors"
+                              : "Rainy Season — Product Units Share"}
+                          </h4>
+                          <p className="text-[11px] text-blue-700/80 leading-tight">
+                            June – October
+                          </p>
+                        </div>
+                      </div>
+                      <Badge className="bg-blue-100 text-blue-800 text-[10px]">
+                        {topProductsBySeason.rainy.list.length} products
                       </Badge>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
-        ) : (
-          <div className="text-center py-8 text-gray-500 h-full flex items-center justify-center">
-            <p>No products found for Rainy season.</p>
-          </div>
-        )
-      ) : (
-        <div className="h-full flex items-start justify-center">
-          <SeasonDonutChart
-            products={topProductsBySeason.rainy.list}
-            season="rainy"
-            topUnits={topProductsBySeason.rainy.topUnits}
-            topRevenue={topProductsBySeason.rainy.topRevenue}
-          />
-        </div>
-      )}
-    </div>
-  </div>
+                    </div>
 
-  {/* DRY SEASON (NOW RIGHT) */}
-  <div className="rounded-xl border border-green-200 bg-green-50/30 shadow-sm overflow-hidden flex flex-col">
-    <div className="px-4 py-3 border-b border-green-100 bg-green-50/60 flex items-center justify-between">
-      <div className="flex items-center gap-2">
-        <Sun className="size-4 text-green-800" />
-        <div>
-          <h4 className="text-sm font-semibold text-green-800 leading-tight">
-            {productViewMode === "list"
-              ? "Dry Season — Top Contributors"
-              : "Dry Season — Product Units Share"}
-          </h4>
-          <p className="text-[11px] text-green-700/80 leading-tight">
-            November – May
-          </p>
-        </div>
-      </div>
-      <Badge className="bg-green-100 text-green-800 text-[10px]">
-        {topProductsBySeason.dry.list.length} products
-      </Badge>
-    </div>
+                    <div className="p-4" style={{ height: 400 }}>
+                      {productViewMode === "list" ? (
+                        topProductsBySeason.rainy.list.length > 0 ? (
+                          <div className="season-table-scroll overflow-y-auto rounded-lg border border-blue-100 h-full">
+                            <Table>
+                              <TableHeader className="sticky top-0 z-10 bg-white shadow-sm">
+                                <TableRow>
+                                  <TableHead className="w-14 bg-white" style={{ color: '#1d4ed8' }}>Rank</TableHead>
+                                  <TableHead className="bg-white" style={{ color: '#1d4ed8' }}>Product</TableHead>
+                                  <TableHead className="bg-white text-right" style={{ color: '#1d4ed8' }}>Units</TableHead>
+                                  <TableHead className="bg-white text-right" style={{ color: '#1d4ed8' }}>Revenue</TableHead>
+                                  <TableHead className="bg-white text-right" style={{ color: '#1d4ed8' }}>%</TableHead>
+                                </TableRow>
+                              </TableHeader>
+                              <TableBody>
+                                {topProductsBySeason.rainy.list.map((product: any) => (
+                                  <TableRow key={product.productKey} className="hover:bg-gray-50 transition-colors">
+                                    <TableCell>
+                                      <Badge className="bg-blue-700">#{product.rank}</Badge>
+                                    </TableCell>
+                                    <TableCell>
+                                      <p className="font-semibold text-sm">{product.brand}</p>
+                                      <p className="text-xs text-gray-500">{product.name}</p>
+                                    </TableCell>
+                                    <TableCell className="text-right font-medium">
+                                      {product.units.toLocaleString()}
+                                    </TableCell>
+                                    <TableCell className="text-right font-bold">
+                                      ₱{product.revenue.toLocaleString()}
+                                    </TableCell>
+                                    <TableCell className="text-right">
+                                      <Badge className="bg-blue-100 text-blue-800">
+                                        {product.percentShare.toFixed(1)}%
+                                      </Badge>
+                                    </TableCell>
+                                  </TableRow>
+                                ))}
+                              </TableBody>
+                            </Table>
+                          </div>
+                        ) : (
+                          <div className="text-center py-8 text-gray-500 h-full flex items-center justify-center">
+                            <p>No products found for Rainy season.</p>
+                          </div>
+                        )
+                      ) : (
+                        <div className="h-full flex items-start justify-center">
+                          <SeasonDonutChart
+                            products={topProductsBySeason.rainy.list}
+                            season="rainy"
+                            topUnits={topProductsBySeason.rainy.topUnits}
+                            topRevenue={topProductsBySeason.rainy.topRevenue}
+                            otherUnits={topProductsBySeason.rainy.otherUnits}
+                            totalUnits={topProductsBySeason.rainy.totalUnits}
+                          />
+                        </div>
+                      )}
+                    </div>
+                  </div>
 
-    <div className="p-4" style={{ height: 400 }}>
-      {productViewMode === "list" ? (
-        topProductsBySeason.dry.list.length > 0 ? (
-          <div className="season-table-scroll overflow-y-auto rounded-lg border border-green-100 h-full">
-            <Table>
-              <TableHeader className="sticky top-0 z-10 bg-white shadow-sm">
-                <TableRow>
-                  <TableHead className="w-14 bg-white" style={{ color: '#174d32' }}>Rank</TableHead>
-                  <TableHead className="bg-white" style={{ color: '#174d32' }}>Product</TableHead>
-                  <TableHead className="bg-white text-right" style={{ color: '#174d32' }}>Units</TableHead>
-                  <TableHead className="bg-white text-right" style={{ color: '#174d32' }}>Revenue</TableHead>
-                  <TableHead className="bg-white text-right" style={{ color: '#174d32' }}>%</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {topProductsBySeason.dry.list.map((product: any) => (
-                  <TableRow key={product.productKey} className="hover:bg-gray-50 transition-colors">
-                    <TableCell>
-                      <Badge className="bg-[#174d32]">#{product.rank}</Badge>
-                    </TableCell>
-                    <TableCell>
-                      <p className="font-semibold text-sm">{product.brand}</p>
-                      <p className="text-xs text-gray-500">{product.name}</p>
-                    </TableCell>
-                    <TableCell className="text-right font-medium">
-                      {product.units.toLocaleString()}
-                    </TableCell>
-                    <TableCell className="text-right font-bold">
-                      ₱{product.revenue.toLocaleString()}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <Badge className="bg-green-100 text-green-800">
-                        {product.percentShare.toFixed(1)}%
+                  {/* DRY SEASON (RIGHT) */}
+                  <div className="rounded-xl border border-green-200 bg-green-50/30 shadow-sm overflow-hidden flex flex-col">
+                    <div className="px-4 py-3 border-b border-green-100 bg-green-50/60 flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Sun className="size-4 text-green-800" />
+                        <div>
+                          <h4 className="text-sm font-semibold text-green-800 leading-tight">
+                            {productViewMode === "list"
+                              ? "Dry Season — Top Contributors"
+                              : "Dry Season — Product Units Share"}
+                          </h4>
+                          <p className="text-[11px] text-green-700/80 leading-tight">
+                            November – May
+                          </p>
+                        </div>
+                      </div>
+                      <Badge className="bg-green-100 text-green-800 text-[10px]">
+                        {topProductsBySeason.dry.list.length} products
                       </Badge>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
-        ) : (
-          <div className="text-center py-8 text-gray-500 h-full flex items-center justify-center">
-            <p>No products found for Dry season.</p>
-          </div>
-        )
-      ) : (
-        <div className="h-full flex items-start justify-center">
-          <SeasonDonutChart
-            products={topProductsBySeason.dry.list}
-            season="dry"
-            topUnits={topProductsBySeason.dry.topUnits}
-            topRevenue={topProductsBySeason.dry.topRevenue}
-          />
-        </div>
-      )}
-    </div>
-  </div>
-</div>
+                    </div>
+
+                    <div className="p-4" style={{ height: 400 }}>
+                      {productViewMode === "list" ? (
+                        topProductsBySeason.dry.list.length > 0 ? (
+                          <div className="season-table-scroll overflow-y-auto rounded-lg border border-green-100 h-full">
+                            <Table>
+                              <TableHeader className="sticky top-0 z-10 bg-white shadow-sm">
+                                <TableRow>
+                                  <TableHead className="w-14 bg-white" style={{ color: '#174d32' }}>Rank</TableHead>
+                                  <TableHead className="bg-white" style={{ color: '#174d32' }}>Product</TableHead>
+                                  <TableHead className="bg-white text-right" style={{ color: '#174d32' }}>Units</TableHead>
+                                  <TableHead className="bg-white text-right" style={{ color: '#174d32' }}>Revenue</TableHead>
+                                  <TableHead className="bg-white text-right" style={{ color: '#174d32' }}>%</TableHead>
+                                </TableRow>
+                              </TableHeader>
+                              <TableBody>
+                                {topProductsBySeason.dry.list.map((product: any) => (
+                                  <TableRow key={product.productKey} className="hover:bg-gray-50 transition-colors">
+                                    <TableCell>
+                                      <Badge className="bg-[#174d32]">#{product.rank}</Badge>
+                                    </TableCell>
+                                    <TableCell>
+                                      <p className="font-semibold text-sm">{product.brand}</p>
+                                      <p className="text-xs text-gray-500">{product.name}</p>
+                                    </TableCell>
+                                    <TableCell className="text-right font-medium">
+                                      {product.units.toLocaleString()}
+                                    </TableCell>
+                                    <TableCell className="text-right font-bold">
+                                      ₱{product.revenue.toLocaleString()}
+                                    </TableCell>
+                                    <TableCell className="text-right">
+                                      <Badge className="bg-green-100 text-green-800">
+                                        {product.percentShare.toFixed(1)}%
+                                      </Badge>
+                                    </TableCell>
+                                  </TableRow>
+                                ))}
+                              </TableBody>
+                            </Table>
+                          </div>
+                        ) : (
+                          <div className="text-center py-8 text-gray-500 h-full flex items-center justify-center">
+                            <p>No products found for Dry season.</p>
+                          </div>
+                        )
+                      ) : (
+                        <div className="h-full flex items-start justify-center">
+                          <SeasonDonutChart
+                            products={topProductsBySeason.dry.list}
+                            season="dry"
+                            topUnits={topProductsBySeason.dry.topUnits}
+                            topRevenue={topProductsBySeason.dry.topRevenue}
+                            otherUnits={topProductsBySeason.dry.otherUnits}
+                            totalUnits={topProductsBySeason.dry.totalUnits}
+                          />
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
               </CardContent>
             </Card>
           )}
@@ -3154,7 +3205,6 @@ Return ONLY valid JSON with this structure:
               </CardContent>
             </Card>
           )}
-          {/* ==================== END STOCK RECOMMENDATIONS ==================== */}
 
           {(bestSellingProducts.length > 0 || slowMovingProducts.length > 0) && (
             <section>
@@ -3188,7 +3238,7 @@ Return ONLY valid JSON with this structure:
                               <div>
                                 <h4 className="font-semibold text-gray-800 text-sm">{product.name}</h4>
                                 <p className="text-xs text-gray-500">
-                                  {product.unitsSold?.toLocaleString() || 0} units
+                                  {product.unitsSold?.toLocaleString() || 0} units in the last 12 months
                                 </p>
                               </div>
                               <div className="text-right">
@@ -3223,7 +3273,7 @@ Return ONLY valid JSON with this structure:
                               <div>
                                 <h4 className="font-semibold text-gray-800 text-sm">{product.name}</h4>
                                 <p className="text-xs text-gray-500">
-                                  {product.unitsSold?.toLocaleString() || 0} units sold
+                                  {product.unitsSold?.toLocaleString() || 0} units in the last 12 months
                                 </p>
                               </div>
                               <div className="text-right">
@@ -3411,4 +3461,4 @@ Return ONLY valid JSON with this structure:
       )}
     </div>
   );
-} 
+}
