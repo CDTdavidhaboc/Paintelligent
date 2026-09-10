@@ -19,7 +19,6 @@ import {
 } from "../components/ui/table";
 
 import { Badge } from "../components/ui/badge";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs";
 import { Button } from "../components/ui/button";
 
 import {
@@ -31,6 +30,10 @@ import {
   Tooltip,
   ResponsiveContainer,
   ReferenceArea,
+  PieChart,
+  Pie,
+  Cell,
+  Legend,
 } from "recharts";
 
 import {
@@ -56,6 +59,8 @@ import {
   Sun,
   ShoppingBag,
   Trash2,
+  List,
+  PieChart as PieChartIcon,
 } from "lucide-react";
 
 import Papa from "papaparse";
@@ -72,6 +77,17 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 
 // Initialize Gemini AI
 const genAI = new GoogleGenerativeAI(import.meta.env.VITE_GEMINI_API_KEY || '');
+
+// Season-specific color palettes for the per-product donut
+const DRY_DONUT_COLORS = [
+  "#174d32", "#1a6b3f", "#22884f", "#2fa862", "#4ec07f",
+  "#7dd39f", "#a7e3c0", "#c9f0d8", "#0f3d24", "#0a2e1b",
+];
+
+const RAINY_DONUT_COLORS = [
+  "#1e40af", "#2563eb", "#3b82f6", "#60a5fa", "#93c5fd",
+  "#bfdbfe", "#1d4ed8", "#0ea5e9", "#38bdf8", "#7dd3fc",
+];
 
 interface SalesRecord {
   id: string;
@@ -115,72 +131,35 @@ interface SeasonProduct {
   revenue: number;
   totalRevenue: number;
   volumeUsed: number;
-  rank?: number; // Add rank property
+  rank?: number;
 }
 
 const MONTH_NAMES = [
-  "Jan",
-  "Feb",
-  "Mar",
-  "Apr",
-  "May",
-  "Jun",
-  "Jul",
-  "Aug",
-  "Sep",
-  "Oct",
-  "Nov",
-  "Dec",
+  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
 ];
 
 const SEASON_FOR_MONTH = (monthIndex: number): string => {
-  if (monthIndex >= 10 || monthIndex <= 3) {
-    return "Dry";
-  } else {
-    return "Rainy";
-  }
+  if (monthIndex >= 10 || monthIndex <= 3) return "Dry";
+  return "Rainy";
 };
 
 const getMonthIndexFromName = (monthName: string): number => {
   const monthNames = [
-    "January",
-    "February",
-    "March",
-    "April",
-    "May",
-    "June",
-    "July",
-    "August",
-    "September",
-    "October",
-    "November",
-    "December",
+    "January", "February", "March", "April", "May", "June",
+    "July", "August", "September", "October", "November", "December",
   ];
   const shortNames = [
-    "Jan",
-    "Feb",
-    "Mar",
-    "Apr",
-    "May",
-    "Jun",
-    "Jul",
-    "Aug",
-    "Sep",
-    "Oct",
-    "Nov",
-    "Dec",
+    "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+    "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
   ];
 
   const trimmed = monthName.trim();
 
-  const fullIndex = monthNames.findIndex(
-    (m) => m.toLowerCase() === trimmed.toLowerCase()
-  );
+  const fullIndex = monthNames.findIndex((m) => m.toLowerCase() === trimmed.toLowerCase());
   if (fullIndex !== -1) return fullIndex;
 
-  const shortIndex = shortNames.findIndex(
-    (m) => m.toLowerCase() === trimmed.toLowerCase()
-  );
+  const shortIndex = shortNames.findIndex((m) => m.toLowerCase() === trimmed.toLowerCase());
   if (shortIndex !== -1) return shortIndex;
 
   return -1;
@@ -244,7 +223,7 @@ const showNotification = (
 
 import { createPortal } from 'react-dom';
 
-// MonthDropdown component with proper color coding - FIXED positioning with PORTAL
+// MonthDropdown component
 const MonthDropdown = ({ 
   months, 
   badgeClass,
@@ -272,14 +251,11 @@ const MonthDropdown = ({
   const validMonths = months.filter(m => m !== "No data" && m !== "");
   const firstMonth = validMonths.length > 0 ? validMonths[0] : "No data";
   
-  // Determine colors based on action type
   const isIncrease = actionType === "Increase";
   
-  // Button colors
   const buttonBgColor = isIncrease ? 'bg-orange-500 hover:bg-orange-600' : 'bg-green-700 hover:bg-green-800';
   const buttonTextColor = 'text-white';
   
-  // Dropdown item colors
   const selectedBgColor = isIncrease ? 'bg-orange-100' : 'bg-green-100';
   const selectedTextColor = isIncrease ? 'text-orange-700' : 'text-green-700';
   const selectedStockColor = isIncrease ? 'text-orange-600' : 'text-green-600';
@@ -309,12 +285,8 @@ const MonthDropdown = ({
     const stock = getStockForMonth(month);
     if (stock !== null) {
       setSelectedMonth(month);
-      if (setCurrentStock) {
-        setCurrentStock(stock);
-      }
-      if (onMonthSelect) {
-        onMonthSelect(month, stock);
-      }
+      if (setCurrentStock) setCurrentStock(stock);
+      if (onMonthSelect) onMonthSelect(month, stock);
     }
     setIsOpen(false);
     setDropdownPosition(null);
@@ -393,9 +365,7 @@ const MonthDropdown = ({
               >
                 <div className="flex justify-between items-center gap-3">
                   <div className="flex items-center gap-2">
-                    {isSelected && (
-                      <span className="text-[10px]">✓</span>
-                    )}
+                    {isSelected && <span className="text-[10px]">✓</span>}
                     <span>{month}</span>
                   </div>
                   {stock !== null && (
@@ -419,12 +389,241 @@ const MonthDropdown = ({
   );
 };
 
+// ============ Recommended Stock Dropdown ============
+const RecommendedStockDropdown = ({
+  items,
+  pillBg,
+  isIncrease,
+}: {
+  items: { month: string; year: number; units: number; recommended: number }[];
+  pillBg: string;
+  isIncrease: boolean;
+}) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const [dropdownPosition, setDropdownPosition] = useState<{ top: number; left: number } | null>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (isOpen && !target.closest('.recommended-stock-container')) {
+        setIsOpen(false);
+        setDropdownPosition(null);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [isOpen]);
+
+  const handleButtonClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (isOpen) {
+      setIsOpen(false);
+      setDropdownPosition(null);
+    } else {
+      const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+      setDropdownPosition({
+        top: rect.bottom + 4,
+        left: rect.left,
+      });
+      setIsOpen(true);
+    }
+  };
+
+  if (items.length === 0) {
+    return <span className="text-xs text-gray-400">No data</span>;
+  }
+
+  const accentText = isIncrease ? 'text-orange-700' : 'text-green-700';
+  const accentBg = isIncrease ? 'bg-orange-50' : 'bg-green-50';
+  const accentBorder = isIncrease ? 'border-orange-200' : 'border-green-200';
+  const hoverRow = isIncrease ? 'hover:bg-orange-50/60' : 'hover:bg-green-50/60';
+  const headerBg = isIncrease ? 'bg-orange-100' : 'bg-green-100';
+
+  const avgRecommended = Math.round(
+    items.reduce((s, i) => s + i.recommended, 0) / items.length
+  );
+
+  return (
+    <div className="recommended-stock-container relative inline-block" style={{ overflow: 'visible' }}>
+      <button
+        ref={buttonRef}
+        onClick={handleButtonClick}
+        className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-medium transition hover:opacity-90 cursor-pointer ${pillBg}`}
+        type="button"
+      >
+        <span className="font-bold">{avgRecommended}</span>
+        <span className="opacity-80">avg units</span>
+        <svg
+          className={`w-3 h-3 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`}
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
+
+      {isOpen && dropdownPosition && createPortal(
+        <div
+          className="fixed bg-white rounded-lg shadow-2xl border min-w-[240px] max-h-72 overflow-hidden"
+          style={{
+            top: dropdownPosition.top,
+            left: dropdownPosition.left,
+            zIndex: 999999,
+            borderColor: isIncrease ? '#fbd38d' : '#86efac',
+          }}
+        >
+          <div className={`px-3 py-2 text-xs font-semibold ${accentText} border-b ${accentBorder} ${headerBg} flex items-center justify-between`}>
+            <span>Recommended Stock</span>
+            <span className="text-[10px] opacity-70">per month</span>
+          </div>
+
+          <div className="max-h-60 overflow-y-auto season-table-scroll">
+            {items.map((m, i) => (
+              <div
+                key={i}
+                className={`flex items-center justify-between gap-3 px-3 py-2 text-xs border-b border-gray-50 last:border-0 ${hoverRow}`}
+              >
+                <div className="flex items-center gap-2">
+                  <span
+                    className={`inline-flex items-center justify-center w-10 text-[10px] font-semibold rounded ${accentBg} ${accentText} px-1.5 py-0.5`}
+                  >
+                    {m.month}
+                  </span>
+                  <span className="text-gray-700">{m.year}</span>
+                  <span className="text-gray-400 text-[10px]">({m.units}u sold)</span>
+                </div>
+                <span className={`font-bold ${accentText}`}>
+                  {m.recommended} units
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>,
+        document.body
+      )}
+    </div>
+  );
+};
+// ============ END COMPONENT ============
+
+// ============ Per-Product Donut Chart Component ============
+const SeasonDonutChart = ({
+  products,
+  season,
+  topUnits,
+  topRevenue,
+}: {
+  products: { productKey: string; name: string; brand: string; units: number; revenue: number; percentShare: number }[];
+  season: "dry" | "rainy";
+  topUnits: number;
+  topRevenue: number;
+}) => {
+  const isDry = season === "dry";
+  const colors = isDry ? DRY_DONUT_COLORS : RAINY_DONUT_COLORS;
+
+  const chartData = useMemo(
+    () =>
+      products.map((p) => ({
+        name: `${p.brand} ${p.name}`.trim(),
+        value: p.units,
+        revenue: p.revenue,
+        percentShare: p.percentShare,
+      })),
+    [products]
+  );
+
+  if (chartData.length === 0) {
+    return (
+      <div
+        style={{ width: "100%", height: 320 }}
+        className="flex items-center justify-center text-sm text-gray-400"
+      >
+        No data available for chart.
+      </div>
+    );
+  }
+
+  const totalUnits = chartData.reduce((sum, d) => sum + d.value, 0);
+
+  return (
+    <div className="w-full">
+      <div className="grid grid-cols-2 gap-3 mb-4">
+        <div
+          className={`rounded-lg border px-3 py-2 ${
+            isDry ? "border-green-200 bg-green-50" : "border-blue-200 bg-blue-50"
+          }`}
+        >
+          <p className={`text-[10px] uppercase tracking-wide font-semibold ${isDry ? "text-green-700" : "text-blue-700"}`}>
+            Total Units Sold
+          </p>
+          <p className={`text-lg font-bold ${isDry ? "text-green-900" : "text-blue-900"}`}>
+            {topUnits.toLocaleString()}
+          </p>
+        </div>
+        <div
+          className={`rounded-lg border px-3 py-2 ${
+            isDry ? "border-green-200 bg-green-50" : "border-blue-200 bg-blue-50"
+          }`}
+        >
+          <p className={`text-[10px] uppercase tracking-wide font-semibold ${isDry ? "text-green-700" : "text-blue-700"}`}>
+            Total Revenue
+          </p>
+          <p className={`text-lg font-bold ${isDry ? "text-green-900" : "text-blue-900"}`}>
+            ₱{topRevenue.toLocaleString()}
+          </p>
+        </div>
+      </div>
+
+      <div style={{ width: "100%", height: 320, position: "relative" }}>
+        <ResponsiveContainer width="100%" height={320}>
+          <PieChart>
+            <Pie
+              data={chartData}
+              cx="50%"
+              cy="50%"
+              innerRadius={70}
+              outerRadius={115}
+              paddingAngle={2}
+              dataKey="value"
+              nameKey="name"
+              stroke="#fff"
+              strokeWidth={2}
+              isAnimationActive={false}
+            >
+              {chartData.map((_, index) => (
+                <Cell key={`cell-${index}`} fill={colors[index % colors.length]} />
+              ))}
+            </Pie>
+            <Tooltip
+              contentStyle={{
+                borderRadius: 12,
+                border: "none",
+                boxShadow: "0 10px 30px rgba(0,0,0,.15)",
+                fontSize: 12,
+              }}
+              formatter={(value: number, name: string, entry: any) => {
+                const pct = totalUnits > 0 ? (value / totalUnits) * 100 : 0;
+                const rev = entry?.payload?.revenue ?? 0;
+                return [
+                  `${value.toLocaleString()} units (${pct.toFixed(1)}%) • ₱${rev.toLocaleString()}`,
+                  name,
+                ];
+              }}
+            />
+          </PieChart>
+        </ResponsiveContainer>
+      </div>
+    </div>
+  );
+};
+// ============ END COMPONENT ============
+
 export default function SeasonalForecasting() {
   const { userEmail } = useAuth();
   const [isLoading, setIsLoading] = useState(true);
-  const [syncStatus, setSyncStatus] = useState<
-    "idle" | "syncing" | "success" | "error"
-  >("idle");
+  const [syncStatus, setSyncStatus] = useState<"idle" | "syncing" | "success" | "error">("idle");
   const [syncMessage, setSyncMessage] = useState("");
 
   const [uploadedData, setUploadedData] = useState<any[] | null>(null);
@@ -441,9 +640,7 @@ export default function SeasonalForecasting() {
   const [productDetails, setProductDetails] = useState<ProductDetail[]>([]);
 
   const [forecastData, setForecastData] = useState<any>(null);
-  const [forecastStatus, setForecastStatus] = useState<
-    "idle" | "loading" | "success" | "error"
-  >("idle");
+  const [forecastStatus, setForecastStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
   const [lastGenerated, setLastGenerated] = useState<string | null>(null);
 
   const [viewMode, setViewMode] = useState("monthly");
@@ -453,9 +650,9 @@ export default function SeasonalForecasting() {
   const [isVisible, setIsVisible] = useState(false);
   const [showRemoveDialog, setShowRemoveDialog] = useState(false);
 
-  // State for product stock selections - this tracks the currently selected stock for each product
+  const [productViewMode, setProductViewMode] = useState<"list" | "chart">("list");
+
   const [productStockStates, setProductStockStates] = useState<Record<string, number>>({});
-  // FIXED: Track which month is selected for each product
   const [productSelectedMonths, setProductSelectedMonths] = useState<Record<string, string>>({});
 
   const CACHE_KEY = "sales_forecast_data";
@@ -557,235 +754,292 @@ export default function SeasonalForecasting() {
     return products.sort((a, b) => b.totalSales - a.totalSales);
   }, [originalData]);
 
-const topProductsBySeason = useMemo(() => {
-  if (!computedProductDetails.length) return null;
+  // Top products by season — top 50% by UNITS
+  const topProductsBySeason = useMemo(() => {
+    if (!computedProductDetails.length) return null;
 
-  // Helper function to rank items with ties
-  const rankItemsWithTies = (items: any[], getUnits: (item: any) => number) => {
-    // Sort by units descending
-    const sorted = [...items].sort((a, b) => getUnits(b) - getUnits(a));
-    
-    // Add rank with ties
-    let rank = 1;
-    let i = 0;
-    while (i < sorted.length) {
-      let j = i;
-      // Find all items with same units
-      while (j < sorted.length && getUnits(sorted[j]) === getUnits(sorted[i])) {
-        j++;
+    const rankItemsWithTies = (items: any[], getUnits: (item: any) => number) => {
+      const sorted = [...items].sort((a, b) => getUnits(b) - getUnits(a));
+      
+      let rank = 1;
+      let i = 0;
+      while (i < sorted.length) {
+        let j = i;
+        while (j < sorted.length && getUnits(sorted[j]) === getUnits(sorted[i])) {
+          j++;
+        }
+        for (let k = i; k < j; k++) {
+          (sorted[k] as any).rank = rank;
+        }
+        i = j;
+        rank += 1;
       }
-      // Assign same rank to all tied items
-      for (let k = i; k < j; k++) {
-        (sorted[k] as any).rank = rank;
+      return sorted;
+    };
+
+    const buildSeasonData = (products: any[]) => {
+      const totalUnits = products.reduce((sum, p) => sum + p.units, 0);
+      if (totalUnits === 0) {
+        return {
+          list: [],
+          totalUnits: 0,
+          totalRevenue: 0,
+          topUnits: 0,
+          topRevenue: 0,
+          otherUnits: 0,
+        };
       }
-      // Skip to next group
-      i = j;
-      // Increment rank by 1 for each unique rank (tie counts as 1)
-      rank += 1;
+
+      const threshold = totalUnits * 0.5;
+      let cumulative = 0;
+      const topContributors: any[] = [];
+
+      for (const product of products) {
+        topContributors.push(product);
+        cumulative += product.units;
+        if (cumulative >= threshold) break;
+      }
+
+      const topUnits = topContributors.reduce((sum, p) => sum + p.units, 0);
+      const topRevenue = topContributors.reduce((sum, p) => sum + p.revenue, 0);
+      const otherUnits = totalUnits - topUnits;
+      const totalRevenue = products.reduce((sum, p) => sum + p.revenue, 0);
+
+      const listWithPct = topContributors.map((p) => ({
+        ...p,
+        percentShare: totalUnits > 0 ? (p.units / totalUnits) * 100 : 0,
+      }));
+
+      return {
+        list: listWithPct,
+        totalUnits,
+        totalRevenue,
+        topUnits,
+        topRevenue,
+        otherUnits,
+      };
+    };
+
+    const dryProducts = computedProductDetails
+      .filter((p) => p.dryUnits > 0)
+      .map(p => ({
+        productKey: p.productKey,
+        name: p.product,
+        brand: p.brand,
+        totalUnits: p.dryUnits,
+        revenue: Math.round(p.drySales),
+        totalRevenue: Math.round(p.drySales),
+        volumeUsed: Math.round(p.totalVolumeUsed / p.months * p.dryMonths / (p.dryMonths || 1)),
+        units: p.dryUnits,
+      }));
+
+    const rankedDry = rankItemsWithTies(dryProducts, (item) => item.units);
+    const dryResult = buildSeasonData(rankedDry);
+
+    const rainyProducts = computedProductDetails
+      .filter((p) => p.rainyUnits > 0)
+      .map(p => ({
+        productKey: p.productKey,
+        name: p.product,
+        brand: p.brand,
+        totalUnits: p.rainyUnits,
+        revenue: Math.round(p.rainySales),
+        totalRevenue: Math.round(p.rainySales),
+        volumeUsed: Math.round(p.totalVolumeUsed / p.months * p.rainyMonths / (p.rainyMonths || 1)),
+        units: p.rainyUnits,
+      }));
+
+    const rankedRainy = rankItemsWithTies(rainyProducts, (item) => item.units);
+    const rainyResult = buildSeasonData(rankedRainy);
+
+    return {
+      dry: dryResult,
+      rainy: rainyResult,
+    };
+  }, [computedProductDetails]);
+
+// ============ STOCK RECOMMENDATIONS — REAL, DATA-DRIVEN ============
+// Each product is classified as Increase / Maintain / Reduce based on its
+// own historical demand trend and peak-vs-average ratio. Recommended stock
+// per month is derived from that month's actual units sold × an action
+// multiplier, rounded to the nearest 5.
+const stockRecommendations = useMemo(() => {
+  if (!computedProductDetails.length || !originalData.length) return [];
+
+  const result: any[] = [];
+
+  // Collect each product's monthly units history, sorted chronologically
+  const getProductMonthlyHistory = (productName: string, brand: string) => {
+    const records = originalData.filter(
+      (r) => r.product === productName && r.brand === brand
+    );
+    if (records.length === 0) return [];
+
+    const map: Record<
+      string,
+      { month: string; year: number; monthIndex: number; units: number; sales: number }
+    > = {};
+
+    records.forEach((rec) => {
+      const short = rec.month.substring(0, 3);
+      const mi = MONTH_NAMES.indexOf(short);
+      if (mi === -1) return;
+      const key = `${rec.year}-${String(mi + 1).padStart(2, "0")}`;
+      if (!map[key]) {
+        map[key] = {
+          month: short,
+          year: rec.year,
+          monthIndex: mi,
+          units: 0,
+          sales: 0,
+        };
+      }
+      map[key].units += rec.unitsSold || 0;
+      map[key].sales += rec.sales || 0;
+    });
+
+    return Object.values(map).sort((a, b) => {
+      if (a.year !== b.year) return a.year - b.year;
+      return a.monthIndex - b.monthIndex;
+    });
+  };
+
+  // Classify each product based on trend + peak ratio
+  const classify = (history: { units: number }[]) => {
+    const unitsArr = history.map((h) => h.units).filter((u) => u >= 0);
+    if (unitsArr.length === 0) {
+      return { action: "Maintain", avg: 0, peak: 0, trendRatio: 1 };
     }
-    return sorted;
+
+    const total = unitsArr.reduce((s, u) => s + u, 0);
+    const avg = total / unitsArr.length;
+    const peak = Math.max(...unitsArr);
+    const peakRatio = avg > 0 ? peak / avg : 1;
+
+    // Split into earlier vs last 3 for trend
+    const last3 = unitsArr.slice(-3);
+    const earlier = unitsArr.slice(0, Math.max(1, unitsArr.length - 3));
+    const last3Avg = last3.reduce((s, u) => s + u, 0) / Math.max(1, last3.length);
+    const earlierAvg = earlier.reduce((s, u) => s + u, 0) / Math.max(1, earlier.length);
+    const trendRatio = earlierAvg > 0 ? last3Avg / earlierAvg : 1;
+
+    let action: "Increase" | "Maintain" | "Reduce" = "Maintain";
+    if (trendRatio >= 1.15 || peakRatio >= 1.3) {
+      action = "Increase";
+    } else if (trendRatio <= 0.7 && peakRatio < 1.2) {
+      action = "Reduce";
+    }
+    return { action, avg, peak, trendRatio };
   };
 
-  // Dry season top products with proper ranking
-  const dryProducts = computedProductDetails
-    .filter((p) => p.dryUnits > 0)
-    .map(p => ({
-      productKey: p.productKey,
-      name: p.product,
-      brand: p.brand,
-      totalUnits: p.dryUnits,
-      revenue: Math.round(p.drySales),
-      totalRevenue: Math.round(p.drySales),
-      volumeUsed: Math.round(p.totalVolumeUsed / p.months * p.dryMonths / (p.dryMonths || 1)),
-      units: p.dryUnits,
-    }));
+  // Compute recommended stock for a given month's units
+  const recommend = (units: number, action: string) => {
+    let target: number;
+    if (action === "Increase") target = units * 1.25;
+    else if (action === "Reduce") target = units * 0.75;
+    else target = units * 1.1;
 
-  const rankedDry = rankItemsWithTies(dryProducts, (item) => item.units);
-  
-  // Get unique ranks and take top 5 unique ranks
-  const uniqueRanks = [...new Set(rankedDry.map(item => item.rank))].slice(0, 5);
-  const topDryProducts = rankedDry.filter(item => uniqueRanks.includes(item.rank));
-
-  // Rainy season top products with proper ranking
-  const rainyProducts = computedProductDetails
-    .filter((p) => p.rainyUnits > 0)
-    .map(p => ({
-      productKey: p.productKey,
-      name: p.product,
-      brand: p.brand,
-      totalUnits: p.rainyUnits,
-      revenue: Math.round(p.rainySales),
-      totalRevenue: Math.round(p.rainySales),
-      volumeUsed: Math.round(p.totalVolumeUsed / p.months * p.rainyMonths / (p.rainyMonths || 1)),
-      units: p.rainyUnits,
-    }));
-
-  const rankedRainy = rankItemsWithTies(rainyProducts, (item) => item.units);
-  
-  // Get unique ranks and take top 5 unique ranks
-  const uniqueRanksRainy = [...new Set(rankedRainy.map(item => item.rank))].slice(0, 5);
-  const topRainyProducts = rankedRainy.filter(item => uniqueRanksRainy.includes(item.rank));
-
-  return {
-    dry: topDryProducts,
-    rainy: topRainyProducts,
+    const floor = action === "Increase" ? 30 : action === "Reduce" ? 10 : 20;
+    return Math.max(Math.round(Math.max(target, floor) / 5) * 5, floor);
   };
-}, [computedProductDetails]);
-  // stockRecommendations with month-specific data - FIXED to only show peak months
-  const stockRecommendations = useMemo(() => {
-    if (!computedProductDetails.length || !originalData.length) return [];
 
-    const sortedByUnits = [...computedProductDetails].sort((a, b) => b.totalUnits - a.totalUnits);
-    const avgUnits = computedProductDetails.reduce((sum, p) => sum + p.totalUnits, 0) / computedProductDetails.length;
+  computedProductDetails.forEach((p) => {
+    const history = getProductMonthlyHistory(p.product, p.brand);
+    if (history.length === 0) return;
 
-    const increaseStock = sortedByUnits
-      .filter(p => p.totalUnits > avgUnits * 1.1)
-      .slice(0, 3);
+    const { action, avg, peak } = classify(history);
 
-    const maintainStock = sortedByUnits
-      .filter(p => p.totalUnits >= avgUnits * 0.8 && p.totalUnits <= avgUnits * 1.1)
-      .slice(0, 3);
+    const items = history.map((h) => ({
+      month: `${h.month} ${h.year}`,
+      peakSales: Math.round(h.sales),
+      peakUnits: h.units,
+      recommendedStock: recommend(h.units, action),
+    }));
 
-    const result: any[] = [];
+    result.push({
+      category: `${p.brand} ${p.product}`,
+      action,
+      avgUnits: Math.round(avg),
+      peakUnits: Math.round(peak),
+      items,
+      defaultStock: items[items.length - 1]?.recommendedStock || 30,
+      defaultMonth: items[items.length - 1]?.month || "No data",
+    });
+  });
 
-    const getProductMonthDetails = (productName: string, brand: string) => {
-      const productRecords = originalData.filter(
-        (r) => r.product === productName && r.brand === brand
-      );
-      
-      if (productRecords.length === 0) {
-        return [];
-      }
-      
-      const monthlyData: Record<string, { 
-        sales: number; 
-        units: number; 
-        month: string; 
-        year: number;
-        monthName: string;
-        fullLabel: string;
-      }> = {};
-      
-      productRecords.forEach((record) => {
-        const monthKey = `${record.month}-${record.year}`;
-        const monthShort = record.month.substring(0, 3);
-        
-        if (!monthlyData[monthKey]) {
-          monthlyData[monthKey] = {
-            sales: 0,
-            units: 0,
+  return result;
+}, [computedProductDetails, originalData]);
+
+  // ============ PER-MONTH UNITS SOLD PER PRODUCT ============
+  // Keyed by BOTH "Brand Product" (space) and "Brand-Product" (hyphen)
+  const perMonthUnitsByProduct = useMemo(() => {
+    const bucket: Record<string, Record<string, { month: string; monthIndex: number; year: number; units: number }>> = {};
+
+    originalData.forEach((record) => {
+      const brand = record.brand || "";
+      const product = record.product || "";
+      const spaceKey = `${brand} ${product}`.trim();
+      const hyphenKey = `${brand}-${product}`;
+
+      const monthShort = record.month.substring(0, 3);
+      const monthIdx = MONTH_NAMES.indexOf(monthShort);
+      if (monthIdx === -1) return;
+
+      const periodKey = `${record.year}-${String(monthIdx + 1).padStart(2, "0")}`;
+
+      [spaceKey, hyphenKey].forEach((key) => {
+        if (!key) return;
+        if (!bucket[key]) bucket[key] = {};
+        if (!bucket[key][periodKey]) {
+          bucket[key][periodKey] = {
             month: monthShort,
+            monthIndex: monthIdx,
             year: record.year,
-            monthName: record.month,
-            fullLabel: `${monthShort} ${record.year}`
+            units: 0,
           };
         }
-        monthlyData[monthKey].sales += record.sales;
-        monthlyData[monthKey].units += record.unitsSold || 0;
-      });
-      
-      const monthlyArray = Object.values(monthlyData);
-      // Sort by sales to get peak months (highest sales first)
-      const sortedMonths = [...monthlyArray].sort((a, b) => b.sales - a.sales);
-      
-      // FIXED: Only return the top 3 peak months
-      const topPeakMonths = sortedMonths.slice(0, 3);
-      
-      return topPeakMonths.map(month => ({
-        label: month.fullLabel,
-        month: month.month,
-        year: month.year,
-        sales: Math.round(month.sales),
-        units: Math.round(month.units),
-      }));
-    };
-
-    const calculateStockForMonth = (peakUnits: number, action: string) => {
-      if (action === "Increase") {
-        return Math.round(Math.max(peakUnits * 2.5, 30) / 5) * 5;
-      } else {
-        return Math.round(Math.max(peakUnits * 1.2, 20) / 5) * 5;
-      }
-    };
-
-    // Process Increase products
-    increaseStock.forEach(p => {
-      const monthDetails = getProductMonthDetails(p.product, p.brand);
-      const volumePerUnit = Math.round(p.totalVolumeUsed / (p.totalUnits || 1)) || 3785;
-      const pricePerMl = p.pricePerMl || 0;
-      
-      const monthRecommendations = monthDetails.map(month => {
-        const recommendedStock = calculateStockForMonth(month.units, "Increase");
-        return {
-          month: month.label,
-          peakSales: month.sales,
-          peakUnits: month.units,
-          recommendedStock: recommendedStock,
-        };
-      });
-      
-      if (monthRecommendations.length === 0) {
-        const avgMonthlyUnits = p.totalUnits / (p.months || 1);
-        monthRecommendations.push({
-          month: "No data",
-          peakSales: 0,
-          peakUnits: 0,
-          recommendedStock: Math.round(Math.max(avgMonthlyUnits * 4, 30) / 5) * 5,
-        });
-      }
-      
-      result.push({
-        category: `${p.brand} ${p.product}`,
-        action: "Increase",
-        volumePerUnit: volumePerUnit,
-        pricePerMl: pricePerMl,
-        items: monthRecommendations,
-        defaultStock: monthRecommendations[0]?.recommendedStock || 60,
-        defaultMonth: monthRecommendations[0]?.month || "No data",
+        bucket[key][periodKey].units += record.unitsSold || 0;
       });
     });
 
-    // Process Maintain products
-    maintainStock.forEach(p => {
-      const monthDetails = getProductMonthDetails(p.product, p.brand);
-      const volumePerUnit = Math.round(p.totalVolumeUsed / (p.totalUnits || 1)) || 3785;
-      const pricePerMl = p.pricePerMl || 0;
-      
-      const monthRecommendations = monthDetails.map(month => {
-        const recommendedStock = calculateStockForMonth(month.units, "Maintain");
-        return {
-          month: month.label,
-          peakSales: month.sales,
-          peakUnits: month.units,
-          recommendedStock: recommendedStock,
-        };
+    const result: Record<string, { month: string; monthIndex: number; year: number; units: number }[]> = {};
+    Object.entries(bucket).forEach(([key, monthsMap]) => {
+      result[key] = Object.values(monthsMap).sort((a, b) => {
+        if (a.year !== b.year) return a.year - b.year;
+        return a.monthIndex - b.monthIndex;
       });
-      
-      if (monthRecommendations.length === 0) {
-        const avgMonthlyUnits = p.totalUnits / (p.months || 1);
-        monthRecommendations.push({
-          month: "No data",
-          peakSales: 0,
-          peakUnits: 0,
-          recommendedStock: Math.round(Math.max(avgMonthlyUnits * 2, 20) / 5) * 5,
-        });
-      }
-      
-      result.push({
-        category: `${p.brand} ${p.product}`,
-        action: "Maintain",
-        volumePerUnit: volumePerUnit,
-        pricePerMl: pricePerMl,
-        items: monthRecommendations,
-        defaultStock: monthRecommendations[0]?.recommendedStock || 30,
-        defaultMonth: monthRecommendations[0]?.month || "No data",
+    });
+    return result;
+  }, [originalData]);
+
+  // ============ RECOMMENDED STOCK PER MONTH PER PRODUCT ============
+  const recommendedStockByProduct = useMemo(() => {
+    const result: Record<string, { month: string; year: number; units: number; recommended: number }[]> = {};
+
+    const actionByProduct: Record<string, "Increase" | "Maintain"> = {};
+    stockRecommendations.forEach((r: any) => {
+      actionByProduct[r.category] = r.action === "Increase" ? "Increase" : "Maintain";
+    });
+
+    Object.entries(perMonthUnitsByProduct).forEach(([key, months]) => {
+      const action = actionByProduct[key] || "Maintain";
+      result[key] = months.map((m) => {
+        const recommended =
+          action === "Increase"
+            ? Math.round(Math.max(m.units * 2.5, 30) / 5) * 5
+            : Math.round(Math.max(m.units * 1.2, 20) / 5) * 5;
+        return {
+          month: m.month,
+          year: m.year,
+          units: m.units,
+          recommended,
+        };
       });
     });
 
     return result;
-  }, [computedProductDetails, originalData]);
+  }, [perMonthUnitsByProduct, stockRecommendations]);
 
-  // Initialize stock states when recommendations change
   useEffect(() => {
     if (stockRecommendations.length > 0) {
       const initialStates: Record<string, number> = {};
@@ -800,7 +1054,6 @@ const topProductsBySeason = useMemo(() => {
     }
   }, [stockRecommendations]);
 
-  // FIXED: Function to update stock for a product
   const updateProductStock = (productKey: string, stock: number, month?: string) => {
     setProductStockStates(prev => ({
       ...prev,
@@ -814,25 +1067,81 @@ const topProductsBySeason = useMemo(() => {
     }
   };
 
-  const bestSellingProducts = useMemo(() => {
-    if (!computedProductDetails.length) return [];
+ // ============ BEST-SELLING PRODUCTS ============
+// A product is best-selling if it sold 100+ UNITS in the last 12 months.
+// If the uploaded data covers less than a year, we use the whole span.
+const bestSellingProducts = useMemo(() => {
+  if (!computedProductDetails.length || !originalData.length) return [];
 
-    const sortedByUnits = [...computedProductDetails].sort((a, b) => b.totalUnits - a.totalUnits);
-    return sortedByUnits.slice(0, 5).map(p => {
-      const dryAvg = p.dryMonths > 0 ? p.drySales / p.dryMonths : 0;
-      const rainyAvg = p.rainyMonths > 0 ? p.rainySales / p.rainyMonths : 0;
-      
+  const BEST_UNIT_THRESHOLD = 100; // >= 100 units in the last year = best-selling
+
+  // Determine the most recent period present in the data
+  let maxYear = 0;
+  let maxMonthIdx = -1;
+  originalData.forEach((rec) => {
+    const mi = MONTH_NAMES.indexOf(rec.month.substring(0, 3));
+    if (mi === -1) return;
+    if (rec.year > maxYear || (rec.year === maxYear && mi > maxMonthIdx)) {
+      maxYear = rec.year;
+      maxMonthIdx = mi;
+    }
+  });
+
+  if (maxYear === 0) return [];
+
+  // Define cutoff = (maxYear, maxMonthIdx) minus 11 months
+  // This gives a 12-month window (current month + previous 11).
+  const MONTHS_WINDOW = 12;
+  const cutoffOrdinal = maxYear * 12 + maxMonthIdx - (MONTHS_WINDOW - 1);
+
+  // Sum units per product within the last 12 months
+  const unitsInWindow: Record<string, number> = {};
+  const metaByProduct: Record<
+    string,
+    { name: string; dryUnits: number; rainyUnits: number; totalRevenue: number; volumeUsed: number; pricePerMl: number }
+  > = {};
+
+  originalData.forEach((rec) => {
+    const mi = MONTH_NAMES.indexOf(rec.month.substring(0, 3));
+    if (mi === -1) return;
+    const ordinal = rec.year * 12 + mi;
+    if (ordinal < cutoffOrdinal) return; // outside the last-12-months window
+
+    const key = `${rec.brand || ""}-${rec.product || ""}`;
+    unitsInWindow[key] = (unitsInWindow[key] || 0) + (rec.unitsSold || 0);
+  });
+
+  // Attach metadata + dry/rainy split for display
+  computedProductDetails.forEach((p) => {
+    metaByProduct[p.productKey] = {
+      name: `${p.brand} ${p.product}`,
+      dryUnits: p.dryUnits || 0,
+      rainyUnits: p.rainyUnits || 0,
+      totalRevenue: Math.round(p.totalSales),
+      volumeUsed: Math.round(p.totalVolumeUsed),
+      pricePerMl: p.pricePerMl,
+    };
+  });
+
+  // Flag products whose units-in-window meet the best-seller threshold
+  const flagged = Object.entries(unitsInWindow)
+    .filter(([key, units]) => units >= BEST_UNIT_THRESHOLD && metaByProduct[key])
+    .sort((a, b) => b[1] - a[1]) // highest units first
+    .map(([key, units]) => {
+      const meta = metaByProduct[key];
       return {
-        name: `${p.brand} ${p.product}`,
-        unitsSold: p.totalUnits,
-        dryUnits: p.dryUnits,
-        rainyUnits: p.rainyUnits,
-        totalRevenue: Math.round(p.totalSales),
-        volumeUsed: Math.round(p.totalVolumeUsed),
-        pricePerMl: p.pricePerMl,
+        name: meta.name,
+        unitsSold: units,               // units in the last 12 months
+        dryUnits: meta.dryUnits,
+        rainyUnits: meta.rainyUnits,
+        totalRevenue: meta.totalRevenue,
+        volumeUsed: meta.volumeUsed,
+        pricePerMl: meta.pricePerMl,
       };
     });
-  }, [computedProductDetails]);
+
+  return flagged;
+}, [computedProductDetails, originalData]);
 
   const slowMovingProducts = useMemo(() => {
     if (!computedProductDetails.length) return [];
@@ -924,7 +1233,6 @@ const topProductsBySeason = useMemo(() => {
     loadData();
   }, [userEmail]);
 
-  // Auto-generate forecast when data is saved
   useEffect(() => {
     if (isDataSaved && salesData.length > 0 && forecastStatus === "idle" && !isGenerating) {
       generateForecast();
@@ -1243,11 +1551,6 @@ const topProductsBySeason = useMemo(() => {
 
       setUploadError("");
       setHasData(true);
-
-      console.log("Product details computed:", products.length, "unique products");
-      console.log("Top 5 products by total sales:", products.slice(0, 5).map(p => 
-        `${p.brand} ${p.product}: ₱${p.totalSales.toLocaleString()}`
-      ));
 
     } catch (error) {
       console.error("Error processing uploaded data:", error);
@@ -1684,7 +1987,6 @@ Return ONLY valid JSON with this structure:
   ]
 }`;
 
-      // UPDATED: Use GoogleGenerativeAI instead of salesForecastAI
       const model = genAI.getGenerativeModel({ model: "gemini-3.5-flash" });
       const result = await model.generateContent(prompt);
       const response = await result.response;
@@ -1704,12 +2006,6 @@ Return ONLY valid JSON with this structure:
         marketingStrategies: aiResult.marketingStrategies || [],
         forecast: calculatedForecast
       };
-
-      console.log("=== FINAL RESULT ===");
-      console.log("Best selling (frontend):", resultData.bestSellingProducts.map(p => `${p.name}: ${p.unitsSold} units`));
-      console.log("Slow moving (frontend):", resultData.slowMovingProducts.map(p => `${p.name}: ${p.unitsSold} units`));
-      console.log("Stock recs (frontend):", resultData.stockRecommendations.map(r => `${r.category}: ${r.items[0].action}`));
-      console.log("Marketing strategies (AI):", resultData.marketingStrategies.length);
 
       localStorage.setItem(CACHE_KEY, JSON.stringify(resultData));
       localStorage.setItem(CACHE_TIMESTAMP_KEY, String(Date.now()));
@@ -1875,21 +2171,11 @@ Return ONLY valid JSON with this structure:
     >
       <style>{`
         @keyframes slideUp {
-          from {
-            opacity: 0;
-            transform: translateY(20px) scale(0.95);
-          }
-          to {
-            opacity: 1;
-            transform: translateY(0) scale(1);
-          }
+          from { opacity: 0; transform: translateY(20px) scale(0.95); }
+          to { opacity: 1; transform: translateY(0) scale(1); }
         }
-        .animate-slide-up {
-          animation: slideUp 0.3s ease-out forwards;
-        }
-        .forecast-page [data-slot="card"] {
-          border-radius: 1rem;
-        }
+        .animate-slide-up { animation: slideUp 0.3s ease-out forwards; }
+        .forecast-page [data-slot="card"] { border-radius: 1rem; }
         .forecast-page select {
           border-color: rgb(167 243 208);
           background: rgb(255 255 255);
@@ -1900,26 +2186,16 @@ Return ONLY valid JSON with this structure:
           box-shadow: 0 0 0 3px rgb(209 250 229);
           border-color: rgb(5 150 105);
         }
-        .forecast-page [data-slot="table-head"] {
-          color: rgb(22 101 52);
-          font-weight: 700;
-        }
-        .forecast-page [data-slot="table-row"]:hover {
-          background: rgb(240 253 244 / 0.7);
-        }
-        /* Ensure dropdowns are not clipped */
-        .forecast-page [data-slot="card-content"] {
-          overflow: visible !important;
-        }
-        .forecast-page .overflow-x-auto {
-          overflow: visible !important;
-        }
-        .forecast-page table {
-          overflow: visible !important;
-        }
-        .forecast-page tbody tr td {
-          overflow: visible !important;
-        }
+        .forecast-page [data-slot="table-head"] { color: rgb(22 101 52); font-weight: 700; }
+        .forecast-page [data-slot="table-row"]:hover { background: rgb(240 253 244 / 0.7); }
+        .forecast-page [data-slot="card-content"] { overflow: visible !important; }
+        .forecast-page .overflow-x-auto { overflow: visible !important; }
+        .forecast-page table { overflow: visible !important; }
+        .forecast-page tbody tr td { overflow: visible !important; }
+        .season-table-scroll::-webkit-scrollbar { width: 8px; }
+        .season-table-scroll::-webkit-scrollbar-track { background: #f1f5f9; border-radius: 8px; }
+        .season-table-scroll::-webkit-scrollbar-thumb { background: #94a3b8; border-radius: 8px; }
+        .season-table-scroll::-webkit-scrollbar-thumb:hover { background: #64748b; }
       `}</style>
 
       <header className="overflow-hidden rounded-2xl bg-[#174d32] px-5 py-2 text-white shadow-[0_18px_45px_rgba(23,77,50,0.18)] sm:px-7 sm:py-6">
@@ -2035,24 +2311,12 @@ Return ONLY valid JSON with this structure:
                     Required Headers (exact match):
                   </p>
                   <div className="flex flex-wrap gap-1.5 mt-1.5">
-                    <Badge variant="outline" className="text-xs bg-white border-green-300 text-green-700">
-                      Date
-                    </Badge>
-                    <Badge variant="outline" className="text-xs bg-white border-green-300 text-green-700">
-                      Brand
-                    </Badge>
-                    <Badge variant="outline" className="text-xs bg-white border-green-300 text-green-700">
-                      Product
-                    </Badge>
-                    <Badge variant="outline" className="text-xs bg-white border-green-300 text-green-700">
-                      Total Sales (PHP)
-                    </Badge>
-                    <Badge variant="outline" className="text-xs bg-white border-green-300 text-green-700">
-                      Units Sold
-                    </Badge>
-                    <Badge variant="outline" className="text-xs bg-white border-green-300 text-green-700">
-                      Season
-                    </Badge>
+                    <Badge variant="outline" className="text-xs bg-white border-green-300 text-green-700">Date</Badge>
+                    <Badge variant="outline" className="text-xs bg-white border-green-300 text-green-700">Brand</Badge>
+                    <Badge variant="outline" className="text-xs bg-white border-green-300 text-green-700">Product</Badge>
+                    <Badge variant="outline" className="text-xs bg-white border-green-300 text-green-700">Total Sales (PHP)</Badge>
+                    <Badge variant="outline" className="text-xs bg-white border-green-300 text-green-700">Units Sold</Badge>
+                    <Badge variant="outline" className="text-xs bg-white border-green-300 text-green-700">Season</Badge>
                   </div>
                   <p className="text-[11px] text-green-600 mt-1.5">
                     Headers are case-sensitive and must match exactly
@@ -2077,14 +2341,10 @@ Return ONLY valid JSON with this structure:
                       )}
                     </div>
                     <div>
-                      <p className={`text-sm font-medium truncate max-w-[150px] ${
-                        isDataSaved ? "text-gray-900" : "text-gray-900"
-                      }`}>
+                      <p className="text-sm font-medium truncate max-w-[150px] text-gray-900">
                         {uploadedDataName}
                       </p>
-                      <p className={`text-xs ${
-                        isDataSaved ? "text-gray-400" : "text-gray-500"
-                      }`}>
+                      <p className={`text-xs ${isDataSaved ? "text-gray-400" : "text-gray-500"}`}>
                         {uploadedData.length} rows
                       </p>
                     </div>
@@ -2110,11 +2370,7 @@ Return ONLY valid JSON with this structure:
                   <Button
                     onClick={() => csvInputRef.current?.click()}
                     variant="outline"
-                    className={`text-xs h-7 px-2 ${
-                      isDataSaved
-                        ? "border-green-300 text-green-600 hover:bg-green-50"
-                        : "border-green-300 text-green-600 hover:bg-green-50"
-                    }`}
+                    className="text-xs h-7 px-2 border-green-300 text-green-600 hover:bg-green-50"
                   >
                     <RefreshCw className="size-3 mr-1" />
                     Replace
@@ -2122,11 +2378,7 @@ Return ONLY valid JSON with this structure:
                   <Button
                     onClick={() => setShowRemoveDialog(true)}
                     variant="outline"
-                    className={`text-xs h-7 px-2 ${
-                      isDataSaved
-                        ? "border-red-300 text-red-600 hover:bg-red-50"
-                        : "border-red-300 text-red-600 hover:bg-red-50"
-                    }`}
+                    className="text-xs h-7 px-2 border-red-300 text-red-600 hover:bg-red-50"
                   >
                     <Trash2 className="size-3 mr-1" />
                     Clear
@@ -2145,7 +2397,6 @@ Return ONLY valid JSON with this structure:
         </Card>
       </section>
 
-      {/* Remove Uploaded Data Dialog */}
       {showRemoveDialog && createPortal(
         <div 
           className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 animate-fade-in"
@@ -2535,338 +2786,376 @@ Return ONLY valid JSON with this structure:
           {topProductsBySeason && (
             <Card className="shadow-lg border-0 overflow-hidden">
               <div className="bg-gradient-to-r from-green-900 to-emerald-600 px-6 py-4">
-                <div className="flex items-center gap-3">
-                  <Lightbulb className="w-5 h-5 text-white" />
-                  <div>
-                    <h3 className="text-lg font-bold text-white">Top Product Per Season</h3>
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <Lightbulb className="w-5 h-5 text-white" />
+                    <div>
+                      <h3 className="text-lg font-bold text-white">Top Product Per Season</h3>
+                      <p className="text-xs text-white/70 mt-0.5">
+                        Products contributing to the top 50% of units sold
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex bg-white/15 rounded-lg p-1 w-fit">
+                    <button
+                      onClick={() => setProductViewMode("list")}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition ${
+                        productViewMode === "list"
+                          ? "bg-white text-green-900"
+                          : "text-white/80 hover:text-white"
+                      }`}
+                    >
+                      <List className="size-3.5" />
+                      List
+                    </button>
+                    <button
+                      onClick={() => setProductViewMode("chart")}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition ${
+                        productViewMode === "chart"
+                          ? "bg-white text-green-900"
+                          : "text-white/80 hover:text-white"
+                      }`}
+                    >
+                      <PieChartIcon className="size-3.5" />
+                      Chart
+                    </button>
                   </div>
                 </div>
               </div>
+
               <CardContent>
-                <Tabs defaultValue="dry" className="w-full">
-                  <div className="items-center justify-between ml-125">  
-                  <TabsList className="grid w-full max-w-sm grid-cols-2 mb-6">
-                    <TabsTrigger value="dry" className="data-[state=active]:bg-[#174d32] data-[state=active]:text-white">
-                      Dry Season
-                    </TabsTrigger>
-                    <TabsTrigger value="rainy" className="data-[state=active]:bg-blue-700 data-[state=active]:text-white">
-                      Rainy Season
-                    </TabsTrigger>
-                  </TabsList>
-                  </div>
-
-                <TabsContent value="dry">
-  <Card className="border border-green-200 bg-green-50/30 shadow-sm">
-    <CardHeader className="border-b border-green-100">
-      <div className="flex justify-between items-center">
+               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+  {/* RAINY SEASON (NOW LEFT) */}
+  <div className="rounded-xl border border-blue-200 bg-blue-50/30 shadow-sm overflow-hidden flex flex-col">
+    <div className="px-4 py-3 border-b border-blue-100 bg-blue-50/60 flex items-center justify-between">
+      <div className="flex items-center gap-2">
+        <CloudRain className="size-4 text-blue-800" />
         <div>
-          <CardTitle className="flex items-center gap-2 text-lg text-green-800">
-            <Sun className="size-5" />
-            Dry Season
-          </CardTitle>
-          <CardDescription>November – May</CardDescription>
+          <h4 className="text-sm font-semibold text-blue-800 leading-tight">
+            {productViewMode === "list"
+              ? "Rainy Season — Top Contributors"
+              : "Rainy Season — Product Units Share"}
+          </h4>
+          <p className="text-[11px] text-blue-700/80 leading-tight">
+            June – October
+          </p>
         </div>
-        <Badge className="bg-[#174d32] text-white">
-          {topProductsBySeason.dry.length} Products
-        </Badge>
       </div>
-    </CardHeader>
-    <CardContent>
-      {topProductsBySeason.dry.length > 0 ? (
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead className="w-16" style={{ color: '#174d32' }}>Rank</TableHead>
-              <TableHead style={{ color: '#174d32' }}>Brand</TableHead>
-              <TableHead style={{ color: '#174d32' }}>Product</TableHead>
-              <TableHead style={{ color: '#174d32' }}>Total Units Sold</TableHead>
-              <TableHead style={{ color: '#174d32' }}>Total Revenue</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {(() => {
-              let currentRank = '';
-              let rowSpan = 0;
-              let rankRows: any[] = [];
-              
-              // Group rows by rank
-              const groupedByRank = topProductsBySeason.dry.reduce((acc: any, product: any) => {
-                const rank = product.rank;
-                if (!acc[rank]) acc[rank] = [];
-                acc[rank].push(product);
-                return acc;
-              }, {});
-              
-              // Build rows with rowspan
-              const rows: any[] = [];
-              Object.keys(groupedByRank).sort((a, b) => Number(a) - Number(b)).forEach(rank => {
-                const products = groupedByRank[rank];
-                products.forEach((product: any, index: number) => {
-                  rows.push({
-                    ...product,
-                    rankDisplay: index === 0 ? `#${rank}` : null,
-                    rowSpan: index === 0 ? products.length : 0
-                  });
-                });
-              });
-              
-              return rows.map((product: any) => (
-                <TableRow key={product.productKey} className="hover:bg-gray-50 transition-colors">
-                  <TableCell>
-                    {product.rankDisplay && (
-                      <Badge className="bg-[#174d32]">{product.rankDisplay}</Badge>
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    <p className="font-semibold text-sm">{product.brand}</p>
-                  </TableCell>
-                  <TableCell>
-                    <p className="font-medium text-sm">{product.name}</p>
-                  </TableCell>
-                  <TableCell className="font-medium">
-                    {product.totalUnits.toLocaleString()}
-                  </TableCell>
-                  <TableCell className="font-bold">
-                    ₱{product.revenue.toLocaleString()}
-                  </TableCell>
+      <Badge className="bg-blue-100 text-blue-800 text-[10px]">
+        {topProductsBySeason.rainy.list.length} products
+      </Badge>
+    </div>
+
+    <div className="p-4" style={{ height: 400 }}>
+      {productViewMode === "list" ? (
+        topProductsBySeason.rainy.list.length > 0 ? (
+          <div className="season-table-scroll overflow-y-auto rounded-lg border border-blue-100 h-full">
+            <Table>
+              <TableHeader className="sticky top-0 z-10 bg-white shadow-sm">
+                <TableRow>
+                  <TableHead className="w-14 bg-white" style={{ color: '#1d4ed8' }}>Rank</TableHead>
+                  <TableHead className="bg-white" style={{ color: '#1d4ed8' }}>Product</TableHead>
+                  <TableHead className="bg-white text-right" style={{ color: '#1d4ed8' }}>Units</TableHead>
+                  <TableHead className="bg-white text-right" style={{ color: '#1d4ed8' }}>Revenue</TableHead>
+                  <TableHead className="bg-white text-right" style={{ color: '#1d4ed8' }}>%</TableHead>
                 </TableRow>
-              ));
-            })()}
-          </TableBody>
-        </Table>
+              </TableHeader>
+              <TableBody>
+                {topProductsBySeason.rainy.list.map((product: any) => (
+                  <TableRow key={product.productKey} className="hover:bg-gray-50 transition-colors">
+                    <TableCell>
+                      <Badge className="bg-blue-700">#{product.rank}</Badge>
+                    </TableCell>
+                    <TableCell>
+                      <p className="font-semibold text-sm">{product.brand}</p>
+                      <p className="text-xs text-gray-500">{product.name}</p>
+                    </TableCell>
+                    <TableCell className="text-right font-medium">
+                      {product.units.toLocaleString()}
+                    </TableCell>
+                    <TableCell className="text-right font-bold">
+                      ₱{product.revenue.toLocaleString()}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <Badge className="bg-blue-100 text-blue-800">
+                        {product.percentShare.toFixed(1)}%
+                      </Badge>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        ) : (
+          <div className="text-center py-8 text-gray-500 h-full flex items-center justify-center">
+            <p>No products found for Rainy season.</p>
+          </div>
+        )
       ) : (
-        <div className="text-center py-8 text-gray-500">
-          <p>No products found for Dry season.</p>
+        <div className="h-full flex items-start justify-center">
+          <SeasonDonutChart
+            products={topProductsBySeason.rainy.list}
+            season="rainy"
+            topUnits={topProductsBySeason.rainy.topUnits}
+            topRevenue={topProductsBySeason.rainy.topRevenue}
+          />
         </div>
       )}
-    </CardContent>
-  </Card>
-</TabsContent>
+    </div>
+  </div>
 
-                <TabsContent value="rainy">
-  <Card className="border border-blue-200 bg-blue-50/30 shadow-sm">
-    <CardHeader className="border-b border-blue-100">
-      <div className="flex justify-between items-center">
+  {/* DRY SEASON (NOW RIGHT) */}
+  <div className="rounded-xl border border-green-200 bg-green-50/30 shadow-sm overflow-hidden flex flex-col">
+    <div className="px-4 py-3 border-b border-green-100 bg-green-50/60 flex items-center justify-between">
+      <div className="flex items-center gap-2">
+        <Sun className="size-4 text-green-800" />
         <div>
-          <CardTitle className="flex items-center gap-2 text-lg text-blue-800">
-            <CloudRain className="size-5" />
-            Rainy Season
-          </CardTitle>
-          <CardDescription>June – October</CardDescription>
+          <h4 className="text-sm font-semibold text-green-800 leading-tight">
+            {productViewMode === "list"
+              ? "Dry Season — Top Contributors"
+              : "Dry Season — Product Units Share"}
+          </h4>
+          <p className="text-[11px] text-green-700/80 leading-tight">
+            November – May
+          </p>
         </div>
-        <Badge className="bg-blue-700 text-white">
-          {topProductsBySeason.rainy.length} Products
-        </Badge>
       </div>
-    </CardHeader>
-    <CardContent>
-      {topProductsBySeason.rainy.length > 0 ? (
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead className="w-16" style={{ color: '#1d4ed8' }}>Rank</TableHead>
-              <TableHead style={{ color: '#1d4ed8' }}>Brand</TableHead>
-              <TableHead style={{ color: '#1d4ed8' }}>Product</TableHead>
-              <TableHead style={{ color: '#1d4ed8' }}>Total Units Sold</TableHead>
-              <TableHead style={{ color: '#1d4ed8' }}>Total Revenue</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {(() => {
-              // Group rows by rank
-              const groupedByRank = topProductsBySeason.rainy.reduce((acc: any, product: any) => {
-                const rank = product.rank;
-                if (!acc[rank]) acc[rank] = [];
-                acc[rank].push(product);
-                return acc;
-              }, {});
-              
-              // Build rows with rowspan
-              const rows: any[] = [];
-              Object.keys(groupedByRank).sort((a, b) => Number(a) - Number(b)).forEach(rank => {
-                const products = groupedByRank[rank];
-                products.forEach((product: any, index: number) => {
-                  rows.push({
-                    ...product,
-                    rankDisplay: index === 0 ? `#${rank}` : null,
-                    rowSpan: index === 0 ? products.length : 0
-                  });
-                });
-              });
-              
-              return rows.map((product: any) => (
-                <TableRow key={product.productKey} className="hover:bg-gray-50 transition-colors">
-                  <TableCell>
-                    {product.rankDisplay && (
-                      <Badge className="bg-blue-700">{product.rankDisplay}</Badge>
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    <p className="font-semibold text-sm">{product.brand}</p>
-                  </TableCell>
-                  <TableCell>
-                    <p className="font-medium text-sm">{product.name}</p>
-                  </TableCell>
-                  <TableCell className="font-medium">
-                    {product.totalUnits.toLocaleString()}
-                  </TableCell>
-                  <TableCell className="font-bold">
-                    ₱{product.revenue.toLocaleString()}
-                  </TableCell>
+      <Badge className="bg-green-100 text-green-800 text-[10px]">
+        {topProductsBySeason.dry.list.length} products
+      </Badge>
+    </div>
+
+    <div className="p-4" style={{ height: 400 }}>
+      {productViewMode === "list" ? (
+        topProductsBySeason.dry.list.length > 0 ? (
+          <div className="season-table-scroll overflow-y-auto rounded-lg border border-green-100 h-full">
+            <Table>
+              <TableHeader className="sticky top-0 z-10 bg-white shadow-sm">
+                <TableRow>
+                  <TableHead className="w-14 bg-white" style={{ color: '#174d32' }}>Rank</TableHead>
+                  <TableHead className="bg-white" style={{ color: '#174d32' }}>Product</TableHead>
+                  <TableHead className="bg-white text-right" style={{ color: '#174d32' }}>Units</TableHead>
+                  <TableHead className="bg-white text-right" style={{ color: '#174d32' }}>Revenue</TableHead>
+                  <TableHead className="bg-white text-right" style={{ color: '#174d32' }}>%</TableHead>
                 </TableRow>
-              ));
-            })()}
-          </TableBody>
-        </Table>
+              </TableHeader>
+              <TableBody>
+                {topProductsBySeason.dry.list.map((product: any) => (
+                  <TableRow key={product.productKey} className="hover:bg-gray-50 transition-colors">
+                    <TableCell>
+                      <Badge className="bg-[#174d32]">#{product.rank}</Badge>
+                    </TableCell>
+                    <TableCell>
+                      <p className="font-semibold text-sm">{product.brand}</p>
+                      <p className="text-xs text-gray-500">{product.name}</p>
+                    </TableCell>
+                    <TableCell className="text-right font-medium">
+                      {product.units.toLocaleString()}
+                    </TableCell>
+                    <TableCell className="text-right font-bold">
+                      ₱{product.revenue.toLocaleString()}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <Badge className="bg-green-100 text-green-800">
+                        {product.percentShare.toFixed(1)}%
+                      </Badge>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        ) : (
+          <div className="text-center py-8 text-gray-500 h-full flex items-center justify-center">
+            <p>No products found for Dry season.</p>
+          </div>
+        )
       ) : (
-        <div className="text-center py-8 text-gray-500">
-          <p>No products found for Rainy season.</p>
+        <div className="h-full flex items-start justify-center">
+          <SeasonDonutChart
+            products={topProductsBySeason.dry.list}
+            season="dry"
+            topUnits={topProductsBySeason.dry.topUnits}
+            topRevenue={topProductsBySeason.dry.topRevenue}
+          />
         </div>
       )}
-    </CardContent>
-  </Card>
-</TabsContent>
-                </Tabs>
+    </div>
+  </div>
+</div>
               </CardContent>
             </Card>
           )}
 
-          {/* Stock Recommendations with working dropdown */}
+          {/* ==================== STOCK RECOMMENDATIONS ==================== */}
           {isDataSaved && stockRecommendations.length > 0 && (
-            <Card className="shadow-lg border-0 overflow-visible">
-              <div className="rounded-t-2xl bg-gradient-to-r from-green-900 to-emerald-600 px-6 py-4">
+            <Card className="shadow-lg border-0 overflow-hidden">
+              <div className="bg-gradient-to-r from-green-900 to-emerald-600 px-6 py-4">
                 <div className="flex items-center gap-3">
                   <Lightbulb className="w-5 h-5 text-white" />
                   <div>
                     <h3 className="text-lg font-bold text-white">Product Stock Recommendations</h3>
+                    <p className="text-xs text-white/70 mt-0.5">
+                      Recommended stock per month for each product
+                    </p>
                   </div>
                 </div>
               </div>
 
-              <CardContent className="overflow-visible">
-                {(() => {
-                  const groupedByAction = stockRecommendations.reduce((acc: any, category: any) => {
-                    const action = category.action || "Maintain";
-                    if (!acc[action]) acc[action] = [];
-                    acc[action].push(category);
-                    return acc;
-                  }, {});
+              <CardContent>
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  {/* LEFT: INCREASE */}
+                  <div className="rounded-xl border border-orange-200 bg-orange-50/30 shadow-sm overflow-hidden flex flex-col">
+                    <div className="px-4 py-3 border-b border-orange-100 bg-orange-50/60 flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <TrendingUp className="size-4 text-orange-700" />
+                        <div>
+                          <h4 className="text-sm font-semibold text-orange-800 leading-tight">
+                            Increase before peak month
+                          </h4>
+                          <p className="text-[11px] text-orange-700/80 leading-tight">
+                            Products in high demand
+                          </p>
+                        </div>
+                      </div>
+                      <Badge className="bg-orange-100 text-orange-800 text-[10px]">
+                        {stockRecommendations.filter((r: any) => r.action === "Increase").length} products
+                      </Badge>
+                    </div>
 
-                  const actionOrder = ["Increase", "Maintain"];
-
-                  return (
-                    <div className="space-y-6">
-                      {actionOrder
-                        .filter((action) => groupedByAction[action])
-                        .map((action) => {
-                          const isIncrease = action === "Increase";
-                          const borderColor = isIncrease ? "border-orange-500" : "border-green-900";
-                          const bgColor = isIncrease ? "bg-orange-50/30" : "bg-green-50/30";
-                          const headerBg = isIncrease ? "bg-orange-50/50" : "bg-green-50/50";
-                          const headerText = isIncrease ? "text-orange-700" : "text-green-700";
-                          const rowHover = isIncrease ? "hover:bg-orange-50/30" : "hover:bg-green-50/30";
-                          const productText = isIncrease ? "text-orange-800" : "text-gray-800";
-                          const recommendedText = isIncrease ? "text-orange-600" : "text-green-600";
-                          const peakBadge = isIncrease
-                            ? "bg-orange-200 text-orange-800"
-                            : "bg-green-200 text-green-800";
-                          
-                          const actionLabel = isIncrease ? "Increase before peak month" : "Maintain current stock";
-
+                    <div className="p-4" style={{ height: 400 }}>
+                      {(() => {
+                        const list = stockRecommendations.filter((r: any) => r.action === "Increase");
+                        if (list.length === 0) {
                           return (
-                            <div
-                              key={action}
-                              className={`border-2 rounded-lg ${borderColor} ${bgColor} rounded-r-lg p-4 overflow-visible`}
-                            >
-                              <div className="flex items-center gap-3 mb-4 pb-3 border-b border-gray-200">
-                                <h4 className={`text-md font-semibold ${isIncrease ? 'text-orange-700' : 'text-green-700'}`}>
-                                  {actionLabel}
-                                </h4>
-                              </div>
-
-                              <div className="overflow-x-auto overflow-visible">
-                                <table className="w-full text-sm table-fixed overflow-visible">
-                                  <thead>
-                                    <tr className={headerBg}>
-                                      <th className={`text-left px-3 py-2 text-xs font-semibold ${headerText} w-[45%]`}>
-                                        Product
-                                      </th>
-                                      <th className={`text-center px-3 py-2 text-xs font-semibold ${headerText} w-[25%]`}>
-                                        Recommended
-                                      </th>
-                                      <th className={`text-center px-3 py-2 text-xs font-semibold ${headerText} w-[30%]`}>
-                                        Peak Month
-                                      </th>
-                                    </tr>
-                                  </thead>
-                                  <tbody>
-                                    {groupedByAction[action].map((category: any, idx: number) => {
-                                      const categoryKey = category.category;
-                                      const currentStock = productStockStates[categoryKey] !== undefined 
-                                        ? productStockStates[categoryKey] 
-                                        : category.defaultStock || 60;
-                                      
-                                      const monthLabels = category.items.map((item: any) => item.month);
-                                      
-                                      const recommendationsMap = category.items.map((item: any) => ({
-                                        month: item.month,
-                                        recommendedStock: item.recommendedStock,
-                                        peakUnits: item.peakUnits,
-                                        peakSales: item.peakSales,
-                                      }));
-                                      
-                                      const updateStock = (stock: number) => {
-                                        setProductStockStates(prev => ({
-                                          ...prev,
-                                          [categoryKey]: stock
-                                        }));
-                                      };
-                                      
-                                      return (
-                                        <tr
-                                          key={idx}
-                                          className={`border-b border-gray-100 ${rowHover} transition-colors overflow-visible`}
-                                        >
-                                          <td className="px-3 py-3">
-                                            <span className={`font-medium text-sm ${productText}`}>
-                                              {category.category}
-                                            </span>
-                                          </td>
-                                          
-                                          <td className={`text-center px-3 py-3 text-sm font-bold ${recommendedText}`}>
-                                            {currentStock} units
-                                          </td>
-                                          
-                                          <td className="text-center px-3 py-3 overflow-visible relative">
-                                            {monthLabels.length > 0 && monthLabels[0] !== "No data" ? (
-                                              <MonthDropdown 
-                                                months={monthLabels} 
-                                                badgeClass={peakBadge}
-                                                recommendations={recommendationsMap}
-                                                currentStock={currentStock}
-                                                setCurrentStock={updateStock}
-                                                actionType={action}
-                                              />
-                                            ) : (
-                                              <span className="text-xs text-gray-400">No data</span>
-                                            )}
-                                          </td>
-                                        </tr>
-                                      );
-                                    })}
-                                  </tbody>
-                                </table>
-                              </div>
+                            <div className="text-center py-8 text-gray-500 h-full flex items-center justify-center">
+                              <p>No products flagged for Increase.</p>
                             </div>
                           );
-                        })}
+                        }
+                        return (
+                          <div className="season-table-scroll overflow-y-auto rounded-lg border border-orange-100 h-full">
+                            <table className="w-full text-sm">
+                              <thead className="sticky top-0 z-10 bg-white shadow-sm">
+                                <tr>
+                                  <th className="text-left px-3 py-2 text-xs font-semibold text-orange-700">
+                                    Product
+                                  </th>
+                                  <th className="text-right px-3 py-2 text-xs font-semibold text-orange-700">
+                                    Recommended Stock
+                                  </th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {list.map((category: any, idx: number) => {
+                                  const categoryKey = category.category;
+                                  const productRecommended = recommendedStockByProduct[categoryKey] || [];
+                                  const pillBg = "bg-orange-100 text-orange-800 border-orange-200";
+
+                                  return (
+                                    <tr key={idx} className="border-b border-gray-100 hover:bg-orange-50/30 transition-colors">
+                                      <td className="px-3 py-3 align-top">
+                                        <span className="font-medium text-sm text-orange-800">
+                                          {category.category}
+                                        </span>
+                                      </td>
+                                      <td className="px-3 py-3 align-top text-right">
+                                        <RecommendedStockDropdown
+                                          items={productRecommended}
+                                          pillBg={pillBg}
+                                          isIncrease={true}
+                                        />
+                                      </td>
+                                    </tr>
+                                  );
+                                })}
+                              </tbody>
+                            </table>
+                          </div>
+                        );
+                      })()}
                     </div>
-                  );
-                })()}
+                  </div>
+
+                  {/* RIGHT: MAINTAIN */}
+                  <div className="rounded-xl border border-green-200 bg-green-50/30 shadow-sm overflow-hidden flex flex-col">
+                    <div className="px-4 py-3 border-b border-green-100 bg-green-50/60 flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <TrendingDown className="size-4 text-green-700" />
+                        <div>
+                          <h4 className="text-sm font-semibold text-green-800 leading-tight">
+                            Maintain current stock
+                          </h4>
+                          <p className="text-[11px] text-green-700/80 leading-tight">
+                            Products with steady demand
+                          </p>
+                        </div>
+                      </div>
+                      <Badge className="bg-green-100 text-green-800 text-[10px]">
+                        {stockRecommendations.filter((r: any) => r.action === "Maintain").length} products
+                      </Badge>
+                    </div>
+
+                    <div className="p-4" style={{ height: 400 }}>
+                      {(() => {
+                        const list = stockRecommendations.filter((r: any) => r.action === "Maintain");
+                        if (list.length === 0) {
+                          return (
+                            <div className="text-center py-8 text-gray-500 h-full flex items-center justify-center">
+                              <p>No products flagged for Maintain.</p>
+                            </div>
+                          );
+                        }
+                        return (
+                          <div className="season-table-scroll overflow-y-auto rounded-lg border border-green-100 h-full">
+                            <table className="w-full text-sm">
+                              <thead className="sticky top-0 z-10 bg-white shadow-sm">
+                                <tr>
+                                  <th className="text-left px-3 py-2 text-xs font-semibold text-green-700">
+                                    Product
+                                  </th>
+                                  <th className="text-right px-3 py-2 text-xs font-semibold text-green-700">
+                                    Recommended Stock
+                                  </th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {list.map((category: any, idx: number) => {
+                                  const categoryKey = category.category;
+                                  const productRecommended = recommendedStockByProduct[categoryKey] || [];
+                                  const pillBg = "bg-green-100 text-green-800 border-green-200";
+
+                                  return (
+                                    <tr key={idx} className="border-b border-gray-100 hover:bg-green-50/30 transition-colors">
+                                      <td className="px-3 py-3 align-top">
+                                        <span className="font-medium text-sm text-gray-800">
+                                          {category.category}
+                                        </span>
+                                      </td>
+                                      <td className="px-3 py-3 align-top text-right">
+                                        <RecommendedStockDropdown
+                                          items={productRecommended}
+                                          pillBg={pillBg}
+                                          isIncrease={false}
+                                        />
+                                      </td>
+                                    </tr>
+                                  );
+                                })}
+                              </tbody>
+                            </table>
+                          </div>
+                        );
+                      })()}
+                    </div>
+                  </div>
+                </div>
               </CardContent>
             </Card>
           )}
-          
+          {/* ==================== END STOCK RECOMMENDATIONS ==================== */}
+
           {(bestSellingProducts.length > 0 || slowMovingProducts.length > 0) && (
             <section>
               <div className="bg-gradient-to-r from-green-900 to-emerald-600 rounded-t-2xl px-6 py-4">
@@ -2877,7 +3166,7 @@ Return ONLY valid JSON with this structure:
                   </div>
                 </div>
               </div>
-              
+
               <div className="bg-white rounded-b-2xl shadow-lg border border-t-0 border-gray-200 p-4">
                 <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
                   {bestSellingProducts.length > 0 && (
@@ -2916,7 +3205,7 @@ Return ONLY valid JSON with this structure:
                   )}
 
                   {slowMovingProducts.length > 0 && (
-                    <Card className=" border-1 border-orange-300 shadow-lg hover:shadow-xl transition-all duration-300">
+                    <Card className="border-1 border-orange-300 shadow-lg hover:shadow-xl transition-all duration-300">
                       <CardHeader className="bg-gradient-to-r from-orange-700 to-amber-600 rounded-t-lg border-b border-orange-100 !p-2">
                         <div className="flex items-center gap-2">
                           <div className="w-5 h-5 ml-3 mt-1 rounded-lg bg-orange-500 flex items-center justify-center flex-shrink-0">
@@ -3080,11 +3369,7 @@ Return ONLY valid JSON with this structure:
                               {drySeason ? "November – May" : "June – October"}
                             </p>
                           </div>
-                          <Badge
-                            className={`ml-auto ${
-                              drySeason ? "bg-white/20 text-white" : "bg-white/20 text-white"
-                            } border-0`}
-                          >
+                          <Badge className="ml-auto bg-white/20 text-white border-0">
                             {(strategy.strategies || []).length} strategies
                           </Badge>
                         </div>
@@ -3126,4 +3411,4 @@ Return ONLY valid JSON with this structure:
       )}
     </div>
   );
-}
+} 
