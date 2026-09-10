@@ -797,25 +797,30 @@ export default function SeasonalForecasting() {
   const topProductsBySeason = useMemo(() => {
     if (!computedProductDetails.length) return null;
 
-    const rankItemsWithTies = (items: any[], getUnits: (item: any) => number) => {
-      const sorted = [...items].sort((a, b) => getUnits(b) - getUnits(a));
-      
-      let rank = 1;
-      let i = 0;
-      while (i < sorted.length) {
-        let j = i;
-        while (j < sorted.length && getUnits(sorted[j]) === getUnits(sorted[i])) {
-          j++;
-        }
-        for (let k = i; k < j; k++) {
-          (sorted[k] as any).rank = rank;
-        }
-        i = j;
-        rank += 1;
-      }
-      return sorted;
-    };
+const rankItemsWithTies = (items: any[], getUnits: (item: any) => number) => {
+  const sorted = [...items].sort((a, b) => getUnits(b) - getUnits(a));
 
+  // Dense rank: index of the unique value in a descending list
+  const uniqueUnits = [...new Set(sorted.map(getUnits))].sort((a, b) => b - a);
+
+  // Track which rank value we've already assigned a "displayRank" to
+  const seenRank = new Set<number>();
+
+  sorted.forEach((item) => {
+    const rankNumber = uniqueUnits.indexOf(getUnits(item)) + 1;
+    (item as any).rank = rankNumber;
+
+    // Only the first occurrence of each rank gets a visible number
+    if (!seenRank.has(rankNumber)) {
+      (item as any).displayRank = `#${rankNumber}`;
+      seenRank.add(rankNumber);
+    } else {
+      (item as any).displayRank = null;
+    }
+  });
+
+  return sorted;
+};
     const buildSeasonData = (products: any[]) => {
       const totalUnits = products.reduce((sum, p) => sum + p.units, 0);
       if (totalUnits === 0) {
@@ -2912,8 +2917,10 @@ Return ONLY valid JSON with this structure:
                                 {topProductsBySeason.rainy.list.map((product: any) => (
                                   <TableRow key={product.productKey} className="hover:bg-gray-50 transition-colors">
                                     <TableCell>
-                                      <Badge className="bg-blue-700">#{product.rank}</Badge>
-                                    </TableCell>
+  {product.displayRank && (
+    <Badge className="bg-[#174d32]">{product.displayRank}</Badge>
+  )}
+</TableCell>
                                     <TableCell>
                                       <p className="font-semibold text-sm">{product.brand}</p>
                                       <p className="text-xs text-gray-500">{product.name}</p>
@@ -2993,8 +3000,10 @@ Return ONLY valid JSON with this structure:
                                 {topProductsBySeason.dry.list.map((product: any) => (
                                   <TableRow key={product.productKey} className="hover:bg-gray-50 transition-colors">
                                     <TableCell>
-                                      <Badge className="bg-[#174d32]">#{product.rank}</Badge>
-                                    </TableCell>
+  {product.displayRank && (
+    <Badge className="bg-[#174d32]">{product.displayRank}</Badge>
+  )}
+</TableCell>
                                     <TableCell>
                                       <p className="font-semibold text-sm">{product.brand}</p>
                                       <p className="text-xs text-gray-500">{product.name}</p>
