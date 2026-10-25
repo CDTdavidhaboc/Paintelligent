@@ -390,6 +390,22 @@ const MonthDropdown = ({
 };
 
 // ============ Recommended Stock Dropdown ============
+const OPEN_DROPDOWN_REGISTRY = {
+  currentId: null as string | null,
+  listeners: new Set<(id: string | null) => void>(),
+  set(id: string | null) {
+    if (this.currentId === id) return;
+    this.currentId = id;
+    this.listeners.forEach((fn) => fn(id));
+  },
+  subscribe(fn: (id: string | null) => void) {
+    this.listeners.add(fn);
+    return () => {
+      this.listeners.delete(fn);
+    };
+  },
+};
+
 const RecommendedStockDropdown = ({
   items,
   pillBg,
@@ -400,19 +416,133 @@ const RecommendedStockDropdown = ({
   isIncrease: boolean;
 }) => {
   const [isOpen, setIsOpen] = useState(false);
-  const [dropdownPosition, setDropdownPosition] = useState<{ top: number; left: number } | null>(null);
-  const buttonRef = useRef<HTMLButtonElement>(null);
+  const [dropdownPosition, setDropdownPosition] = useState<{
+    top: number;
+    left: number;
+    maxHeight: number;
+  } | null>(null);
 
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const instanceIdRef = useRef<string>(
+    `stock-dd-${Math.random().toString(36).slice(2)}`
+  );
+  const openedAtRef = useRef<number>(0);
+  const lastButtonRectRef = useRef<DOMRect | null>(null);
+
+  // ── 1) Click outside → close ──────────────────────────────
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       const target = e.target as HTMLElement;
-      if (isOpen && !target.closest('.recommended-stock-container')) {
+      if (isOpen && !target.closest(".recommended-stock-container")) {
+        setIsOpen(false);
+        setDropdownPosition(null);
+        if (OPEN_DROPDOWN_REGISTRY.currentId === instanceIdRef.current) {
+          OPEN_DROPDOWN_REGISTRY.set(null);
+        }
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [isOpen]);
+
+  // ── 2) Only one dropdown open at a time ───────────────────
+  useEffect(() => {
+    const unsubscribe = OPEN_DROPDOWN_REGISTRY.subscribe((activeId) => {
+      if (isOpen && activeId !== instanceIdRef.current) {
         setIsOpen(false);
         setDropdownPosition(null);
       }
+    });
+    return () => {
+      unsubscribe();
+      if (OPEN_DROPDOWN_REGISTRY.currentId === instanceIdRef.current) {
+        OPEN_DROPDOWN_REGISTRY.set(null);
+      }
     };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [isOpen]);
+
+  // ── 3) Position on open + on resize; close on REAL scroll ─
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const computePosition = () => {
+      if (!buttonRef.current) return null;
+      const rect = buttonRef.current.getBoundingClientRect();
+      lastButtonRectRef.current = rect;
+
+      const viewportH = window.innerHeight;
+      const viewportW = window.innerWidth;
+      const GAP = 6;
+      const MAX_DROPDOWN_H = 320;
+      const MIN_DROPDOWN_H = 140;
+      const DROPDOWN_W = 260;
+
+      const spaceBelow = viewportH - rect.bottom - GAP;
+      const spaceAbove = rect.top - GAP;
+      const useTop = spaceBelow < MIN_DROPDOWN_H && spaceAbove > spaceBelow;
+
+      const maxHeight = Math.min(
+        MAX_DROPDOWN_H,
+        Math.max(MIN_DROPDOWN_H, (useTop ? spaceAbove : spaceBelow) - 8)
+      );
+
+      const left = Math.min(
+        Math.max(8, rect.left),
+        Math.max(8, viewportW - DROPDOWN_W - 8)
+      );
+
+      const top = useTop
+        ? Math.max(8, rect.top - Math.min(maxHeight, spaceAbove) - GAP)
+        : rect.bottom + GAP;
+
+      return { top, left, maxHeight };
+    };
+
+    // Immediately compute position (no waiting)
+    openedAtRef.current = Date.now();
+    const initial = computePosition();
+    if (initial) setDropdownPosition(initial);
+
+    const handleResize = () => {
+      const next = computePosition();
+      if (next) setDropdownPosition(next);
+    };
+
+    const handleScrollCapture = (e: Event) => {
+      // Guard 1: Ignore the first 150ms after opening (opening-click phantom scroll)
+      if (Date.now() - openedAtRef.current < 150) return;
+
+      const target = e.target as HTMLElement | null;
+
+      // Guard 2: Don't close on scrolls inside the dropdown itself
+      if (target && target.closest(".recommended-stock-dropdown-panel")) {
+        return;
+      }
+
+      // Guard 3: Only close if the button actually moved
+      if (buttonRef.current && lastButtonRectRef.current) {
+        const now = buttonRef.current.getBoundingClientRect();
+        const prev = lastButtonRectRef.current;
+        const moved =
+          Math.abs(now.top - prev.top) > 2 ||
+          Math.abs(now.left - prev.left) > 2;
+        if (!moved) return;
+      }
+
+      setIsOpen(false);
+      setDropdownPosition(null);
+      if (OPEN_DROPDOWN_REGISTRY.currentId === instanceIdRef.current) {
+        OPEN_DROPDOWN_REGISTRY.set(null);
+      }
+    };
+
+    window.addEventListener("resize", handleResize);
+    window.addEventListener("scroll", handleScrollCapture, true);
+
+    return () => {
+      window.removeEventListener("resize", handleResize);
+      window.removeEventListener("scroll", handleScrollCapture, true);
+    };
   }, [isOpen]);
 
   const handleButtonClick = (e: React.MouseEvent) => {
@@ -420,12 +550,11 @@ const RecommendedStockDropdown = ({
     if (isOpen) {
       setIsOpen(false);
       setDropdownPosition(null);
+      if (OPEN_DROPDOWN_REGISTRY.currentId === instanceIdRef.current) {
+        OPEN_DROPDOWN_REGISTRY.set(null);
+      }
     } else {
-      const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-      setDropdownPosition({
-        top: rect.bottom + 4,
-        left: rect.left,
-      });
+      OPEN_DROPDOWN_REGISTRY.set(instanceIdRef.current);
       setIsOpen(true);
     }
   };
@@ -434,18 +563,21 @@ const RecommendedStockDropdown = ({
     return <span className="text-xs text-gray-400">No data</span>;
   }
 
-  const accentText = isIncrease ? 'text-orange-700' : 'text-green-700';
-  const accentBg = isIncrease ? 'bg-orange-50' : 'bg-green-50';
-  const accentBorder = isIncrease ? 'border-orange-200' : 'border-green-200';
-  const hoverRow = isIncrease ? 'hover:bg-orange-50/60' : 'hover:bg-green-50/60';
-  const headerBg = isIncrease ? 'bg-orange-100' : 'bg-green-100';
+  const accentText = isIncrease ? "text-orange-700" : "text-green-700";
+  const accentBg = isIncrease ? "bg-orange-50" : "bg-green-50";
+  const accentBorder = isIncrease ? "border-orange-200" : "border-green-200";
+  const hoverRow = isIncrease ? "hover:bg-orange-50/60" : "hover:bg-green-50/60";
+  const headerBg = isIncrease ? "bg-orange-100" : "bg-green-100";
 
   const avgRecommended = Math.round(
     items.reduce((s, i) => s + i.recommended, 0) / items.length
   );
 
   return (
-    <div className="recommended-stock-container relative inline-block" style={{ overflow: 'visible' }}>
+    <div
+      className="recommended-stock-container relative inline-block"
+      style={{ overflow: "visible" }}
+    >
       <button
         ref={buttonRef}
         onClick={handleButtonClick}
@@ -455,59 +587,71 @@ const RecommendedStockDropdown = ({
         <span className="font-bold">{avgRecommended}</span>
         <span className="opacity-80">avg units</span>
         <svg
-          className={`w-3 h-3 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`}
+          className={`w-3 h-3 transition-transform duration-200 ${isOpen ? "rotate-180" : ""}`}
           fill="none"
           stroke="currentColor"
           viewBox="0 0 24 24"
         >
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth="2"
+            d="M19 9l-7 7-7-7"
+          />
         </svg>
       </button>
 
-      {isOpen && dropdownPosition && createPortal(
-        <div
-          className="fixed bg-white rounded-lg shadow-2xl border min-w-[240px] max-h-72 overflow-hidden"
-          style={{
-            top: dropdownPosition.top,
-            left: dropdownPosition.left,
-            zIndex: 999999,
-            borderColor: isIncrease ? '#fbd38d' : '#86efac',
-          }}
-        >
-          <div className={`px-3 py-2 text-xs font-semibold ${accentText} border-b ${accentBorder} ${headerBg} flex items-center justify-between`}>
-            <span>Recommended Stock</span>
-            <span className="text-[10px] opacity-70">per month</span>
-          </div>
+      {isOpen &&
+        dropdownPosition &&
+        createPortal(
+          <div
+            className="recommended-stock-dropdown-panel fixed bg-white rounded-lg shadow-2xl border overflow-hidden flex flex-col"
+            style={{
+              top: dropdownPosition.top,
+              left: dropdownPosition.left,
+              width: 260,
+              maxHeight: dropdownPosition.maxHeight,
+              zIndex: 999999,
+              borderColor: isIncrease ? "#fbd38d" : "#86efac",
+            }}
+          >
+            <div
+              className={`px-3 py-2 text-xs font-semibold ${accentText} border-b ${accentBorder} ${headerBg} flex items-center justify-between flex-shrink-0`}
+            >
+              <span>Recommended Stock</span>
+              <span className="text-[10px] opacity-70">per month</span>
+            </div>
 
-          <div className="max-h-60 overflow-y-auto season-table-scroll">
-            {items.map((m, i) => (
-              <div
-                key={i}
-                className={`flex items-center justify-between gap-3 px-3 py-2 text-xs border-b border-gray-50 last:border-0 ${hoverRow}`}
-              >
-                <div className="flex items-center gap-2">
-                  <span
-                    className={`inline-flex items-center justify-center w-10 text-[10px] font-semibold rounded ${accentBg} ${accentText} px-1.5 py-0.5`}
-                  >
-                    {m.month}
+            <div className="overflow-y-auto season-table-scroll flex-1 min-h-0">
+              {items.map((m, i) => (
+                <div
+                  key={i}
+                  className={`flex items-center justify-between gap-3 px-3 py-2 text-xs border-b border-gray-50 last:border-0 ${hoverRow}`}
+                >
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span
+                      className={`inline-flex items-center justify-center text-[10px] font-semibold rounded ${accentBg} ${accentText} px-1.5 py-0.5 flex-shrink-0`}
+                    >
+                      {m.month}
+                    </span>
+                    <span className="text-gray-700 flex-shrink-0">{m.year}</span>
+                    <span className="text-gray-400 text-[10px] truncate">
+                      ({m.units}u sold)
+                    </span>
+                  </div>
+                  <span className={`font-bold ${accentText} flex-shrink-0`}>
+                    {m.recommended} units
                   </span>
-                  <span className="text-gray-700">{m.year}</span>
-                  <span className="text-gray-400 text-[10px]">({m.units}u sold)</span>
                 </div>
-                <span className={`font-bold ${accentText}`}>
-                  {m.recommended} units
-                </span>
-              </div>
-            ))}
-          </div>
-        </div>,
-        document.body
-      )}
+              ))}
+            </div>
+          </div>,
+          document.body
+        )}
     </div>
   );
 };
 // ============ END COMPONENT ============
-
 // ============ Per-Product Donut Chart Component ============
 const SeasonDonutChart = ({
   products,
@@ -526,7 +670,7 @@ const SeasonDonutChart = ({
 }) => {
   const isDry = season === "dry";
   const colors = isDry ? DRY_DONUT_COLORS : RAINY_DONUT_COLORS;
-  const otherColor = isDry ? "#d1d5db" : "#cbd5e1"; // neutral grey for "Other Products"
+  const otherColor = isDry ? "#d1d5db" : "#cbd5e1";
 
   const chartData = useMemo(() => {
     const base = products.map((p) => ({
@@ -635,7 +779,6 @@ const SeasonDonutChart = ({
         </ResponsiveContainer>
       </div>
 
-      {/* Custom legend strip */}
       <div className="mt-3 flex flex-wrap items-center justify-center gap-3 text-[11px]">
         <div className="flex items-center gap-1.5">
           <span
@@ -793,24 +936,18 @@ export default function SeasonalForecasting() {
     return products.sort((a, b) => b.totalSales - a.totalSales);
   }, [originalData]);
 
-  // Top products by season — top 50% by UNITS
   const topProductsBySeason = useMemo(() => {
     if (!computedProductDetails.length) return null;
 
 const rankItemsWithTies = (items: any[], getUnits: (item: any) => number) => {
   const sorted = [...items].sort((a, b) => getUnits(b) - getUnits(a));
-
-  // Dense rank: index of the unique value in a descending list
   const uniqueUnits = [...new Set(sorted.map(getUnits))].sort((a, b) => b - a);
-
-  // Track which rank value we've already assigned a "displayRank" to
   const seenRank = new Set<number>();
 
   sorted.forEach((item) => {
     const rankNumber = uniqueUnits.indexOf(getUnits(item)) + 1;
     (item as any).rank = rankNumber;
 
-    // Only the first occurrence of each rank gets a visible number
     if (!seenRank.has(rankNumber)) {
       (item as any).displayRank = `#${rankNumber}`;
       seenRank.add(rankNumber);
@@ -902,11 +1039,91 @@ const rankItemsWithTies = (items: any[], getUnits: (item: any) => number) => {
     };
   }, [computedProductDetails]);
 
-  // ============ STOCK RECOMMENDATIONS — REAL, DATA-DRIVEN ============
+  // ============ PER-MONTH UNITS SOLD PER PRODUCT ============
+  const perMonthUnitsByProduct = useMemo(() => {
+    const bucket: Record<string, Record<string, { month: string; monthIndex: number; year: number; units: number }>> = {};
+
+    originalData.forEach((record) => {
+      const brand = (record.brand || "").trim();
+      const product = (record.product || "").trim();
+      const spaceKey = `${brand} ${product}`.trim();
+      const hyphenKey = `${brand}-${product}`;
+
+      const monthShort = record.month.substring(0, 3);
+      const monthIdx = MONTH_NAMES.indexOf(monthShort);
+      if (monthIdx === -1) return;
+
+      const periodKey = `${record.year}-${String(monthIdx + 1).padStart(2, "0")}`;
+
+      [spaceKey, hyphenKey].forEach((key) => {
+        if (!key) return;
+        if (!bucket[key]) bucket[key] = {};
+        if (!bucket[key][periodKey]) {
+          bucket[key][periodKey] = {
+            month: monthShort,
+            monthIndex: monthIdx,
+            year: record.year,
+            units: 0,
+          };
+        }
+        bucket[key][periodKey].units += record.unitsSold || 0;
+      });
+    });
+
+    const result: Record<string, { month: string; monthIndex: number; year: number; units: number }[]> = {};
+    Object.entries(bucket).forEach(([key, monthsMap]) => {
+      result[key] = Object.values(monthsMap).sort((a, b) => {
+        if (a.year !== b.year) return a.year - b.year;
+        return a.monthIndex - b.monthIndex;
+      });
+    });
+    return result;
+  }, [originalData]);
+
+  // ============ DATA-ADAPTIVE THRESHOLDS ============
+  const stockThresholds = useMemo(() => {
+    const allAvgs: number[] = [];
+    const allPeaks: number[] = [];
+
+    Object.values(perMonthUnitsByProduct).forEach((months) => {
+      if (months.length === 0) return;
+      const units = months.map((m) => m.units);
+      const sum = units.reduce((s, u) => s + u, 0);
+      allAvgs.push(sum / units.length);
+      allPeaks.push(Math.max(...units));
+    });
+
+    const pickPercentile = (arr: number[], pct: number): number => {
+      if (arr.length === 0) return 0;
+      const sorted = [...arr].sort((a, b) => a - b);
+      const idx = Math.min(
+        sorted.length - 1,
+        Math.max(0, Math.floor(sorted.length * (1 - pct)))
+      );
+      return sorted[idx];
+    };
+
+    const TOP_PCT = 0.3;
+
+    const rawAvg = pickPercentile(allAvgs, TOP_PCT);
+    const rawPeak = pickPercentile(allPeaks, TOP_PCT);
+
+    const highAvg = Math.max(5, Math.round(rawAvg));
+    const highPeak = Math.max(10, Math.round(rawPeak));
+
+    return {
+      HIGH_AVG_UNITS_THRESHOLD: highAvg,
+      HIGH_PEAK_UNITS_THRESHOLD: highPeak,
+    };
+  }, [perMonthUnitsByProduct]);
+
+  // ============ STOCK RECOMMENDATIONS ============
   const stockRecommendations = useMemo(() => {
     if (!computedProductDetails.length || !originalData.length) return [];
 
     const result: any[] = [];
+
+    const { HIGH_AVG_UNITS_THRESHOLD, HIGH_PEAK_UNITS_THRESHOLD } = stockThresholds;
 
     const getProductMonthlyHistory = (productName: string, brand: string) => {
       const records = originalData.filter(
@@ -946,37 +1163,31 @@ const rankItemsWithTies = (items: any[], getUnits: (item: any) => number) => {
     const classify = (history: { units: number }[]) => {
       const unitsArr = history.map((h) => h.units).filter((u) => u >= 0);
       if (unitsArr.length === 0) {
-        return { action: "Maintain", avg: 0, peak: 0, trendRatio: 1 };
+        return { action: "Maintain" as const, avg: 0, peak: 0 };
       }
 
       const total = unitsArr.reduce((s, u) => s + u, 0);
       const avg = total / unitsArr.length;
       const peak = Math.max(...unitsArr);
-      const peakRatio = avg > 0 ? peak / avg : 1;
 
-      const last3 = unitsArr.slice(-3);
-      const earlier = unitsArr.slice(0, Math.max(1, unitsArr.length - 3));
-      const last3Avg = last3.reduce((s, u) => s + u, 0) / Math.max(1, last3.length);
-      const earlierAvg = earlier.reduce((s, u) => s + u, 0) / Math.max(1, earlier.length);
-      const trendRatio = earlierAvg > 0 ? last3Avg / earlierAvg : 1;
+      const action: "Increase" | "Maintain" =
+        avg >= HIGH_AVG_UNITS_THRESHOLD || peak >= HIGH_PEAK_UNITS_THRESHOLD
+          ? "Increase"
+          : "Maintain";
 
-      let action: "Increase" | "Maintain" | "Reduce" = "Maintain";
-      if (trendRatio >= 1.15 || peakRatio >= 1.3) {
-        action = "Increase";
-      } else if (trendRatio <= 0.7 && peakRatio < 1.2) {
-        action = "Reduce";
-      }
-      return { action, avg, peak, trendRatio };
+      return { action, avg, peak };
     };
 
     const recommend = (units: number, action: string) => {
       let target: number;
-      if (action === "Increase") target = units * 1.25;
-      else if (action === "Reduce") target = units * 0.75;
-      else target = units * 1.1;
-
-      const floor = action === "Increase" ? 30 : action === "Reduce" ? 10 : 20;
-      return Math.max(Math.round(Math.max(target, floor) / 5) * 5, floor);
+      if (action === "Increase") {
+        target = units * 1.5;
+      } else {
+        const buffer = Math.max(5, Math.round(units * 0.15));
+        target = units + buffer;
+      }
+      const floor = action === "Increase" ? 15 : 5;
+      return Math.round(Math.max(target, floor) / 5) * 5;
     };
 
     computedProductDetails.forEach((p) => {
@@ -993,61 +1204,19 @@ const rankItemsWithTies = (items: any[], getUnits: (item: any) => number) => {
       }));
 
       result.push({
-        category: `${p.brand} ${p.product}`,
+        category: `${(p.brand || "").trim()} ${(p.product || "").trim()}`.trim(),
         action,
         avgUnits: Math.round(avg),
         peakUnits: Math.round(peak),
         items,
-        defaultStock: items[items.length - 1]?.recommendedStock || 30,
+        defaultStock: items[items.length - 1]?.recommendedStock || 15,
         defaultMonth: items[items.length - 1]?.month || "No data",
       });
     });
 
     return result;
-  }, [computedProductDetails, originalData]);
+  }, [computedProductDetails, originalData, stockThresholds]);
 
-  // ============ PER-MONTH UNITS SOLD PER PRODUCT ============
-  const perMonthUnitsByProduct = useMemo(() => {
-    const bucket: Record<string, Record<string, { month: string; monthIndex: number; year: number; units: number }>> = {};
-
-    originalData.forEach((record) => {
-      const brand = record.brand || "";
-      const product = record.product || "";
-      const spaceKey = `${brand} ${product}`.trim();
-      const hyphenKey = `${brand}-${product}`;
-
-      const monthShort = record.month.substring(0, 3);
-      const monthIdx = MONTH_NAMES.indexOf(monthShort);
-      if (monthIdx === -1) return;
-
-      const periodKey = `${record.year}-${String(monthIdx + 1).padStart(2, "0")}`;
-
-      [spaceKey, hyphenKey].forEach((key) => {
-        if (!key) return;
-        if (!bucket[key]) bucket[key] = {};
-        if (!bucket[key][periodKey]) {
-          bucket[key][periodKey] = {
-            month: monthShort,
-            monthIndex: monthIdx,
-            year: record.year,
-            units: 0,
-          };
-        }
-        bucket[key][periodKey].units += record.unitsSold || 0;
-      });
-    });
-
-    const result: Record<string, { month: string; monthIndex: number; year: number; units: number }[]> = {};
-    Object.entries(bucket).forEach(([key, monthsMap]) => {
-      result[key] = Object.values(monthsMap).sort((a, b) => {
-        if (a.year !== b.year) return a.year - b.year;
-        return a.monthIndex - b.monthIndex;
-      });
-    });
-    return result;
-  }, [originalData]);
-
-  // ============ RECOMMENDED STOCK PER MONTH PER PRODUCT ============
   const recommendedStockByProduct = useMemo(() => {
     const result: Record<string, { month: string; year: number; units: number; recommended: number }[]> = {};
 
@@ -1056,13 +1225,33 @@ const rankItemsWithTies = (items: any[], getUnits: (item: any) => number) => {
       actionByProduct[r.category] = r.action === "Increase" ? "Increase" : "Maintain";
     });
 
+    const { HIGH_AVG_UNITS_THRESHOLD, HIGH_PEAK_UNITS_THRESHOLD } = stockThresholds;
+
     Object.entries(perMonthUnitsByProduct).forEach(([key, months]) => {
-      const action = actionByProduct[key] || "Maintain";
+      let action = actionByProduct[key];
+
+      if (!action) {
+        const avgUnits =
+          months.length > 0
+            ? months.reduce((s, m) => s + m.units, 0) / months.length
+            : 0;
+        const peakUnits = months.length > 0 ? Math.max(...months.map((m) => m.units)) : 0;
+        action =
+          avgUnits >= HIGH_AVG_UNITS_THRESHOLD || peakUnits >= HIGH_PEAK_UNITS_THRESHOLD
+            ? "Increase"
+            : "Maintain";
+      }
+
       result[key] = months.map((m) => {
-        const recommended =
-          action === "Increase"
-            ? Math.round(Math.max(m.units * 2.5, 30) / 5) * 5
-            : Math.round(Math.max(m.units * 1.2, 20) / 5) * 5;
+        let recommended: number;
+
+        if (action === "Increase") {
+          recommended = Math.round(Math.max(m.units * 1.5, 15) / 5) * 5;
+        } else {
+          const buffer = Math.max(5, Math.round(m.units * 0.15));
+          recommended = Math.round(Math.max(m.units + buffer, 5) / 5) * 5;
+        }
+
         return {
           month: m.month,
           year: m.year,
@@ -1073,7 +1262,7 @@ const rankItemsWithTies = (items: any[], getUnits: (item: any) => number) => {
     });
 
     return result;
-  }, [perMonthUnitsByProduct, stockRecommendations]);
+  }, [perMonthUnitsByProduct, stockRecommendations, stockThresholds]);
 
   useEffect(() => {
     if (stockRecommendations.length > 0) {
@@ -1081,7 +1270,7 @@ const rankItemsWithTies = (items: any[], getUnits: (item: any) => number) => {
       const initialMonths: Record<string, string> = {};
       stockRecommendations.forEach((category: any) => {
         const key = category.category;
-        initialStates[key] = category.defaultStock || 60;
+        initialStates[key] = category.defaultStock || 15;
         initialMonths[key] = category.defaultMonth || "No data";
       });
       setProductStockStates(initialStates);
@@ -1102,8 +1291,6 @@ const rankItemsWithTies = (items: any[], getUnits: (item: any) => number) => {
     }
   };
 
-  // ============ BEST-SELLING PRODUCTS ============
-  // A product is best-selling if it sold 100+ UNITS in the last 12 months.
   const bestSellingProducts = useMemo(() => {
     if (!computedProductDetails.length || !originalData.length) return [];
 
@@ -1169,8 +1356,6 @@ const rankItemsWithTies = (items: any[], getUnits: (item: any) => number) => {
       });
   }, [computedProductDetails, originalData]);
 
-  // ============ SLOW-MOVING PRODUCTS ============
-  // A product is slow-moving if it sold < 10 UNITS in the last 12 months.
   const slowMovingProducts = useMemo(() => {
     if (!computedProductDetails.length || !originalData.length) return [];
 
@@ -2878,7 +3063,6 @@ Return ONLY valid JSON with this structure:
 
               <CardContent>
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                  {/* RAINY SEASON (LEFT) */}
                   <div className="rounded-xl border border-blue-200 bg-blue-50/30 shadow-sm overflow-hidden flex flex-col">
                     <div className="px-4 py-3 border-b border-blue-100 bg-blue-50/60 flex items-center justify-between">
                       <div className="flex items-center gap-2">
@@ -2961,7 +3145,6 @@ Return ONLY valid JSON with this structure:
                     </div>
                   </div>
 
-                  {/* DRY SEASON (RIGHT) */}
                   <div className="rounded-xl border border-green-200 bg-green-50/30 shadow-sm overflow-hidden flex flex-col">
                     <div className="px-4 py-3 border-b border-green-100 bg-green-50/60 flex items-center justify-between">
                       <div className="flex items-center gap-2">
@@ -3065,7 +3248,6 @@ Return ONLY valid JSON with this structure:
 
               <CardContent>
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                  {/* LEFT: INCREASE */}
                   <div className="rounded-xl border border-orange-200 bg-orange-50/30 shadow-sm overflow-hidden flex flex-col">
                     <div className="px-4 py-3 border-b border-orange-100 bg-orange-50/60 flex items-center justify-between">
                       <div className="flex items-center gap-2">
@@ -3075,7 +3257,7 @@ Return ONLY valid JSON with this structure:
                             Increase before peak month
                           </h4>
                           <p className="text-[11px] text-orange-700/80 leading-tight">
-                            Products in high demand
+                            High-volume products
                           </p>
                         </div>
                       </div>
@@ -3138,7 +3320,6 @@ Return ONLY valid JSON with this structure:
                     </div>
                   </div>
 
-                  {/* RIGHT: MAINTAIN */}
                   <div className="rounded-xl border border-green-200 bg-green-50/30 shadow-sm overflow-hidden flex flex-col">
                     <div className="px-4 py-3 border-b border-green-100 bg-green-50/60 flex items-center justify-between">
                       <div className="flex items-center gap-2">
