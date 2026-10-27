@@ -1038,6 +1038,33 @@ export const deleteUserPermanently = async (email: string) => {
       console.log('✅ user_data deleted');
     }
 
+    // ✅ NEW: Delete paint analysis history
+    console.log('🎨 Deleting paint analysis history...');
+    const { error: historyError } = await supabaseAdmin
+      .from('paint_analysis_history')
+      .delete()
+      .eq('email', normalizedEmail);
+    
+    if (historyError && historyError.code !== 'PGRST116') {
+      console.error('❌ Error deleting paint analysis history:', historyError);
+    } else {
+      console.log('✅ paint_analysis_history deleted');
+    }
+
+    // ✅ NEW: Delete pending registrations (cleanup)
+    console.log('📝 Deleting pending registrations...');
+    const { error: pendingError } = await supabaseAdmin
+      .from('pending_registrations')
+      .delete()
+      .eq('email', normalizedEmail);
+    
+    if (pendingError && pendingError.code !== 'PGRST116') {
+      console.error('❌ Error deleting pending registrations:', pendingError);
+    } else {
+      console.log('✅ pending_registrations deleted');
+    }
+
+    // ✅ Delete password reset tokens
     await supabase
       .from('password_reset_tokens')
       .delete()
@@ -1046,7 +1073,7 @@ export const deleteUserPermanently = async (email: string) => {
     console.log('✅ User PERMANENTLY deleted from all systems');
     return { 
       success: true, 
-      message: 'User permanently deleted from Auth, user_data, and all related records' 
+      message: 'User permanently deleted from Auth, user_data, paint_analysis_history, pending_registrations, and password_reset_tokens' 
     };
   } catch (error: any) {
     console.error('❌ Error permanently deleting user:', error);
