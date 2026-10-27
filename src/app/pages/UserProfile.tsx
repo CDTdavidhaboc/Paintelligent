@@ -9,7 +9,8 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { createPortal } from "react-dom";
-import { getUserData, saveUserProfile, saveProfilePicture } from "../lib/supabase";
+// ✅ FIXED: Imported deleteUserPermanently
+import { getUserData, saveUserProfile, saveProfilePicture, deleteUserPermanently } from "../lib/supabase";
 
 const DEFAULT_USER_DATA = {
   name: "New User",
@@ -642,37 +643,51 @@ export default function UserProfile() {
     }
   };
 
-  // ✅ Delete account
+  // ✅ FIXED: Delete account now calls the backend to remove from Auth and user_data
   const confirmDeleteAccount = async () => {
     setIsDeleting(true);
     console.log("🗑️ Deleting account for:", userEmail);
-    
+
+    if (!userEmail) {
+      setIsDeleting(false);
+      showNotificationMessage("No user email found ❌");
+      return;
+    }
+
     try {
-      if (userEmail) {
-        const keysToRemove = [
-          `user_${userEmail}_profileData`,
-          `user_${userEmail}_profilePicture`,
-          `user_${userEmail}_userName`,
-          'userProfileData',
-          'userProfilePicture',
-          'userName'
-        ];
-        
-        keysToRemove.forEach(key => {
-          if (localStorage.getItem(key)) {
-            localStorage.removeItem(key);
-            console.log(`🗑️ Removed localStorage key: ${key}`);
-          }
-        });
+      // Call the Supabase function to permanently delete the user
+      const result = await deleteUserPermanently(userEmail);
+
+      if (!result.success) {
+        console.error("❌ Backend deletion failed:", result.error);
+        showNotificationMessage(result.error || "Error deleting account ❌");
+        setIsDeleting(false);
+        return;
       }
+
+      console.log("✅ Backend deletion successful");
+
+      // Clear local storage
+      const keysToRemove = [
+        `user_${userEmail}_profileData`,
+        `user_${userEmail}_profilePicture`,
+        `user_${userEmail}_userName`,
+        'userProfileData',
+        'userProfilePicture',
+        'userName'
+      ];
       
-      // Optionally: call a supabase delete function here if available
-      // e.g. await deleteUserAccount(userEmail);
+      keysToRemove.forEach(key => {
+        if (localStorage.getItem(key)) {
+          localStorage.removeItem(key);
+          console.log(`🗑️ Removed localStorage key: ${key}`);
+        }
+      });
       
+      // Logout and redirect
       logout();
       setShowDeleteDialog(false);
       showNotificationMessage("Account deleted ✅");
-      console.log("✅ Account deleted");
       
       setTimeout(() => {
         navigate("/login", { replace: true });
