@@ -3,11 +3,12 @@ import { Badge } from "../components/ui/badge";
 import { 
   LogOut, User, Mail, Phone, MapPin, Calendar, Shield, Activity, Building2, Clock, Camera, 
   Edit2, Save, X, UserPlus, Award, CheckCircle, Pencil, UserCircle, Check, Plus, Trash2, Building, Users, Search,
-  Paintbrush, Loader2, AlertTriangle
+  Paintbrush, Loader2, AlertTriangle, MoreVertical, Trash
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { createPortal } from "react-dom";
 import { getUserData, saveUserProfile, saveProfilePicture } from "../lib/supabase";
 
 const DEFAULT_USER_DATA = {
@@ -24,13 +25,18 @@ const DEFAULT_USER_DATA = {
   }),
   employeeId: `EMP-${Date.now().toString().slice(-6)}`,
   permissions: ["Seasonal Forecast", "Paint Analyzer"],
-  contacts: [
-    { id: 1, name: "John Doe", email: "john@example.com", phone: "+1 234 567 890", role: "Manager" },
-    { id: 2, name: "Jane Smith", email: "jane@example.com", phone: "+1 234 567 891", role: "Coordinator" }
-  ]
+  contacts: [] // ✅ Removed default/empty contacts
 };
 
 const ENSURE_PERMISSIONS = ["Seasonal Forecast", "Paint Analyzer"];
+
+const sanitizePhone = (value: string): string => {
+  return value.replace(/\D/g, "").slice(0, 11);
+};
+
+const isPhoneComplete = (value: string): boolean => {
+  return /^\d{11}$/.test(value);
+};
 
 export default function UserProfile() {
   const navigate = useNavigate();
@@ -50,17 +56,69 @@ export default function UserProfile() {
   const [localAddress, setLocalAddress] = useState('');
   const [isVisible, setIsVisible] = useState(false);
   const [showLogoutDialog, setShowLogoutDialog] = useState(false);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [phoneWarning, setPhoneWarning] = useState<string | null>(null);
+  const [contactPhoneWarnings, setContactPhoneWarnings] = useState<Record<number, string>>({});
+  
+  // ✅ 3-dots dropdown state
+  const [showMenu, setShowMenu] = useState(false);
+  const [menuCoords, setMenuCoords] = useState({ top: 0, right: 0 });
+  
   const fileInputRef = useRef<HTMLInputElement>(null);
   const notificationTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const menuButtonRef = useRef<HTMLButtonElement>(null); 
 
   useEffect(() => {
     const timer = setTimeout(() => setIsVisible(true), 80);
     return () => clearTimeout(timer);
   }, []);
 
+  // ✅ Close dropdown on outside click (checks both button and portal menu)
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (
+        menuRef.current && !menuRef.current.contains(target) &&
+        menuButtonRef.current && !menuButtonRef.current.contains(target)
+      ) {
+        setShowMenu(false);
+      }
+    };
+    if (showMenu) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [showMenu]);
+
+  // ✅ Calculate menu position on open
+  const toggleMenu = () => {
+    if (!showMenu && menuButtonRef.current) {
+      const rect = menuButtonRef.current.getBoundingClientRect();
+      setMenuCoords({
+        top: rect.bottom + window.scrollY + 8,
+        right: window.innerWidth - rect.right - window.scrollX
+      });
+    }
+    setShowMenu(prev => !prev);
+  };
+
   const getUserStorageKey = (key: string) => {
     return `user_${userEmail}_${key}`;
   };
+
+  const normalizeContact = (c: any) => ({
+    id: c.id ?? Date.now() + Math.random(),
+    name: c.name || "",
+    email: c.email || "",
+    phone: sanitizePhone(c.phone || ""),
+    role: c.role || "",
+    company: c.company || "",
+    isSupplier: c.isSupplier ?? (c.type === "supplier"),
+  });
 
   useEffect(() => {
     const loadUserData = async () => {
@@ -77,9 +135,16 @@ export default function UserProfile() {
         if (supabaseData) {
           console.log("📥 Loaded user data from Supabase:", supabaseData);
           
+          const legacyContacts = supabaseData.contacts || [];
+          const legacySuppliers = supabaseData.suppliers || [];
+          const unifiedContacts = [
+            ...legacyContacts.map(normalizeContact),
+            ...legacySuppliers.map((s: any) => normalizeContact({ ...s, isSupplier: true })),
+          ];
+          
           const profileData = {
             name: supabaseData.full_name || supabaseData.name || "New User",
-            phone: supabaseData.phone || "",
+            phone: sanitizePhone(supabaseData.phone || ""),
             role: supabaseData.role || "User",
             location: supabaseData.location || "",
             address: supabaseData.address || "",
@@ -91,7 +156,7 @@ export default function UserProfile() {
             }),
             employeeId: supabaseData.employee_id || `EMP-${Date.now().toString().slice(-6)}`,
             permissions: supabaseData.permissions || ["Seasonal Forecast", "Paint Analyzer"],
-            contacts: supabaseData.contacts || DEFAULT_USER_DATA.contacts,
+            contacts: unifiedContacts, // ✅ Removed fallback to DEFAULT_USER_DATA.contacts
           };
           
           setUserData(profileData);
@@ -158,13 +223,19 @@ export default function UserProfile() {
         
         delete parsedData.department;
         
+        parsedData.phone = sanitizePhone(parsedData.phone || "");
+        const legacyContacts = parsedData.contacts || [];
+        const legacySuppliers = parsedData.suppliers || [];
+        const unifiedContacts = [
+          ...legacyContacts.map(normalizeContact),
+          ...legacySuppliers.map((s: any) => normalizeContact({ ...s, isSupplier: true })),
+        ];
+        parsedData.contacts = unifiedContacts; // ✅ Removed fallback
+        delete parsedData.suppliers;
+        
         const existingPermissions = parsedData.permissions || [];
         const combinedPermissions = [...new Set([...existingPermissions, ...ENSURE_PERMISSIONS])];
         parsedData.permissions = combinedPermissions;
-        
-        if (!parsedData.contacts) {
-          parsedData.contacts = DEFAULT_USER_DATA.contacts;
-        }
         
         if (savedName) {
           parsedData.name = savedName;
@@ -235,17 +306,42 @@ export default function UserProfile() {
     }, 3000);
   };
 
+  const validateAllPhones = (data: any): boolean => {
+    let isValid = true;
+    
+    if (data.phone && !isPhoneComplete(data.phone)) {
+      setPhoneWarning("Phone number must be exactly 11 digits.");
+      isValid = false;
+    } else {
+      setPhoneWarning(null);
+    }
+    
+    const contactWarnings: Record<number, string> = {};
+    (data.contacts || []).forEach((c: any) => {
+      if (c.phone && !isPhoneComplete(c.phone)) {
+        contactWarnings[c.id] = "Must be exactly 11 digits.";
+        isValid = false;
+      }
+    });
+    setContactPhoneWarnings(contactWarnings);
+    
+    return isValid;
+  };
+
   const saveUserData = async (data: any) => {
     try {
       console.log("💾 Saving user data:", data);
       
       delete data.department;
+      delete data.suppliers;
       
       const existingPermissions = data.permissions || [];
       const combinedPermissions = [...new Set([...existingPermissions, ...ENSURE_PERMISSIONS])];
       
       const dataToSave = {
         ...data,
+        phone: sanitizePhone(data.phone || ""),
+        contacts: (data.contacts || []).map(normalizeContact),
         permissions: combinedPermissions,
       };
       
@@ -319,20 +415,30 @@ export default function UserProfile() {
   };
 
   const handleEditToggle = () => {
+    setShowMenu(false); 
     if (isEditing) {
       setTempUserData(userData);
       setTempProfilePicture(profilePicture);
       setLocalAddress(userData.address || '');
+      setPhoneWarning(null);
+      setContactPhoneWarnings({});
       showNotificationMessage("Changes cancelled");
     } else {
       setTempUserData(userData);
       setTempProfilePicture(profilePicture);
       setLocalAddress(userData.address || '');
+      setPhoneWarning(null);
+      setContactPhoneWarnings({});
     }
     setIsEditing(!isEditing);
   };
 
   const handleSave = async () => {
+    if (!validateAllPhones(tempUserData)) {
+      showNotificationMessage("Please fix phone number errors before saving ❌");
+      return;
+    }
+    
     try {
       const saveSuccess = await saveUserData(tempUserData);
       
@@ -377,6 +483,8 @@ export default function UserProfile() {
       }
       
       setIsEditing(false);
+      setPhoneWarning(null);
+      setContactPhoneWarnings({});
       showNotificationMessage("Profile saved successfully! ✅");
       
       setTimeout(() => {
@@ -392,6 +500,26 @@ export default function UserProfile() {
   };
 
   const handleInputChange = useCallback((field: string, value: string) => {
+    if (field === 'phone') {
+      const digitsOnly = value.replace(/\D/g, "");
+      if (digitsOnly.length > 11) {
+        setPhoneWarning("Phone number cannot exceed 11 digits.");
+        setTempUserData(prev => ({
+          ...prev,
+          phone: digitsOnly.slice(0, 11)
+        }));
+        return;
+      }
+      setPhoneWarning(digitsOnly.length > 0 && digitsOnly.length < 11
+        ? `Phone number must be exactly 11 digits (${digitsOnly.length}/11).`
+        : null);
+      setTempUserData(prev => ({
+        ...prev,
+        phone: digitsOnly
+      }));
+      return;
+    }
+    
     setTempUserData(prev => ({
       ...prev,
       [field]: value
@@ -404,7 +532,9 @@ export default function UserProfile() {
       name: "",
       email: "",
       phone: "",
-      role: ""
+      role: "",
+      company: "",
+      isSupplier: false,
     };
     setTempUserData(prev => ({
       ...prev,
@@ -417,9 +547,47 @@ export default function UserProfile() {
       ...prev,
       contacts: (prev.contacts || []).filter(contact => contact.id !== id)
     }));
+    setContactPhoneWarnings(prev => {
+      const copy = { ...prev };
+      delete copy[id];
+      return copy;
+    });
   };
 
-  const handleContactChange = (id: number, field: string, value: string) => {
+  const handleContactChange = (id: number, field: string, value: any) => {
+    if (field === 'phone') {
+      const digitsOnly = String(value).replace(/\D/g, "");
+      if (digitsOnly.length > 11) {
+        setContactPhoneWarnings(prev => ({
+          ...prev,
+          [id]: "Phone number cannot exceed 11 digits."
+        }));
+        setTempUserData(prev => ({
+          ...prev,
+          contacts: (prev.contacts || []).map(contact => 
+            contact.id === id ? { ...contact, phone: digitsOnly.slice(0, 11) } : contact
+          )
+        }));
+        return;
+      }
+      setContactPhoneWarnings(prev => {
+        const copy = { ...prev };
+        if (digitsOnly.length > 0 && digitsOnly.length < 11) {
+          copy[id] = `Must be exactly 11 digits (${digitsOnly.length}/11).`;
+        } else {
+          delete copy[id];
+        }
+        return copy;
+      });
+      setTempUserData(prev => ({
+        ...prev,
+        contacts: (prev.contacts || []).map(contact => 
+          contact.id === id ? { ...contact, phone: digitsOnly } : contact
+        )
+      }));
+      return;
+    }
+    
     setTempUserData(prev => ({
       ...prev,
       contacts: (prev.contacts || []).map(contact => 
@@ -428,20 +596,23 @@ export default function UserProfile() {
     }));
   };
 
+  // ✅ Dropdown handlers
   const handleLogoutWithConfirmation = () => {
+    setShowMenu(false);
     setShowLogoutDialog(true);
   };
 
-  // ============================================================
-  // ✅ FIXED: confirmLogout - NO PAGE REFRESH
-  // ============================================================
+  const handleDeleteWithConfirmation = () => {
+    setShowMenu(false);
+    setShowDeleteDialog(true);
+  };
+
   const confirmLogout = () => {
     setShowLogoutDialog(false);
     
     console.log("🔴 Logging out...");
     
     try {
-      // Clear user-specific localStorage
       if (userEmail) {
         const keysToRemove = [
           `user_${userEmail}_profileData`,
@@ -460,17 +631,57 @@ export default function UserProfile() {
         });
       }
       
-      // Call logout from AuthContext
       logout();
       console.log("✅ Logout successful");
       
-      // ✅ FIXED: Use React Router navigate (NO page refresh)
       navigate("/login", { replace: true });
       
     } catch (error) {
       console.error("❌ Logout error:", error);
-      // ✅ FIXED: Use React Router navigate (NO page refresh)
       navigate("/login", { replace: true });
+    }
+  };
+
+  // ✅ Delete account
+  const confirmDeleteAccount = async () => {
+    setIsDeleting(true);
+    console.log("🗑️ Deleting account for:", userEmail);
+    
+    try {
+      if (userEmail) {
+        const keysToRemove = [
+          `user_${userEmail}_profileData`,
+          `user_${userEmail}_profilePicture`,
+          `user_${userEmail}_userName`,
+          'userProfileData',
+          'userProfilePicture',
+          'userName'
+        ];
+        
+        keysToRemove.forEach(key => {
+          if (localStorage.getItem(key)) {
+            localStorage.removeItem(key);
+            console.log(`🗑️ Removed localStorage key: ${key}`);
+          }
+        });
+      }
+      
+      // Optionally: call a supabase delete function here if available
+      // e.g. await deleteUserAccount(userEmail);
+      
+      logout();
+      setShowDeleteDialog(false);
+      showNotificationMessage("Account deleted ✅");
+      console.log("✅ Account deleted");
+      
+      setTimeout(() => {
+        navigate("/login", { replace: true });
+      }, 600);
+      
+    } catch (error) {
+      console.error("❌ Delete account error:", error);
+      setIsDeleting(false);
+      showNotificationMessage("Error deleting account ❌");
     }
   };
 
@@ -550,16 +761,23 @@ export default function UserProfile() {
   }, [displayData.address]);
 
   const filteredContacts = useMemo(() => {
+    const term = searchTerm.toLowerCase();
     return (displayData.contacts || []).filter((contact: any) =>
-      contact.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      contact.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      contact.name.toLowerCase().includes(term) ||
+      contact.email.toLowerCase().includes(term) ||
       contact.phone.includes(searchTerm) ||
-      contact.role.toLowerCase().includes(searchTerm.toLowerCase())
+      contact.role.toLowerCase().includes(term) ||
+      (contact.company || "").toLowerCase().includes(term) ||
+      (contact.isSupplier ? "supplier".includes(term) : "contact".includes(term))
     );
   }, [displayData.contacts, searchTerm]);
 
+  // ✅ Check if we should show the search bar (5 or more entries)
+  const totalContacts = (displayData.contacts || []).length;
+  const showSearchBar = totalContacts >= 5;
+
   const EditableField = useMemo(() => {
-    return function EditableField({ label, value, field, type = "text", icon: Icon, readOnly = false }: any) {
+    return function EditableField({ label, value, field, type = "text", icon: Icon, readOnly = false, warning }: any) {
       if (isEditing && !readOnly) {
         return (
           <div className="flex items-start gap-4 p-3 rounded-lg hover:bg-gray-50 transition-colors">
@@ -572,9 +790,19 @@ export default function UserProfile() {
                 type={type}
                 value={value || ''}
                 onChange={(e) => handleInputChange(field, e.target.value)}
-                className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#174d32] focus:border-transparent"
+                className={`w-full p-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-[#174d32] focus:border-transparent ${
+                  warning ? 'border-red-400 bg-red-50' : 'border-gray-300'
+                }`}
                 placeholder={`Enter ${label.toLowerCase()}`}
+                inputMode={field === 'phone' ? 'numeric' : undefined}
+                maxLength={field === 'phone' ? 11 : undefined}
               />
+              {warning && (
+                <div className="mt-1.5 flex items-start gap-1.5 rounded-md border border-red-200 bg-red-50 px-2.5 py-1.5">
+                  <AlertTriangle className="size-3.5 text-red-500 flex-shrink-0 mt-0.5" />
+                  <p className="text-xs font-medium text-red-600">{warning}</p>
+                </div>
+              )}
             </div>
           </div>
         );
@@ -606,14 +834,15 @@ export default function UserProfile() {
 
   return (
     <>
+      {/* ✅ Notifications */}
       {showNotification && (
         <div className="fixed bottom-6 right-6 z-[9999] animate-slide-up">
           <div className={`flex items-center gap-3 px-6 py-4 rounded-lg shadow-2xl border max-w-md ${
-            notificationMessage.includes("saved") || notificationMessage.includes("✅") || notificationMessage.includes("uploaded")
+            notificationMessage.includes("saved") || notificationMessage.includes("✅") || notificationMessage.includes("uploaded") || notificationMessage.includes("deleted")
               ? "bg-green-800 border-green-400/30 text-white"
               : notificationMessage.includes("cancelled") || notificationMessage.includes("removed")
               ? "bg-gray-600 border-gray-400/30 text-white"
-              : notificationMessage.includes("Error") || notificationMessage.includes("Please")
+              : notificationMessage.includes("Error") || notificationMessage.includes("Please") || notificationMessage.includes("fix")
               ? "bg-red-600 border-red-400/30 text-white"
               : "bg-blue-600 border-blue-400/30 text-white"
           }`}>
@@ -626,6 +855,7 @@ export default function UserProfile() {
         </div>
       )}
 
+      {/* ✅ Logout Dialog */}
       {showLogoutDialog && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
           <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl animate-in slide-in-from-bottom-4 duration-300">
@@ -658,6 +888,90 @@ export default function UserProfile() {
         </div>
       )}
 
+      {/* ✅ Delete account dialog */}
+      {showDeleteDialog && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl animate-in slide-in-from-bottom-4 duration-300">
+            <div className="flex items-start gap-4">
+              <div className="flex size-12 flex-shrink-0 items-center justify-center rounded-full bg-red-100">
+                <Trash className="size-6 text-red-600" />
+              </div>
+              <div className="flex-1">
+                <h3 className="text-lg font-semibold text-gray-900">Delete Account?</h3>
+                <p className="mt-1 text-sm text-gray-500">
+                  This action is <strong className="text-red-600">permanent and cannot be undone</strong>. 
+                  Your profile, contacts, suppliers, and all associated data will be permanently deleted.
+                </p>
+              </div>
+            </div>
+            <div className="mt-6 flex gap-3 justify-end">
+              <button
+                onClick={() => setShowDeleteDialog(false)}
+                disabled={isDeleting}
+                className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 transition-all hover:bg-gray-50 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmDeleteAccount}
+                disabled={isDeleting}
+                className="flex items-center gap-2 rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition-all hover:bg-red-700 hover:shadow-lg disabled:opacity-50"
+              >
+                {isDeleting ? (
+                  <><Loader2 className="size-4 animate-spin" /> Deleting...</>
+                ) : (
+                  <> Yes, Delete Account</>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ✅ PORTAL DROPDOWN MENU - Renders directly to body to prevent clipping */}
+      {showMenu && createPortal(
+        <div 
+          ref={menuRef}
+          style={{ 
+            position: 'absolute', 
+            top: `${menuCoords.top}px`, 
+            right: `${menuCoords.right}px`,
+            zIndex: 9999 
+          }}
+          className="animate-menu-in w-56 origin-top-right rounded-xl border border-gray-200 bg-white p-1.5 shadow-2xl ring-1 ring-black/5"
+        >
+          <button
+            onClick={handleEditToggle}
+            className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-emerald-50 hover:text-[#174d32]"
+          >
+            {isEditing ? (
+              <><X className="size-4" /> Cancel Edit</>
+            ) : (
+              <><Pencil className="size-4" /> Edit Profile</>
+            )}
+          </button>
+
+          <div className="my-1 h-px bg-gray-100" />
+
+          <button
+            onClick={handleLogoutWithConfirmation}
+            className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-yellow-50 hover:text-yellow-700"
+          >
+            <LogOut className="size-4" />
+            Log Out
+          </button>
+
+          <button
+            onClick={handleDeleteWithConfirmation}
+            className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-red-600 transition-colors hover:bg-red-50 hover:text-red-700"
+          >
+            <Trash className="size-4" />
+            Delete Account
+          </button>
+        </div>,
+        document.body
+      )}
+
       <div
         className={`
           user-profile-page min-h-max space-y-6 bg-[#f3f7f4] px-4 py-5 sm:px-6 lg:px-8 lg:py-7
@@ -667,60 +981,42 @@ export default function UserProfile() {
       >
         <style>{`
           @keyframes slideUp {
-            from {
-              opacity: 0;
-              transform: translateY(20px) scale(0.95);
-            }
-            to {
-              opacity: 1;
-              transform: translateY(0) scale(1);
-            }
+            from { opacity: 0; transform: translateY(20px) scale(0.95); }
+            to { opacity: 1; transform: translateY(0) scale(1); }
           }
-          
           @keyframes shrink {
-            from {
-              height: 100%;
-            }
-            to {
-              height: 0%;
-            }
+            from { height: 100%; }
+            to { height: 0%; }
           }
-          
-          .animate-slide-up {
-            animation: slideUp 0.3s ease-out forwards;
+          @keyframes menuIn {
+            from { opacity: 0; transform: translateY(-6px) scale(0.96); }
+            to { opacity: 1; transform: translateY(0) scale(1); }
           }
-          
-          .animate-shrink {
-            animation: shrink 3s linear forwards;
-          }
+          .animate-slide-up { animation: slideUp 0.3s ease-out forwards; }
+          .animate-shrink { animation: shrink 3s linear forwards; }
+          .animate-menu-in { animation: menuIn 0.15s ease-out forwards; }
 
-          .user-profile-page [data-slot="card"] {
-            border-radius: 1rem;
-          }
-
+          .user-profile-page [data-slot="card"] { border-radius: 1rem; }
           .user-profile-page select {
             border-color: rgb(167 243 208);
             background: rgb(255 255 255);
             color: rgb(20 83 45);
             outline: none;
           }
-
           .user-profile-page select:focus {
             box-shadow: 0 0 0 3px rgb(209 250 229);
             border-color: rgb(5 150 105);
           }
-
           .user-profile-page [data-slot="table-head"] {
             color: rgb(22 101 52);
             font-weight: 700;
           }
-
           .user-profile-page [data-slot="table-row"]:hover {
             background: rgb(240 253 244 / 0.7);
           }
         `}</style>
 
-        <header className="overflow-hidden rounded-2xl bg-[#174d32] px-5 py-5 text-white shadow-[0_18px_45px_rgba(23,77,50,0.18)] sm:px-7 sm:py-6">
+        <header className="overflow-visible relative z-40 rounded-2xl bg-[#174d32] px-5 py-5 text-white shadow-[0_18px_45px_rgba(23,77,50,0.18)] sm:px-7 sm:py-6">
           <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-start gap-4">
               <div className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-white/12 ring-1 ring-white/15">
@@ -735,45 +1031,31 @@ export default function UserProfile() {
                 </p>
               </div>
             </div>
+
             <div className="flex flex-wrap items-center gap-3">
-              <button
-                onClick={handleEditToggle}
-                className={`flex items-center gap-2 rounded-lg px-5 py-2.5 text-sm font-semibold transition-all ${
-                  isEditing 
-                    ? "bg-white text-red-600 hover:bg-red-100 border-2 border-red-600 hover:text-white hover:bg-red-700" 
-                    : "bg-white text-green-800 border-2 border-green-600 shadow-lg shadow-[#174d32]/20 hover:bg-green-600 hover:text-white hover:shadow-xl"
-                }`}
-              >
-                {isEditing ? (
-                  <>
-                    <X className="size-4" />
-                    Cancel
-                  </>
-                ) : (
-                  <>
-                    <Pencil className="size-4" />
-                    Edit Profile
-                  </>
-                )}
-              </button>
-              
               {isEditing && (
                 <button
                   onClick={handleSave}
                   className="flex items-center gap-2 rounded-lg bg-white px-5 py-2.5 text-sm font-semibold text-green-600 border-2 border-green-600 shadow-lg transition-all hover:text-white hover:bg-green-700 hover:shadow-xl"
                 >
-                  <Save className="size-4  " />
+                  <Save className="size-4" />
                   Save Changes
                 </button>
               )}
-              
-              <button
-                onClick={handleLogoutWithConfirmation}
-                className="flex items-center gap-2 rounded-lg border border-gray-200 bg-white border-2 border-yellow-400 px-4 py-2.5 text-sm font-semibold text-gray-600 transition-all hover:border-red-200 hover:bg-red-50 hover:text-white hover:bg-yellow-400 hover:border-yellow-400"
-              >
-                <LogOut className="size-4" />
-                Log Out
-              </button>
+
+              {/* ✅ 3-dots dropdown trigger */}
+              <div className="relative">
+                <button
+                  ref={menuButtonRef} 
+                  onClick={toggleMenu} 
+                  className="flex items-center justify-center rounded-lg bg-white/10 p-2.5 text-white ring-1 ring-white/20 transition-all hover:bg-white/20 hover:ring-white/30"
+                  aria-label="Open menu"
+                  aria-haspopup="true"
+                  aria-expanded={showMenu}
+                >
+                  <MoreVertical className="size-5" />
+                </button>
+              </div>
             </div>
           </div>
         </header>
@@ -813,11 +1095,7 @@ export default function UserProfile() {
                     onClick={handleProfilePictureClick}
                   >
                     {displayPicture ? (
-                      <img
-                        src={displayPicture}
-                        alt="Profile"
-                        className="w-full h-full object-cover"
-                      />
+                      <img src={displayPicture} alt="Profile" className="w-full h-full object-cover" />
                     ) : (
                       <UserCircle className="w-20 h-20 text-gray-400 group-hover:text-[#174d32] transition-colors" />
                     )}
@@ -828,8 +1106,7 @@ export default function UserProfile() {
                       {displayPicture && (
                         <button
                           onClick={handleRemovePicture}
-                          className="bg-red-500 hover:bg-red-600 text-white p-1.5 rounded-xl shadow-lg 
-                            transition-all duration-200 hover:scale-110"
+                          className="bg-red-500 hover:bg-red-600 text-white p-1.5 rounded-xl shadow-lg transition-all duration-200 hover:scale-110"
                           title="Remove profile picture"
                         >
                           <X className="size-3" />
@@ -837,8 +1114,7 @@ export default function UserProfile() {
                       )}
                       <button
                         onClick={handleProfilePictureClick}
-                        className="bg-[#174d32] hover:bg-[#123e28] text-white p-1.5 rounded-xl shadow-lg 
-                          transition-all duration-200 hover:scale-110"
+                        className="bg-[#174d32] hover:bg-[#123e28] text-white p-1.5 rounded-xl shadow-lg transition-all duration-200 hover:scale-110"
                         title="Change profile picture"
                       >
                         <Camera className="size-3" />
@@ -854,14 +1130,10 @@ export default function UserProfile() {
                         type="text"
                         value={displayData.name}
                         onChange={(e) => handleInputChange('name', e.target.value)}
-                        className="text-2xl font-bold text-gray-900 bg-transparent border-b-2 
-                          border-[#174d32] focus:border-emerald-500 focus:outline-none 
-                          w-full max-w-md pb-1 transition-colors duration-200
-                          placeholder:text-gray-400"
+                        className="text-2xl font-bold text-gray-900 bg-transparent border-b-2 border-[#174d32] focus:border-emerald-500 focus:outline-none w-full max-w-md pb-1 transition-colors duration-200 placeholder:text-gray-400"
                         placeholder="Enter your name"
                       />
-                      <div className="absolute bottom-0 left-0 w-full h-0.5 bg-[#174d32] scale-x-0 
-                        focus-within:scale-x-100 transition-transform duration-300 origin-left" />
+                      <div className="absolute bottom-0 left-0 w-full h-0.5 bg-[#174d32] scale-x-0 focus-within:scale-x-100 transition-transform duration-300 origin-left" />
                     </div>
                   ) : (
                     <CardTitle className="text-2xl font-bold text-gray-900 truncate">
@@ -871,14 +1143,12 @@ export default function UserProfile() {
                   
                   <div className="flex flex-wrap items-center gap-3 mt-2">
                     {isEditing ? (
-                      <div className="flex items-center gap-2 bg-gray-50 px-3 py-1.5 rounded-lg 
-                        border border-gray-200 hover:border-[#174d32] transition-colors duration-200">
+                      <div className="flex items-center gap-2 bg-gray-50 px-3 py-1.5 rounded-lg border border-gray-200 hover:border-[#174d32] transition-colors duration-200">
                         <Shield className="size-4 text-[#174d32]" />
                         <select
                           value={displayData.role}
                           onChange={(e) => handleInputChange('role', e.target.value)}
-                          className="bg-transparent border-none focus:outline-none text-sm font-medium 
-                            text-gray-700 cursor-pointer py-0.5"
+                          className="bg-transparent border-none focus:outline-none text-sm font-medium text-gray-700 cursor-pointer py-0.5"
                         >
                           <option value="User">User</option>
                           <option value="System Administrator">System Administrator</option>
@@ -894,9 +1164,7 @@ export default function UserProfile() {
                     )}
                   </div>
                    <div className="mt-2">
-                    <div className="flex items-center gap-2 text-gray-600 
-                      bg-gray-50/50 px-3 py-1.5 rounded-lg border border-gray-100/50
-                      hover:bg-gray-50 transition-colors duration-200">
+                    <div className="flex items-center gap-2 text-gray-600 bg-gray-50/50 px-3 py-1.5 rounded-lg border border-gray-100/50 hover:bg-gray-50 transition-colors duration-200">
                       <Mail className="size-4 text-[#174d32]/70" />
                       <span className="text-sm font-medium truncate">
                         {displayData.email || userEmail}
@@ -908,20 +1176,16 @@ export default function UserProfile() {
 
               <div className="flex flex-col items-start lg:items-end gap-3 flex-shrink-0">
                 {isNewUser && (
-                  <div className="flex items-center gap-2 bg-emerald-50 px-4 py-2 rounded-xl 
-                    border border-emerald-200 shadow-sm">
+                  <div className="flex items-center gap-2 bg-emerald-50 px-4 py-2 rounded-xl border border-emerald-200 shadow-sm">
                     <div className="relative">
                       <div className="w-2.5 h-2.5 bg-emerald-500 rounded-full animate-pulse" />
-                      <div className="absolute inset-0 w-2.5 h-2.5 bg-emerald-500 rounded-full 
-                        animate-ping opacity-75" />
+                      <div className="absolute inset-0 w-2.5 h-2.5 bg-emerald-500 rounded-full animate-ping opacity-75" />
                     </div>
                     <span className="text-sm font-semibold text-emerald-700">New User</span>
                   </div>
                 )}
                 
-                <div className="flex items-center gap-2 text-gray-500 text-sm 
-                  bg-white/50 backdrop-blur-sm px-4 py-2 rounded-xl border border-gray-200/50
-                  shadow-sm hover:shadow-md transition-all duration-200">
+                <div className="flex items-center gap-2 text-gray-500 text-sm bg-white/50 backdrop-blur-sm px-4 py-2 rounded-xl border border-gray-200/50 shadow-sm hover:shadow-md transition-all duration-200">
                   <Clock className="size-4 text-[#174d32]/60" />
                   <span className="font-medium">
                     Last login: <span className="text-gray-700">{lastLoginDate}</span>
@@ -972,6 +1236,7 @@ export default function UserProfile() {
                 value={displayData.phone}
                 field="phone"
                 icon={Phone}
+                warning={phoneWarning}
               />
               <EditableField
                 label="Office Location"
@@ -1019,28 +1284,31 @@ export default function UserProfile() {
                 <div className="flex size-8 items-center justify-center rounded-lg bg-[#174d32]">
                   <Users className="size-4 text-white" />
                 </div>
-                Contacts
+                Contacts & Suppliers
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="relative mb-3">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 size-4 text-gray-400" />
-                <input
-                  type="text"
-                  placeholder="Search contacts..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full pl-9 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#174d32] focus:border-transparent text-sm"
-                />
-                {searchTerm && (
-                  <button
-                    onClick={() => setSearchTerm("")}
-                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                  >
-                    <X className="size-4" />
-                  </button>
-                )}
-              </div>
+              {/* ✅ Search Field Condition: Only appears if >= 5 contacts */}
+              {showSearchBar && (
+                <div className="relative mb-3">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 size-4 text-gray-400" />
+                  <input
+                    type="text"
+                    placeholder="Search contacts & suppliers..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="w-full pl-9 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#174d32] focus:border-transparent text-sm"
+                  />
+                  {searchTerm && (
+                    <button
+                      onClick={() => setSearchTerm("")}
+                      className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                    >
+                      <X className="size-4" />
+                    </button>
+                  )}
+                </div>
+              )}
 
               {isEditing && (
                 <div className="flex justify-end mb-3">
@@ -1054,10 +1322,18 @@ export default function UserProfile() {
                 </div>
               )}
               
-              <div className="space-y-2 max-h-[300px] overflow-y-auto pr-1">
+              {/* ✅ Fixed Height Scrollable Container to fit exactly 3 items */}
+              <div className="space-y-2 h-[180px] overflow-y-auto pr-1 pb-2 scrollbar-thin scrollbar-thumb-gray-300">
                 {filteredContacts.length > 0 ? (
                   filteredContacts.map((contact: any) => (
-                    <div key={contact.id} className="p-2.5 border border-gray-200 rounded-lg hover:border-[#174d32] transition-colors">
+                    <div
+                      key={contact.id}
+                      className={`p-2.5 border rounded-lg transition-colors ${
+                        contact.isSupplier
+                          ? "border-blue-200 bg-blue-50/30 hover:border-blue-400"
+                          : "border-gray-200 hover:border-[#174d32]"
+                      }`}
+                    >
                       {isEditing ? (
                         <div className="space-y-1.5">
                           <div className="flex gap-1.5">
@@ -1079,10 +1355,14 @@ export default function UserProfile() {
                           <div className="flex gap-1.5">
                             <input
                               type="text"
+                              inputMode="numeric"
+                              maxLength={11}
                               value={contact.phone}
                               onChange={(e) => handleContactChange(contact.id, 'phone', e.target.value)}
-                              placeholder="Phone"
-                              className="flex-1 p-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-[#174d32]"
+                              placeholder="Phone (11 digits)"
+                              className={`flex-1 p-1 border rounded text-sm focus:outline-none focus:ring-1 focus:ring-[#174d32] ${
+                                contactPhoneWarnings[contact.id] ? 'border-red-400 bg-red-50' : 'border-gray-300'
+                              }`}
                             />
                             <input
                               type="text"
@@ -1098,6 +1378,25 @@ export default function UserProfile() {
                               <Trash2 className="size-3.5" />
                             </button>
                           </div>
+                          <div className="flex items-center gap-3 pt-0.5">
+                            {contact.isSupplier && (
+                              <input
+                                type="text"
+                                value={contact.company || ""}
+                                onChange={(e) => handleContactChange(contact.id, 'company', e.target.value)}
+                                placeholder="Company name"
+                                className="flex-1 p-1 border border-blue-300 bg-white rounded text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+                              />
+                            )}
+                          </div>
+                          {contactPhoneWarnings[contact.id] && (
+                            <div className="flex items-start gap-1.5 rounded-md border border-red-200 bg-red-50 px-2 py-1">
+                              <AlertTriangle className="size-3 text-red-500 flex-shrink-0 mt-0.5" />
+                              <p className="text-[11px] font-medium text-red-600">
+                                {contactPhoneWarnings[contact.id]}
+                              </p>
+                            </div>
+                          )}
                         </div>
                       ) : (
                         <div className="flex items-center justify-between">
@@ -1116,10 +1415,16 @@ export default function UserProfile() {
                                 <Shield className="size-3" />
                                 {contact.role}
                               </span>
+                              {contact.isSupplier && contact.company && (
+                                <span className="flex items-center gap-0.5">
+                                  <Building className="size-3" />
+                                  {contact.company}
+                                </span>
+                              )}
                             </div>
                           </div>
-                          <Badge className="bg-[#174d32] text-xs ml-2 flex-shrink-0">
-                            Contact
+                          <Badge className={`text-xs ml-2 flex-shrink-0 ${contact.isSupplier ? "bg-blue-600" : "bg-[#174d32]"}`}>
+                            {contact.isSupplier ? "Supplier" : "Contact"}
                           </Badge>
                         </div>
                       )}
@@ -1129,13 +1434,6 @@ export default function UserProfile() {
                   <p className="text-gray-500 text-sm text-center py-4">
                     {searchTerm ? "No contacts match your search" : "No contacts added yet"}
                   </p>
-                )}
-              </div>
-
-              <div className="mt-3 pt-2 border-t border-gray-200 flex justify-between text-xs text-gray-500">
-                <span>{filteredContacts.length} contact{filteredContacts.length !== 1 ? 's' : ''}</span>
-                {searchTerm && filteredContacts.length !== (displayData.contacts || []).length && (
-                  <span>Showing {filteredContacts.length} of {(displayData.contacts || []).length}</span>
                 )}
               </div>
             </CardContent>
