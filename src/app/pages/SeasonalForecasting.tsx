@@ -3074,7 +3074,7 @@ Return ONLY valid JSON with this structure:
                               : "Rainy Season — Product Units Share"}
                           </h4>
                           <p className="text-[11px] text-blue-700/80 leading-tight">
-                            June – October
+                            June – December
                           </p>
                         </div>
                       </div>
@@ -3156,7 +3156,7 @@ Return ONLY valid JSON with this structure:
                               : "Dry Season — Product Units Share"}
                           </h4>
                           <p className="text-[11px] text-green-700/80 leading-tight">
-                            November – May
+                            January – May
                           </p>
                         </div>
                       </div>
@@ -3606,7 +3606,7 @@ Return ONLY valid JSON with this structure:
                           <div>
                             <h3 className="text-sm font-semibold text-white">{strategy.season}</h3>
                             <p className="text-xs text-white/70">
-                              {drySeason ? "November – May" : "June – October"}
+                              {drySeason ? "January – May" : "June – December"}
                             </p>
                           </div>
                           <Badge className="ml-auto bg-white/20 text-white border-0">

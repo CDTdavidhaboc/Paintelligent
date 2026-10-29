@@ -9,7 +9,6 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { createPortal } from "react-dom";
-// ✅ FIXED: Imported deleteUserPermanently
 import { getUserData, saveUserProfile, saveProfilePicture, deleteUserPermanently } from "../lib/supabase";
 
 const DEFAULT_USER_DATA = {
@@ -26,7 +25,7 @@ const DEFAULT_USER_DATA = {
   }),
   employeeId: `EMP-${Date.now().toString().slice(-6)}`,
   permissions: ["Seasonal Forecast", "Paint Analyzer"],
-  contacts: [] // ✅ Removed default/empty contacts
+  contacts: []
 };
 
 const ENSURE_PERMISSIONS = ["Seasonal Forecast", "Paint Analyzer"];
@@ -37,6 +36,29 @@ const sanitizePhone = (value: string): string => {
 
 const isPhoneComplete = (value: string): boolean => {
   return /^\d{11}$/.test(value);
+};
+
+const normalizeEmail = (value: string): string =>
+  (value || "").trim().toLowerCase();
+
+const findDuplicateContact = (
+  contacts: any[],
+  candidate: { id?: number; email?: string; phone?: string }
+): { field: "email" | "phone"; conflictName: string } | null => {
+  const email = normalizeEmail(candidate.email || "");
+  const phone = sanitizePhone(candidate.phone || "");
+
+  for (const c of contacts) {
+    if (candidate.id != null && c.id === candidate.id) continue;
+
+    if (email && normalizeEmail(c.email) === email) {
+      return { field: "email", conflictName: c.name || "another contact" };
+    }
+    if (phone && sanitizePhone(c.phone) === phone) {
+      return { field: "phone", conflictName: c.name || "another contact" };
+    }
+  }
+  return null;
 };
 
 export default function UserProfile() {
@@ -61,8 +83,10 @@ export default function UserProfile() {
   const [isDeleting, setIsDeleting] = useState(false);
   const [phoneWarning, setPhoneWarning] = useState<string | null>(null);
   const [contactPhoneWarnings, setContactPhoneWarnings] = useState<Record<number, string>>({});
+  const [contactDuplicateWarnings, setContactDuplicateWarnings] = useState<
+    Record<number, { email?: string; phone?: string }>
+  >({});
   
-  // ✅ 3-dots dropdown state
   const [showMenu, setShowMenu] = useState(false);
   const [menuCoords, setMenuCoords] = useState({ top: 0, right: 0 });
   
@@ -76,7 +100,6 @@ export default function UserProfile() {
     return () => clearTimeout(timer);
   }, []);
 
-  // ✅ Close dropdown on outside click (checks both button and portal menu)
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       const target = event.target as Node;
@@ -95,7 +118,6 @@ export default function UserProfile() {
     };
   }, [showMenu]);
 
-  // ✅ Calculate menu position on open
   const toggleMenu = () => {
     if (!showMenu && menuButtonRef.current) {
       const rect = menuButtonRef.current.getBoundingClientRect();
@@ -157,7 +179,7 @@ export default function UserProfile() {
             }),
             employeeId: supabaseData.employee_id || `EMP-${Date.now().toString().slice(-6)}`,
             permissions: supabaseData.permissions || ["Seasonal Forecast", "Paint Analyzer"],
-            contacts: unifiedContacts, // ✅ Removed fallback to DEFAULT_USER_DATA.contacts
+            contacts: unifiedContacts,
           };
           
           setUserData(profileData);
@@ -231,7 +253,7 @@ export default function UserProfile() {
           ...legacyContacts.map(normalizeContact),
           ...legacySuppliers.map((s: any) => normalizeContact({ ...s, isSupplier: true })),
         ];
-        parsedData.contacts = unifiedContacts; // ✅ Removed fallback
+        parsedData.contacts = unifiedContacts;
         delete parsedData.suppliers;
         
         const existingPermissions = parsedData.permissions || [];
@@ -307,25 +329,40 @@ export default function UserProfile() {
     }, 3000);
   };
 
-  const validateAllPhones = (data: any): boolean => {
+  const validateAllContacts = (data: any): boolean => {
     let isValid = true;
-    
+
     if (data.phone && !isPhoneComplete(data.phone)) {
       setPhoneWarning("Phone number must be exactly 11 digits.");
       isValid = false;
     } else {
       setPhoneWarning(null);
     }
-    
-    const contactWarnings: Record<number, string> = {};
+
+    const phoneWarnings: Record<number, string> = {};
+    const dupWarnings: Record<number, { email?: string; phone?: string }> = {};
+
     (data.contacts || []).forEach((c: any) => {
       if (c.phone && !isPhoneComplete(c.phone)) {
-        contactWarnings[c.id] = "Must be exactly 11 digits.";
+        phoneWarnings[c.id] = "Must be exactly 11 digits.";
+        isValid = false;
+      }
+
+      const dup = findDuplicateContact(data.contacts || [], {
+        id: c.id,
+        email: c.email,
+        phone: c.phone,
+      });
+      if (dup) {
+        dupWarnings[c.id] = {
+          [dup.field]: `${dup.field === "email" ? "Email" : "Phone"} already used by ${dup.conflictName}.`,
+        };
         isValid = false;
       }
     });
-    setContactPhoneWarnings(contactWarnings);
-    
+
+    setContactPhoneWarnings(phoneWarnings);
+    setContactDuplicateWarnings(dupWarnings);
     return isValid;
   };
 
@@ -423,6 +460,7 @@ export default function UserProfile() {
       setLocalAddress(userData.address || '');
       setPhoneWarning(null);
       setContactPhoneWarnings({});
+      setContactDuplicateWarnings({});
       showNotificationMessage("Changes cancelled");
     } else {
       setTempUserData(userData);
@@ -430,13 +468,14 @@ export default function UserProfile() {
       setLocalAddress(userData.address || '');
       setPhoneWarning(null);
       setContactPhoneWarnings({});
+      setContactDuplicateWarnings({});
     }
     setIsEditing(!isEditing);
   };
 
   const handleSave = async () => {
-    if (!validateAllPhones(tempUserData)) {
-      showNotificationMessage("Please fix phone number errors before saving ❌");
+    if (!validateAllContacts(tempUserData)) {
+      showNotificationMessage("Please fix duplicate or invalid contact info before saving ❌");
       return;
     }
     
@@ -486,6 +525,7 @@ export default function UserProfile() {
       setIsEditing(false);
       setPhoneWarning(null);
       setContactPhoneWarnings({});
+      setContactDuplicateWarnings({});
       showNotificationMessage("Profile saved successfully! ✅");
       
       setTimeout(() => {
@@ -537,6 +577,18 @@ export default function UserProfile() {
       company: "",
       isSupplier: false,
     };
+
+    const hasEmptyDuplicate = (tempUserData.contacts || []).some(
+      (c: any) =>
+        !normalizeEmail(c.email) &&
+        !sanitizePhone(c.phone) &&
+        c.name === newContact.name
+    );
+    if (hasEmptyDuplicate) {
+      showNotificationMessage("An empty contact already exists — fill it in first.");
+      return;
+    }
+
     setTempUserData(prev => ({
       ...prev,
       contacts: [...(prev.contacts || []), newContact]
@@ -549,6 +601,11 @@ export default function UserProfile() {
       contacts: (prev.contacts || []).filter(contact => contact.id !== id)
     }));
     setContactPhoneWarnings(prev => {
+      const copy = { ...prev };
+      delete copy[id];
+      return copy;
+    });
+    setContactDuplicateWarnings(prev => {
       const copy = { ...prev };
       delete copy[id];
       return copy;
@@ -571,33 +628,64 @@ export default function UserProfile() {
         }));
         return;
       }
-      setContactPhoneWarnings(prev => {
-        const copy = { ...prev };
-        if (digitsOnly.length > 0 && digitsOnly.length < 11) {
-          copy[id] = `Must be exactly 11 digits (${digitsOnly.length}/11).`;
-        } else {
-          delete copy[id];
-        }
-        return copy;
-      });
-      setTempUserData(prev => ({
-        ...prev,
-        contacts: (prev.contacts || []).map(contact => 
+
+      setTempUserData(prev => {
+        const updated = (prev.contacts || []).map(contact =>
           contact.id === id ? { ...contact, phone: digitsOnly } : contact
-        )
-      }));
+        );
+
+        setContactDuplicateWarnings(prevWarn => {
+          const copy = { ...prevWarn };
+          const dup = findDuplicateContact(updated, { id, phone: digitsOnly });
+          const current = copy[id] || {};
+          if (dup?.field === "phone") {
+            copy[id] = { ...current, phone: `Phone already used by ${dup.conflictName}.` };
+          } else {
+            const { phone, ...rest } = current;
+            copy[id] = rest;
+          }
+          return copy;
+        });
+
+        setContactPhoneWarnings(prev => {
+          const copy = { ...prev };
+          if (digitsOnly.length > 0 && digitsOnly.length < 11) {
+            copy[id] = `Must be exactly 11 digits (${digitsOnly.length}/11).`;
+          } else {
+            delete copy[id];
+          }
+          return copy;
+        });
+
+        return { ...prev, contacts: updated };
+      });
       return;
     }
     
-    setTempUserData(prev => ({
-      ...prev,
-      contacts: (prev.contacts || []).map(contact => 
+    setTempUserData(prev => {
+      const updated = (prev.contacts || []).map(contact =>
         contact.id === id ? { ...contact, [field]: value } : contact
-      )
-    }));
+      );
+
+      if (field === "email") {
+        setContactDuplicateWarnings(prevWarn => {
+          const copy = { ...prevWarn };
+          const dup = findDuplicateContact(updated, { id, email: value });
+          const current = copy[id] || {};
+          if (dup?.field === "email") {
+            copy[id] = { ...current, email: `Email already used by ${dup.conflictName}.` };
+          } else {
+            const { email, ...rest } = current;
+            copy[id] = rest;
+          }
+          return copy;
+        });
+      }
+
+      return { ...prev, contacts: updated };
+    });
   };
 
-  // ✅ Dropdown handlers
   const handleLogoutWithConfirmation = () => {
     setShowMenu(false);
     setShowLogoutDialog(true);
@@ -643,7 +731,6 @@ export default function UserProfile() {
     }
   };
 
-  // ✅ FIXED: Delete account now calls the backend to remove from Auth and user_data
   const confirmDeleteAccount = async () => {
     setIsDeleting(true);
     console.log("🗑️ Deleting account for:", userEmail);
@@ -655,7 +742,6 @@ export default function UserProfile() {
     }
 
     try {
-      // Call the Supabase function to permanently delete the user
       const result = await deleteUserPermanently(userEmail);
 
       if (!result.success) {
@@ -667,7 +753,6 @@ export default function UserProfile() {
 
       console.log("✅ Backend deletion successful");
 
-      // Clear local storage
       const keysToRemove = [
         `user_${userEmail}_profileData`,
         `user_${userEmail}_profilePicture`,
@@ -684,7 +769,6 @@ export default function UserProfile() {
         }
       });
       
-      // Logout and redirect
       logout();
       setShowDeleteDialog(false);
       showNotificationMessage("Account deleted ✅");
@@ -787,7 +871,6 @@ export default function UserProfile() {
     );
   }, [displayData.contacts, searchTerm]);
 
-  // ✅ Check if we should show the search bar (5 or more entries)
   const totalContacts = (displayData.contacts || []).length;
   const showSearchBar = totalContacts >= 5;
 
@@ -849,7 +932,6 @@ export default function UserProfile() {
 
   return (
     <>
-      {/* ✅ Notifications */}
       {showNotification && (
         <div className="fixed bottom-6 right-6 z-[9999] animate-slide-up">
           <div className={`flex items-center gap-3 px-6 py-4 rounded-lg shadow-2xl border max-w-md ${
@@ -870,7 +952,6 @@ export default function UserProfile() {
         </div>
       )}
 
-      {/* ✅ Logout Dialog */}
       {showLogoutDialog && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
           <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl animate-in slide-in-from-bottom-4 duration-300">
@@ -903,7 +984,6 @@ export default function UserProfile() {
         </div>
       )}
 
-      {/* ✅ Delete account dialog */}
       {showDeleteDialog && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
           <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl animate-in slide-in-from-bottom-4 duration-300">
@@ -943,7 +1023,6 @@ export default function UserProfile() {
         </div>
       )}
 
-      {/* ✅ PORTAL DROPDOWN MENU - Renders directly to body to prevent clipping */}
       {showMenu && createPortal(
         <div 
           ref={menuRef}
@@ -1058,7 +1137,6 @@ export default function UserProfile() {
                 </button>
               )}
 
-              {/* ✅ 3-dots dropdown trigger */}
               <div className="relative">
                 <button
                   ref={menuButtonRef} 
@@ -1156,27 +1234,12 @@ export default function UserProfile() {
                     </CardTitle>
                   )}
                   
+                  {/* ✅ Role is now READ-ONLY (no dropdown, no editing) */}
                   <div className="flex flex-wrap items-center gap-3 mt-2">
-                    {isEditing ? (
-                      <div className="flex items-center gap-2 bg-gray-50 px-3 py-1.5 rounded-lg border border-gray-200 hover:border-[#174d32] transition-colors duration-200">
-                        <Shield className="size-4 text-[#174d32]" />
-                        <select
-                          value={displayData.role}
-                          onChange={(e) => handleInputChange('role', e.target.value)}
-                          className="bg-transparent border-none focus:outline-none text-sm font-medium text-gray-700 cursor-pointer py-0.5"
-                        >
-                          <option value="User">User</option>
-                          <option value="System Administrator">System Administrator</option>
-                          <option value="Manager">Manager</option>
-                          <option value="Owner">Owner</option>
-                        </select>
-                      </div>
-                    ) : (
-                      <Badge className="bg-gradient-to-r from-[#174d32] to-[#123e28] px-4 py-1.5 rounded-lg text-sm font-medium shadow-lg shadow-[#174d32]/20">
-                        <Shield className="size-3 mr-1.5 inline-block" />
-                        {displayData.role}
-                      </Badge>
-                    )}
+                    <Badge className="bg-gradient-to-r from-[#174d32] to-[#123e28] px-4 py-1.5 rounded-lg text-sm font-medium shadow-lg shadow-[#174d32]/20">
+                      <Shield className="size-3 mr-1.5 inline-block" />
+                      {displayData.role}
+                    </Badge>
                   </div>
                    <div className="mt-2">
                     <div className="flex items-center gap-2 text-gray-600 bg-gray-50/50 px-3 py-1.5 rounded-lg border border-gray-100/50 hover:bg-gray-50 transition-colors duration-200">
@@ -1303,7 +1366,6 @@ export default function UserProfile() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              {/* ✅ Search Field Condition: Only appears if >= 5 contacts */}
               {showSearchBar && (
                 <div className="relative mb-3">
                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 size-4 text-gray-400" />
@@ -1337,7 +1399,6 @@ export default function UserProfile() {
                 </div>
               )}
               
-              {/* ✅ Fixed Height Scrollable Container to fit exactly 3 items */}
               <div className="space-y-2 h-[180px] overflow-y-auto pr-1 pb-2 scrollbar-thin scrollbar-thumb-gray-300">
                 {filteredContacts.length > 0 ? (
                   filteredContacts.map((contact: any) => (
@@ -1364,7 +1425,11 @@ export default function UserProfile() {
                               value={contact.email}
                               onChange={(e) => handleContactChange(contact.id, 'email', e.target.value)}
                               placeholder="Email"
-                              className="flex-1 p-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-[#174d32]"
+                              className={`flex-1 p-1 border rounded text-sm focus:outline-none focus:ring-1 focus:ring-[#174d32] ${
+                                contactDuplicateWarnings[contact.id]?.email
+                                  ? 'border-amber-400 bg-amber-50'
+                                  : 'border-gray-300'
+                              }`}
                             />
                           </div>
                           <div className="flex gap-1.5">
@@ -1376,7 +1441,9 @@ export default function UserProfile() {
                               onChange={(e) => handleContactChange(contact.id, 'phone', e.target.value)}
                               placeholder="Phone (11 digits)"
                               className={`flex-1 p-1 border rounded text-sm focus:outline-none focus:ring-1 focus:ring-[#174d32] ${
-                                contactPhoneWarnings[contact.id] ? 'border-red-400 bg-red-50' : 'border-gray-300'
+                                contactPhoneWarnings[contact.id] || contactDuplicateWarnings[contact.id]?.phone
+                                  ? 'border-red-400 bg-red-50'
+                                  : 'border-gray-300'
                               }`}
                             />
                             <input
@@ -1409,6 +1476,22 @@ export default function UserProfile() {
                               <AlertTriangle className="size-3 text-red-500 flex-shrink-0 mt-0.5" />
                               <p className="text-[11px] font-medium text-red-600">
                                 {contactPhoneWarnings[contact.id]}
+                              </p>
+                            </div>
+                          )}
+                          {contactDuplicateWarnings[contact.id]?.email && (
+                            <div className="flex items-start gap-1.5 rounded-md border border-amber-200 bg-amber-50 px-2 py-1">
+                              <AlertTriangle className="size-3 text-amber-600 flex-shrink-0 mt-0.5" />
+                              <p className="text-[11px] font-medium text-amber-700">
+                                {contactDuplicateWarnings[contact.id].email}
+                              </p>
+                            </div>
+                          )}
+                          {contactDuplicateWarnings[contact.id]?.phone && (
+                            <div className="flex items-start gap-1.5 rounded-md border border-amber-200 bg-amber-50 px-2 py-1">
+                              <AlertTriangle className="size-3 text-amber-600 flex-shrink-0 mt-0.5" />
+                              <p className="text-[11px] font-medium text-amber-700">
+                                {contactDuplicateWarnings[contact.id].phone}
                               </p>
                             </div>
                           )}
