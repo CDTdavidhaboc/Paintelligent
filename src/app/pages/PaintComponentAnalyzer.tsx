@@ -1375,16 +1375,33 @@ Required JSON format:
       await loadAnalysisHistory();
       
       setTimeout(() => setShowAnalysisComplete(false), 1800);
-    } catch (err: any) {
+        } catch (err: any) {
       console.error(err);
-      const message = String(err?.message || "");
+      const message = String(err?.message || "").toLowerCase();
 
-      if (message.includes("429") || message.includes("RESOURCE_EXHAUSTED") || message.includes("quota")) {
-        setAnalyzeError("Gemini quota/rate limit reached. Wait about 1 minute, then try again.");
-        showNotification("Gemini quota/rate limit reached. Wait about 1 minute, then try again.", "error");
+      // Gemini high-demand / overloaded / rate-limit errors → hide real error
+      const isHighDemand =
+        message.includes("429") ||
+        message.includes("resource_exhausted") ||
+        message.includes("quota") ||
+        message.includes("rate limit") ||
+        message.includes("503") ||
+        message.includes("unavailable") ||
+        message.includes("overloaded") ||
+        message.includes("high demand") ||
+        message.includes("try again later") ||
+        message.includes("service unavailable");
+
+      if (isHighDemand) {
+        const friendlyMessage =
+          "Gemini is currently in high demand. Please wait about 1 minute, then try again.";
+        setAnalyzeError(friendlyMessage);
+        showNotification(friendlyMessage, "error");
       } else {
-        setAnalyzeError(err instanceof Error ? err.message : "Gemini analysis failed.");
-        showNotification(err instanceof Error ? err.message : "Gemini analysis failed.", "error");
+        // Show the real error for non-demand failures (bad image, bad JSON, missing inventory, etc.)
+        const realMessage = err instanceof Error ? err.message : "Gemini analysis failed.";
+        setAnalyzeError(realMessage);
+        showNotification(realMessage, "error");
       }
     } finally {
       setIsAnalyzing(false);
