@@ -125,6 +125,8 @@ const extractJson = (text: string) => {
 };
 
 type VisionAnalysis = {
+  isValidSample?: boolean;
+  invalidReason?: string;
   colorHex: string;
   dominantColor: string;
   colorFamily: string;
@@ -689,6 +691,11 @@ export default function PaintComponentAnalyzer() {
   const [processingStep, setProcessingStep] = useState(0);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analyzeError, setAnalyzeError] = useState("");
+  const [colorRecognitionWarning, setColorRecognitionWarning] = useState<{
+    title: string;
+    reason: string;
+    confidence?: number;
+  } | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const csvInputRef = useRef<HTMLInputElement | null>(null);
   const [lastFetched, setLastFetched] = useState<Date | null>(null);
@@ -709,6 +716,9 @@ export default function PaintComponentAnalyzer() {
   // History Match Dialog
   const [showHistoryMatchDialog, setShowHistoryMatchDialog] = useState(false);
   const [historyMatchData, setHistoryMatchData] = useState<any | null>(null);
+  const [showHistoryMatchPreview, setShowHistoryMatchPreview] = useState(false);
+  const [pendingVisionData, setPendingVisionData] =
+    useState<VisionAnalysis | null>(null);
 
   // History states
   const [analysisHistory, setAnalysisHistory] = useState<any[]>([]);
@@ -918,6 +928,7 @@ export default function PaintComponentAnalyzer() {
   const clearCurrentAnalysis = () => {
     setColorAnalysis(null);
     setAnalyzeError("");
+    setColorRecognitionWarning(null);
     setShowClearAnalysisDialog(false);
     setIsFromHistory(false);
 
@@ -1090,6 +1101,8 @@ export default function PaintComponentAnalyzer() {
     setSelectedHistoryItem(item);
     setShowHistory(false);
     setIsFromHistory(true);
+    setColorRecognitionWarning(null);
+    setAnalyzeError("");
 
     const targetBatch = toNumber(item.batch_size, 0.1) || 0.1;
     const { calibratedComponents, calibratedTotalPrice } =
@@ -1226,6 +1239,7 @@ export default function PaintComponentAnalyzer() {
     setUploadedDataName("");
     setColorAnalysis(null);
     setAnalyzeError("");
+    setColorRecognitionWarning(null);
     setIsFromHistory(false);
     if (csvInputRef.current) csvInputRef.current.value = "";
 
@@ -1442,7 +1456,10 @@ export default function PaintComponentAnalyzer() {
   };
 
   // Enhanced analyzeWithGemini with RGB similarity matching and calibrated store pricing
-  const analyzeWithGemini = async (imageBase64: string | null) => {
+  const analyzeWithGemini = async (
+    imageBase64: string | null,
+    options?: { skipHistoryCheck?: boolean; precomputedVision?: VisionAnalysis },
+  ) => {
     if (!imageBase64) {
       setAnalyzeError("Please upload a paint color image first.");
       showNotification("Please upload a paint color image first.", "error");
@@ -1471,6 +1488,7 @@ export default function PaintComponentAnalyzer() {
 
     setIsAnalyzing(true);
     setAnalyzeError("");
+    setColorRecognitionWarning(null);
     setColorAnalysis(null);
     setIsFromHistory(false);
 
@@ -1481,12 +1499,23 @@ export default function PaintComponentAnalyzer() {
         throw new Error("No products found in the inventory.");
       }
 
-      // STEP 1: AI Vision - Detect the color from image
-      const visionPrompt = `
+      let vision: VisionAnalysis;
+
+      if (options?.precomputedVision) {
+        vision = options.precomputedVision;
+      } else {
+        // STEP 1: AI Vision - Detect the color from image
+        const visionPrompt = `
 You are Paintelligent Vision Agent, a professional residential paint color analyzer.
 
 Analyze ONLY the paint color in the uploaded image.
 
+First, evaluate if the image is a valid, recognizable single paint color sample:
+- Set "isValidSample": false if the image has too many competing colors (e.g., busy photo, complex scene, multi-colored object/collage, rainbow, or patterned artwork where no single paint sample is clearly targeted).
+- Set "isValidSample": false if the image is too vague, blurry, dark, overexposed, or unclear to reliably identify a single target paint color.
+- If "isValidSample" is false, explain clearly why in "invalidReason" (e.g., "The uploaded image contains too many competing colors to isolate a single paint color." or "The sample picture is too blurry/vague to recognize a clear paint pigment."), set "confidence" below 40, and set "dominantColor" to "Unknown".
+
+If the image clearly shows a primary target paint color or painted surface:
 Ignore:
 - shadows
 - lighting changes
@@ -1504,117 +1533,158 @@ Return ONLY valid JSON. Do not include markdown.
 
 Required JSON format:
 {
+  "isValidSample": true,
+  "invalidReason": "",
   "colorHex": "#FF00CC",
   "dominantColor": "Vibrant Magenta",
   "colorFamily": "magenta",
   "rgb": { "r": 255, "g": 0, "b": 204 },
   "finish": "gloss/semi-gloss/matte/unknown",
   "paintType": "wall paint/latex/enamel/acrylic/unknown",
-  "confidence": 0,
+  "confidence": 95,
   "notes": "short explanation. Include 2 sentences max"
 }
 `;
 
-      const visionResult = await ai.models.generateContent({
-        model: "gemini-2.5-flash",
-        contents: [
-          {
-            role: "user",
-            parts: [
-              { text: visionPrompt },
-              {
-                inlineData: {
-                  mimeType: imageBase64.startsWith("data:image/jpeg")
-                    ? "image/jpeg"
-                    : "image/png",
-                  data: imageBase64.replace(/^data:image\/\w+;base64,/, ""),
+        const visionResult = await ai.models.generateContent({
+          model: "gemini-2.5-flash",
+          contents: [
+            {
+              role: "user",
+              parts: [
+                { text: visionPrompt },
+                {
+                  inlineData: {
+                    mimeType: imageBase64.startsWith("data:image/jpeg")
+                      ? "image/jpeg"
+                      : "image/png",
+                    data: imageBase64.replace(/^data:image\/\w+;base64,/, ""),
+                  },
                 },
-              },
-            ],
+              ],
+            },
+          ],
+          config: {
+            responseMimeType: "application/json",
           },
-        ],
-        config: {
-          responseMimeType: "application/json",
-        },
-      });
+        });
 
-      const visionText = visionResult.text ?? "";
-      const visionRaw = JSON.parse(extractJson(visionText));
+        const visionText = visionResult.text ?? "";
+        const visionRaw = JSON.parse(extractJson(visionText));
 
-      const vision: VisionAnalysis = {
-        colorHex: visionRaw.colorHex || visionRaw.hex || "#808080",
-        dominantColor: visionRaw.dominantColor || "Unknown",
-        colorFamily: normalizeText(
-          visionRaw.colorFamily || visionRaw.dominantColor || "unknown",
-        ),
-        rgb: visionRaw.rgb || { r: 128, g: 128, b: 128 },
-        finish: visionRaw.finish || "unknown",
-        paintType: visionRaw.paintType || "unknown",
-        confidence: toNumber(visionRaw.confidence, 0),
-        notes: visionRaw.notes || "",
-      };
+        vision = {
+          isValidSample:
+            typeof visionRaw.isValidSample === "boolean"
+              ? visionRaw.isValidSample
+              : true,
+          invalidReason: visionRaw.invalidReason || "",
+          colorHex: visionRaw.colorHex || visionRaw.hex || "#808080",
+          dominantColor: visionRaw.dominantColor || "Unknown",
+          colorFamily: normalizeText(
+            visionRaw.colorFamily || visionRaw.dominantColor || "unknown",
+          ),
+          rgb: visionRaw.rgb || { r: 128, g: 128, b: 128 },
+          finish: visionRaw.finish || "unknown",
+          paintType: visionRaw.paintType || "unknown",
+          confidence: toNumber(visionRaw.confidence, 0),
+          notes: visionRaw.notes || "",
+        };
+      }
 
-      // STEP 2: Check for similar color in history (RGB matching)
-      let existingAnalysis = await findExistingAnalysisByColor(
-        userEmail,
-        vision.colorHex,
-      );
+      // Guard: Stop immediately before formulation if color is unrecognizable, vague, or has too many colors (saves AI formulation tokens)
+      const isUnrecognizedColor =
+        vision.isValidSample === false ||
+        normalizeText(vision.dominantColor) === "unknown" ||
+        normalizeText(vision.dominantColor) === "none" ||
+        normalizeText(vision.dominantColor) === "unrecognized" ||
+        normalizeText(vision.colorFamily) === "unknown" ||
+        (vision.confidence > 0 && vision.confidence < 45);
 
-      if (!existingAnalysis.success || !existingAnalysis.data) {
-        const allHistory = await getPaintAnalysisHistory(userEmail);
+      if (isUnrecognizedColor) {
+        const reasonText =
+          vision.invalidReason?.trim() ||
+          vision.notes?.trim() ||
+          "The analyzer could not recognize a single clear paint color because the sample picture contains too many colors or is too vague.";
 
-        if (
-          allHistory.success &&
-          allHistory.data &&
-          allHistory.data.length > 0
-        ) {
-          const RGB_TOLERANCE = 25;
-          let bestMatch = null;
-          let bestMatchDiff = Infinity;
+        setColorRecognitionWarning({
+          title: "Unable to Recognize a Clear Paint Color",
+          reason: reasonText,
+          confidence: vision.confidence,
+        });
+        setColorAnalysis(null);
+        setIsAnalyzing(false);
+        showNotification(
+          "⚠️ Could not recognize a clear paint color. Please try another sample image.",
+          "error",
+        );
+        return;
+      }
 
-          for (const item of allHistory.data) {
-            if (item.rgb) {
-              const rDiff = Math.abs(item.rgb.r - vision.rgb.r);
-              const gDiff = Math.abs(item.rgb.g - vision.rgb.g);
-              const bDiff = Math.abs(item.rgb.b - vision.rgb.b);
-              const totalDiff = rDiff + gDiff + bDiff;
+      // STEP 2: Check for similar color in history (RGB matching) unless skipped
+      if (!options?.skipHistoryCheck) {
+        let existingAnalysis = await findExistingAnalysisByColor(
+          userEmail,
+          vision.colorHex,
+        );
 
-              if (
-                rDiff <= RGB_TOLERANCE &&
-                gDiff <= RGB_TOLERANCE &&
-                bDiff <= RGB_TOLERANCE
-              ) {
-                if (totalDiff < bestMatchDiff) {
-                  bestMatchDiff = totalDiff;
-                  bestMatch = item;
+        if (!existingAnalysis.success || !existingAnalysis.data) {
+          const allHistory = await getPaintAnalysisHistory(userEmail);
+
+          if (
+            allHistory.success &&
+            allHistory.data &&
+            allHistory.data.length > 0
+          ) {
+            const RGB_TOLERANCE = 25;
+            let bestMatch = null;
+            let bestMatchDiff = Infinity;
+
+            for (const item of allHistory.data) {
+              if (item.rgb) {
+                const rDiff = Math.abs(item.rgb.r - vision.rgb.r);
+                const gDiff = Math.abs(item.rgb.g - vision.rgb.g);
+                const bDiff = Math.abs(item.rgb.b - vision.rgb.b);
+                const totalDiff = rDiff + gDiff + bDiff;
+
+                if (
+                  rDiff <= RGB_TOLERANCE &&
+                  gDiff <= RGB_TOLERANCE &&
+                  bDiff <= RGB_TOLERANCE
+                ) {
+                  if (totalDiff < bestMatchDiff) {
+                    bestMatchDiff = totalDiff;
+                    bestMatch = item;
+                  }
                 }
               }
             }
-          }
 
-          if (bestMatch) {
-            existingAnalysis = { success: true, data: bestMatch };
+            if (bestMatch) {
+              existingAnalysis = { success: true, data: bestMatch };
+            }
           }
         }
-      }
 
-      if (existingAnalysis.success && existingAnalysis.data) {
-        const historyItem = existingAnalysis.data;
-        const itemBatch = toNumber(historyItem.batch_size, 0.1) || 0.1;
-        const { calibratedComponents, calibratedTotalPrice } =
-          calibrateAnalysisPricing(
-            historyItem.paint_components || [],
-            itemBatch,
-          );
+        if (existingAnalysis.success && existingAnalysis.data) {
+          const historyItem = existingAnalysis.data;
+          const itemBatch = toNumber(historyItem.batch_size, 0.1) || 0.1;
+          const { calibratedComponents, calibratedTotalPrice } =
+            calibrateAnalysisPricing(
+              historyItem.paint_components || [],
+              itemBatch,
+            );
 
-        setHistoryMatchData({
-          ...historyItem,
-          paint_components: calibratedComponents,
-          total_price: calibratedTotalPrice,
-        });
-        setShowHistoryMatchDialog(true);
-        setIsAnalyzing(false);
-        return;
+          setHistoryMatchData({
+            ...historyItem,
+            paint_components: calibratedComponents,
+            total_price: calibratedTotalPrice,
+          });
+          setPendingVisionData(vision);
+          setShowHistoryMatchPreview(false);
+          setShowHistoryMatchDialog(true);
+          setIsAnalyzing(false);
+          return;
+        }
       }
 
       // STEP 3: Proceed with full AI formulation
@@ -1880,6 +1950,7 @@ Required JSON format:
 
     setColorAnalysis(null);
     setAnalyzeError("");
+    setColorRecognitionWarning(null);
     setIsFromHistory(false);
 
     const reader = new FileReader();
@@ -1916,6 +1987,7 @@ Required JSON format:
     setUploadedFileSize("");
     setColorAnalysis(null);
     setAnalyzeError("");
+    setColorRecognitionWarning(null);
     setIsFromHistory(false);
     if (fileInputRef.current) fileInputRef.current.value = "";
     setShowRemoveDialog(false);
@@ -2806,6 +2878,32 @@ Required JSON format:
               )}
             </CardContent>
           </Card>
+
+          {colorRecognitionWarning && !colorAnalysis && (
+            <div className="mt-3 flex items-center justify-between gap-3 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 shadow-xs animate-fade-in">
+              <div className="flex items-start gap-2.5">
+                <AlertTriangle className="mt-0.5 size-4 flex-shrink-0 text-amber-600" />
+                <p className="text-xs text-amber-900 leading-relaxed">
+                  <strong className="font-semibold text-amber-950">
+                    {colorRecognitionWarning.title}:
+                  </strong>{" "}
+                  {colorRecognitionWarning.reason} Please click the{" "}
+                  <strong className="font-semibold text-amber-950">
+                    Replace
+                  </strong>{" "}
+                  button above to upload a clearer single-color sample.
+                </p>
+              </div>
+              <Button
+                onClick={() => setColorRecognitionWarning(null)}
+                variant="ghost"
+                className="h-6 w-6 p-0 text-amber-700 hover:bg-amber-100 hover:text-amber-950 rounded-full flex-shrink-0"
+                title="Dismiss warning"
+              >
+                <X className="size-3.5" />
+              </Button>
+            </div>
+          )}
         </section>
 
         {colorAnalysis && (
@@ -3106,10 +3204,12 @@ Required JSON format:
               if (e.target === e.currentTarget) {
                 setShowHistoryMatchDialog(false);
                 setHistoryMatchData(null);
+                setShowHistoryMatchPreview(false);
+                setPendingVisionData(null);
               }
             }}
           >
-            <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl animate-slide-up">
+            <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl animate-slide-up">
               <div className="flex items-start gap-4">
                 <div className="flex items-center gap-3 flex-shrink-0">
                   <div
@@ -3118,9 +3218,22 @@ Required JSON format:
                   />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <h3 className="text-lg font-semibold text-gray-900">
-                    Color Found in History!
-                  </h3>
+                  <div className="flex items-center justify-between gap-2">
+                    <h3 className="text-lg font-semibold text-gray-900">
+                      Color Found in History!
+                    </h3>
+                    <Button
+                      onClick={() =>
+                        setShowHistoryMatchPreview((prev) => !prev)
+                      }
+                      variant="outline"
+                      className="h-7 px-2.5 text-xs border-emerald-200 bg-emerald-50 text-[#174d32] hover:bg-emerald-100 hover:text-[#174d32]"
+                      title="Quick preview of stored analyzed paint"
+                    >
+                      <Eye className="size-3.5 mr-1" />
+                      {showHistoryMatchPreview ? "Hide Preview" : "Quick Preview"}
+                    </Button>
+                  </div>
                   <p className="mt-1 text-sm text-gray-600">
                     The same color for{" "}
                     <strong className="text-[#174d32]">
@@ -3137,6 +3250,13 @@ Required JSON format:
                       {historyMatchData.paint_components?.length || 0}{" "}
                       components
                     </span>
+                    <span className="bg-emerald-50 text-[#174d32] font-medium px-2 py-0.5 rounded-full border border-emerald-100">
+                      ₱{toNumber(historyMatchData.total_price, 0).toFixed(2)} (
+                      {(
+                        toNumber(historyMatchData.batch_size, 0.1) * 1000
+                      ).toFixed(0)}
+                      ml)
+                    </span>
                   </div>
                   <p className="mt-2 text-xs text-green-600 bg-green-50 px-3 py-1.5 rounded-lg border border-green-100">
                     Want to load this saved formula instead of using AI
@@ -3144,17 +3264,145 @@ Required JSON format:
                   </p>
                 </div>
               </div>
-              <div className="mt-6 flex gap-3 justify-end">
+
+              {/* Quick Preview Panel */}
+              {showHistoryMatchPreview && (
+                <div className="mt-4 rounded-xl border border-emerald-100 bg-emerald-50/40 p-3.5 animate-fade-in">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs font-semibold text-[#174d32] uppercase tracking-wider">
+                      Stored Analyzed Paint Preview
+                    </span>
+                    {historyMatchData.analysis_date && (
+                      <span className="text-[11px] text-gray-400">
+                        Saved{" "}
+                        {new Date(
+                          historyMatchData.analysis_date,
+                        ).toLocaleDateString()}
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-3 mb-3 rounded-lg bg-white p-2.5 border border-emerald-100/80 shadow-xs">
+                    {historyMatchData.image_url &&
+                    historyMatchData.image_url !==
+                      LEGACY_TRANSPARENT_CYAN_BASE64 ? (
+                      <img
+                        src={historyMatchData.image_url}
+                        alt={
+                          historyMatchData.custom_name ||
+                          historyMatchData.dominant_color
+                        }
+                        className="w-10 h-10 rounded-lg object-cover border border-gray-200 flex-shrink-0"
+                      />
+                    ) : (
+                      <div
+                        className="w-10 h-10 rounded-lg border border-gray-200 flex-shrink-0"
+                        style={{ backgroundColor: historyMatchData.color_hex }}
+                      />
+                    )}
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs font-semibold text-gray-900 truncate">
+                        {historyMatchData.custom_name ||
+                          `${historyMatchData.dominant_color} - ${historyMatchData.color_hex}`}
+                      </p>
+                      <p className="text-[11px] text-gray-500">
+                        HEX: {historyMatchData.color_hex.toUpperCase()}
+                        {historyMatchData.rgb
+                          ? ` · RGB(${historyMatchData.rgb.r}, ${historyMatchData.rgb.g}, ${historyMatchData.rgb.b})`
+                          : ""}
+                      </p>
+                    </div>
+                    <div className="text-right flex-shrink-0">
+                      <p className="text-xs font-bold text-[#174d32]">
+                        ₱{toNumber(historyMatchData.total_price, 0).toFixed(2)}
+                      </p>
+                      <p className="text-[10px] text-gray-500">
+                        {(
+                          toNumber(historyMatchData.batch_size, 0.1) * 1000
+                        ).toFixed(0)}{" "}
+                        ml batch
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="max-h-44 overflow-y-auto rounded-lg border border-emerald-100 bg-white">
+                    <table className="w-full text-left text-xs">
+                      <thead className="bg-emerald-50/70 text-[#174d32] border-b border-emerald-100 sticky top-0">
+                        <tr>
+                          <th className="py-1.5 px-2.5 font-semibold">
+                            Product
+                          </th>
+                          <th className="py-1.5 px-2 font-semibold text-center">
+                            %
+                          </th>
+                          <th className="py-1.5 px-2 font-semibold text-right">
+                            Amount
+                          </th>
+                          <th className="py-1.5 px-2.5 font-semibold text-right">
+                            Price
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100">
+                        {(historyMatchData.paint_components || []).map(
+                          (comp: any, idx: number) => (
+                            <tr key={idx} className="hover:bg-emerald-50/30">
+                              <td className="py-1.5 px-2.5">
+                                <p className="font-medium text-gray-800 truncate max-w-[170px]">
+                                  {comp.product}
+                                </p>
+                                <p className="text-[10px] text-gray-400 truncate max-w-[170px]">
+                                  {comp.brand} · {comp.category}
+                                </p>
+                              </td>
+                              <td className="py-1.5 px-2 text-center font-medium text-[#174d32]">
+                                {comp.percentage}%
+                              </td>
+                              <td className="py-1.5 px-2 text-right font-mono text-gray-600">
+                                {toNumber(comp.amountMl, 0).toFixed(1)} ml
+                              </td>
+                              <td className="py-1.5 px-2.5 text-right font-medium text-gray-800">
+                                ₱{toNumber(comp.priceValue, 0).toFixed(2)}
+                              </td>
+                            </tr>
+                          ),
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              <div className="mt-6 flex flex-wrap gap-2.5 justify-end">
                 <Button
                   onClick={() => {
                     setShowHistoryMatchDialog(false);
                     setHistoryMatchData(null);
+                    setShowHistoryMatchPreview(false);
+                    setPendingVisionData(null);
                     setIsAnalyzing(false);
                   }}
                   variant="outline"
                   className="border-gray-300 text-gray-700 hover:bg-gray-50"
                 >
                   Cancel
+                </Button>
+                <Button
+                  onClick={() => {
+                    const visionToUse = pendingVisionData || undefined;
+                    setShowHistoryMatchDialog(false);
+                    setHistoryMatchData(null);
+                    setShowHistoryMatchPreview(false);
+                    setPendingVisionData(null);
+                    analyzeWithGemini(uploadedImage, {
+                      skipHistoryCheck: true,
+                      precomputedVision: visionToUse,
+                    });
+                  }}
+                  variant="outline"
+                  className="border-[#174d32] text-[#174d32] hover:bg-emerald-50"
+                >
+                  Analyze Anyway
                 </Button>
                 <Button
                   onClick={() => {
@@ -3204,6 +3452,8 @@ Required JSON format:
 
                     setShowHistoryMatchDialog(false);
                     setHistoryMatchData(null);
+                    setShowHistoryMatchPreview(false);
+                    setPendingVisionData(null);
                     setIsAnalyzing(false);
                   }}
                   className="bg-[#174d32] hover:bg-green-700 text-white"
