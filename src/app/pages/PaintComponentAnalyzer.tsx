@@ -288,9 +288,17 @@ const calculateCalibratedComponentPrice = (
 ): number => {
   if (amountMl <= 0 || batchSizeLiters <= 0) return 0;
 
+  const hasExplicitEstPrice =
+    component.estPricePHP !== undefined && component.estPricePHP !== null;
+  const explicitEstPrice = toNumber(component.estPricePHP, 0);
+
+  if (hasExplicitEstPrice && explicitEstPrice <= 0) {
+    return 0;
+  }
+
   const unitPrice =
-    toNumber(component.estPricePHP, 0) > 0
-      ? toNumber(component.estPricePHP, 0)
+    explicitEstPrice > 0
+      ? explicitEstPrice
       : toNumber(component.unitPurchasePrice, 0) > 0
         ? toNumber(component.unitPurchasePrice, 0) * 1.3
         : PRICING_CALIBRATION.DEFAULT_FALLBACK_UNIT_PRICE_PHP;
@@ -307,6 +315,11 @@ const calculateCalibratedComponentPrice = (
     unitPrice * PRICING_CALIBRATION.DECANTING_BASE_SHARE * batchScaleLiters;
 
   const calibratedCost = volumetricCost + decantingAllowance;
+
+  // Only apply the fixed 14.50 floor when using fallback pricing; when the user sets or edits a unit price, scale directly with unitPrice
+  if (hasExplicitEstPrice) {
+    return Number(calibratedCost.toFixed(2));
+  }
 
   const batchUnits100Ml = (batchSizeLiters * 1000) / 100;
   const minimumComponentFloor =
@@ -1547,10 +1560,10 @@ Required JSON format:
 `;
 
         const visionResult = await ai.models.generateContent({
-          model: "gemini-3.1-flash-lite",
+          model: "gemini-3.5-flash-lite",
           contents: [
             {
-              role: "user",
+              role: "user",     
               parts: [
                 { text: visionPrompt },
                 {
@@ -1757,7 +1770,7 @@ Required JSON format:
 `;
 
       const formulationResult = await ai.models.generateContent({
-        model: "gemini-3.1-flash-lite",
+        model: "gemini-3.5-flash-lite",
         contents: [
           {
             role: "user",
@@ -2046,6 +2059,33 @@ Required JSON format:
         .toFixed(2),
     );
   }, [scaledComponents]);
+
+  const handleUpdateComponentPrice = (index: number, rawValue: string) => {
+    const parsed = parseFloat(rawValue);
+    const nextUnitPrice = Number.isFinite(parsed) && parsed >= 0 ? parsed : 0;
+
+    setColorAnalysis((prev) => {
+      if (!prev) return prev;
+
+      const updatedComponents = prev.paintComponents.map((comp, idx) =>
+        idx === index
+          ? {
+              ...comp,
+              estPricePHP: nextUnitPrice,
+            }
+          : comp,
+      );
+
+      const { calibratedComponents, calibratedTotalPrice } =
+        calibrateAnalysisPricing(updatedComponents, batchSizeLiters);
+
+      return {
+        ...prev,
+        paintComponents: calibratedComponents,
+        totalPrice: calibratedTotalPrice,
+      };
+    });
+  };
 
   const isDataLoaded = uploadedData !== null && uploadedData.length > 0;
   const isAnalyzerEnabled = isDataSaved && isDataLoaded;
@@ -3052,7 +3092,22 @@ Required JSON format:
                             {c.scaledAmountMl} ml
                           </TableCell>
                           <TableCell className="text-sm text-gray-600">
-                            ₱{c.estPricePHP?.toLocaleString() ?? "—"}
+                            <div className="inline-flex items-center rounded-lg border border-emerald-200 bg-white px-2 py-1 focus-within:border-[#174d32] focus-within:ring-2 focus-within:ring-emerald-100">
+                              <span className="text-xs font-semibold text-gray-500 mr-1">
+                                ₱
+                              </span>
+                              <input
+                                type="number"
+                                min="0"
+                                step="any"
+                                value={c.estPricePHP ?? 0}
+                                onChange={(e) =>
+                                  handleUpdateComponentPrice(i, e.target.value)
+                                }
+                                className="w-20 bg-transparent text-sm font-medium text-gray-800 focus:outline-none"
+                                title="Edit estimated price per unit"
+                              />
+                            </div>
                           </TableCell>
                           <TableCell>
                             <div className="flex flex-col gap-1">

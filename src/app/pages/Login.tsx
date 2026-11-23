@@ -301,13 +301,6 @@ export default function Login() {
                   "LOGIN"
                 )}
               </button>
-
-              <div className="text-center text-white/60 text-sm mt-4">
-                Don't have an account?{" "}
-                <Link to="/register" className="text-[#4a9d6f] hover:text-[#5db888] font-semibold">
-                  Register here
-                </Link>
-              </div>
             </form>
           </div>
         </div>
