@@ -22,8 +22,10 @@
   import { Button } from "../components/ui/button";
 
   import {
+    ComposedChart,
     LineChart,
     Line,
+    Area,
     XAxis,
     YAxis,
     CartesianGrid,
@@ -2727,6 +2729,7 @@
     const seasonalAreas = useMemo(() => {
       const areas: any[] = [];
       let areaIndex = 0;
+      const totalSegments = Math.max(1, filteredMonthlyData.length - 1);
       for (let i = 0; i < filteredMonthlyData.length; i++) {
         const current = filteredMonthlyData[i];
         const previous = filteredMonthlyData[i - 1];
@@ -2740,10 +2743,16 @@
           }
           // Extend x2 to the next point's x-coordinate so adjacent season background bands touch seamlessly with zero white gap
           const nextPoint = filteredMonthlyData[end + 1];
+          const endIdx = nextPoint ? end + 1 : end;
+          const startPct = Number(((i / totalSegments) * 100).toFixed(2));
+          const endPct = Number(((endIdx / totalSegments) * 100).toFixed(2));
           areas.push({
             key: `area-${chartKey}-${areaIndex++}`,
+            season: current.season,
             x1: current.month,
             x2: nextPoint ? nextPoint.month : filteredMonthlyData[end].month,
+            startPct,
+            endPct,
             fill: current.season === "Dry" ? "#4ade80" : "#60a5fa",
             stroke: current.season === "Dry" ? "#16a34a" : "#2563eb",
           });
@@ -3293,21 +3302,79 @@
               </CardHeader>
               <CardContent>
                 <ResponsiveContainer width="100%" height={420}>
-                  <LineChart
+                  <ComposedChart
                     data={viewMode === "monthly" ? filteredMonthlyData : weeklyChartData}
                     margin={{ top: 20, right: 30, left: 10, bottom: 30 }}
                   >
                     <defs>
-                      <linearGradient id="historicalGradient" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="#166534" stopOpacity={0.35} />
-                        <stop offset="100%" stopColor="#166534" stopOpacity={0} />
+                      <linearGradient id="historicalStrokeGradient" x1="0" y1="0" x2="1" y2="0">
+                        <stop offset="0%" stopColor="#14532d" />
+                        <stop offset="50%" stopColor="#166534" />
+                        <stop offset="100%" stopColor="#15803d" />
                       </linearGradient>
-                      <linearGradient id="forecastGradient" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="#22c55e" stopOpacity={0.35} />
-                        <stop offset="100%" stopColor="#22c55e" stopOpacity={0} />
+                      <linearGradient id="forecastStrokeGradient" x1="0" y1="0" x2="1" y2="0">
+                        <stop offset="0%" stopColor="#15803d" />
+                        <stop offset="100%" stopColor="#10b981" />
                       </linearGradient>
+                      {/* Horizontal gradient below the line proportioned to each Dry/Rainy season span */}
+                      <linearGradient id="seasonalAreaHorizontal" x1="0%" y1="0%" x2="100%" y2="0%">
+                        {seasonalAreas.map((area, idx) => {
+                          const color = area.season === "Dry" ? "#16a34a" : "#2563eb";
+                          return [
+                            <stop
+                              key={`stop-start-${idx}`}
+                              offset={`${area.startPct}%`}
+                              stopColor={color}
+                              stopOpacity={1}
+                            />,
+                            <stop
+                              key={`stop-end-${idx}`}
+                              offset={`${area.endPct}%`}
+                              stopColor={color}
+                              stopOpacity={1}
+                            />,
+                          ];
+                        })}
+                      </linearGradient>
+                      {/* Vertical fade mask so the seasonal gradient below the line fades smoothly toward the bottom axis */}
+                      <linearGradient id="areaVerticalFadeGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#ffffff" stopOpacity={0.62} />
+                        <stop offset="55%" stopColor="#ffffff" stopOpacity={0.28} />
+                        <stop offset="100%" stopColor="#ffffff" stopOpacity={0.04} />
+                      </linearGradient>
+                      <mask
+                        id="areaVerticalFadeMask"
+                        maskUnits="objectBoundingBox"
+                        maskContentUnits="objectBoundingBox"
+                      >
+                        <rect x="0" y="0" width="1" height="1" fill="url(#areaVerticalFadeGrad)" />
+                      </mask>
+                      {/* Weekly view vertical gradient matched to the selected month's season */}
+                      <linearGradient id="weeklyAreaGradient" x1="0" y1="0" x2="0" y2="1">
+                        <stop
+                          offset="0%"
+                          stopColor={weeklyChartData[0]?.season === "Rainy" ? "#2563eb" : "#16a34a"}
+                          stopOpacity={0.55}
+                        />
+                        <stop
+                          offset="60%"
+                          stopColor={weeklyChartData[0]?.season === "Rainy" ? "#3b82f6" : "#22c55e"}
+                          stopOpacity={0.22}
+                        />
+                        <stop
+                          offset="100%"
+                          stopColor={weeklyChartData[0]?.season === "Rainy" ? "#60a5fa" : "#4ade80"}
+                          stopOpacity={0.03}
+                        />
+                      </linearGradient>
+                      <filter id="lineGlow" x="-20%" y="-20%" width="140%" height="140%">
+                        <feDropShadow dx="0" dy="3" stdDeviation="3" floodColor="#14532d" floodOpacity="0.28" />
+                      </filter>
+                      <filter id="forecastGlow" x="-20%" y="-20%" width="140%" height="140%">
+                        <feDropShadow dx="0" dy="3" stdDeviation="3.5" floodColor="#059669" floodOpacity="0.35" />
+                      </filter>
                     </defs>
-                    <CartesianGrid strokeDasharray="4 4" stroke="#E5E7EB" />
+                    <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" vertical={false} />
                     {viewMode === "monthly" &&
                       seasonalAreas.map((area) => (
                         <ReferenceArea
@@ -3315,28 +3382,34 @@
                           x1={area.x1}
                           x2={area.x2}
                           fill={area.fill}
-                          fillOpacity={0.32}
+                          fillOpacity={0.18}
                           stroke={area.stroke}
-                          strokeOpacity={0.25}
+                          strokeOpacity={0.2}
                         />
                       ))}
                     <XAxis
                       dataKey={viewMode === "monthly" ? "month" : "week"}
-                      tick={{ fontSize: 12 }}
+                      tick={{ fontSize: 12, fill: "#334155", fontWeight: 500 }}
+                      axisLine={{ stroke: "#CBD5E1" }}
+                      tickLine={{ stroke: "#CBD5E1" }}
                       angle={viewMode === "monthly" ? -35 : 0}
                       textAnchor={viewMode === "monthly" ? "end" : "middle"}
                       height={70}
                     />
                     <YAxis
-                      tick={{ fontSize: 12 }}
+                      tick={{ fontSize: 12, fill: "#475569", fontWeight: 500 }}
+                      axisLine={false}
+                      tickLine={false}
                       tickFormatter={(value) => `₱${(value / 1000).toFixed(0)}k`}
                     />
                     <Tooltip
-                      cursor={{ stroke: "#166534", strokeDasharray: "5 5" }}
+                      cursor={{ stroke: "#14532d", strokeWidth: 1.5, strokeDasharray: "4 4" }}
                       contentStyle={{
-                        borderRadius: 12,
-                        border: "none",
-                        boxShadow: "0 10px 30px rgba(0,0,0,.15)",
+                        borderRadius: 14,
+                        border: "1px solid #d1fae5",
+                        backgroundColor: "rgba(255, 255, 255, 0.96)",
+                        boxShadow: "0 14px 34px rgba(20, 83, 45, 0.16)",
+                        padding: "10px 14px",
                       }}
                       formatter={(value: number) => [
                         `₱${Number(value).toLocaleString()}`,
@@ -3353,13 +3426,74 @@
                     />
                     {viewMode === "monthly" ? (
                       <>
+                        <Area
+                          type="monotone"
+                          dataKey="sales"
+                          stroke="none"
+                          fill="url(#seasonalAreaHorizontal)"
+                          mask="url(#areaVerticalFadeMask)"
+                          tooltipType="none"
+                          isAnimationActive={false}
+                        />
                         <Line
                           type="monotone"
                           dataKey={(d) => (!d.isForecast ? d.sales : null)}
-                          stroke="#166534"
-                          strokeWidth={4}
-                          dot={{ r: 4, fill: "#166534" }}
-                          activeDot={{ r: 7 }}
+                          stroke="url(#historicalStrokeGradient)"
+                          strokeWidth={3.5}
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          filter="url(#lineGlow)"
+                          dot={(props: any) => {
+                            const { cx, cy, payload } = props;
+                            if (cx == null || cy == null || payload?.isForecast) {
+                              return <g key={`hist-empty-${payload?.id}`} />;
+                            }
+                            const isDry = payload?.season === "Dry";
+                            const ringColor = isDry ? "#14532d" : "#1e3a8a";
+                            return (
+                              <g key={`hist-dot-${payload?.id}`}>
+                                <circle
+                                  cx={cx}
+                                  cy={cy}
+                                  r={7.5}
+                                  fill={ringColor}
+                                  fillOpacity={0.14}
+                                />
+                                <circle
+                                  cx={cx}
+                                  cy={cy}
+                                  r={4.5}
+                                  fill="#ffffff"
+                                  stroke="#14532d"
+                                  strokeWidth={2.5}
+                                />
+                              </g>
+                            );
+                          }}
+                          activeDot={(props: any) => {
+                            const { cx, cy, payload } = props;
+                            if (cx == null || cy == null) return <g />;
+                            return (
+                              <g key={`hist-active-${payload?.id}`}>
+                                <circle
+                                  cx={cx}
+                                  cy={cy}
+                                  r={12}
+                                  fill="#15803d"
+                                  fillOpacity={0.22}
+                                />
+                                <circle
+                                  cx={cx}
+                                  cy={cy}
+                                  r={7}
+                                  fill="#14532d"
+                                  stroke="#ffffff"
+                                  strokeWidth={2.5}
+                                />
+                                <circle cx={cx} cy={cy} r={2.5} fill="#ffffff" />
+                              </g>
+                            );
+                          }}
                           connectNulls={false}
                           name="Historical Sales"
                         />
@@ -3371,75 +3505,170 @@
                             const nextItem = idx !== -1 ? filteredMonthlyData[idx + 1] : null;
                             return nextItem?.isForecast ? d.sales : null;
                           }}
-                          stroke="#22C55E"
-                          strokeWidth={4}
-                          strokeDasharray="8 6"
+                          stroke="url(#forecastStrokeGradient)"
+                          strokeWidth={3.5}
+                          strokeDasharray="7 6"
+                          strokeLinecap="round"
+                          filter="url(#forecastGlow)"
                           dot={(props: any) => {
                             const { cx, cy, payload } = props;
-                            if (!payload?.isForecast) return <g key={`dot-bridge-${payload?.id}`} />;
+                            if (cx == null || cy == null || !payload?.isForecast) {
+                              return <g key={`dot-bridge-${payload?.id}`} />;
+                            }
                             return (
-                              <circle
-                                key={`dot-fc-${payload?.id}`}
-                                cx={cx}
-                                cy={cy}
-                                r={6}
-                                fill="#22C55E"
-                                stroke="none"
-                              />
+                              <g key={`dot-fc-${payload?.id}`}>
+                                <circle
+                                  cx={cx}
+                                  cy={cy}
+                                  r={10}
+                                  fill="#10b981"
+                                  fillOpacity={0.24}
+                                />
+                                <circle
+                                  cx={cx}
+                                  cy={cy}
+                                  r={6}
+                                  fill="#10b981"
+                                  stroke="#ffffff"
+                                  strokeWidth={2.5}
+                                />
+                                <circle cx={cx} cy={cy} r={2} fill="#ffffff" />
+                              </g>
                             );
                           }}
-                          activeDot={{ r: 8 }}
+                          activeDot={(props: any) => {
+                            const { cx, cy, payload } = props;
+                            if (cx == null || cy == null) return <g />;
+                            return (
+                              <g key={`fc-active-${payload?.id}`}>
+                                <circle
+                                  cx={cx}
+                                  cy={cy}
+                                  r={13}
+                                  fill="#10b981"
+                                  fillOpacity={0.28}
+                                />
+                                <circle
+                                  cx={cx}
+                                  cy={cy}
+                                  r={7.5}
+                                  fill="#059669"
+                                  stroke="#ffffff"
+                                  strokeWidth={2.5}
+                                />
+                                <circle cx={cx} cy={cy} r={2.5} fill="#ffffff" />
+                              </g>
+                            );
+                          }}
                           connectNulls
                           name="AR-2 Forecast"
                         />
                         <Line
+                          type="monotone"
                           dataKey="upperBound"
-                          stroke="#86EFAC"
-                          strokeWidth={2}
-                          strokeDasharray="3 3"
+                          stroke="#059669"
+                          strokeOpacity={0.55}
+                          strokeWidth={1.75}
+                          strokeDasharray="4 4"
+                          strokeLinecap="round"
                           dot={false}
                           name="Upper Bound (95%)"
                         />
                         <Line
+                          type="monotone"
                           dataKey="lowerBound"
-                          stroke="#86EFAC"
-                          strokeWidth={2}
-                          strokeDasharray="3 3"
+                          stroke="#059669"
+                          strokeOpacity={0.55}
+                          strokeWidth={1.75}
+                          strokeDasharray="4 4"
+                          strokeLinecap="round"
                           dot={false}
                           name="Lower Bound (95%)"
                         />
                       </>
                     ) : (
-                      <Line
-                        type="monotone"
-                        dataKey="sales"
-                        stroke="#166534"
-                        strokeWidth={4}
-                        dot={{ r: 5, fill: "#166534" }}
-                        activeDot={{ r: 8 }}
-                        name="Weekly Sales"
-                      />
+                      <>
+                        <Area
+                          type="monotone"
+                          dataKey="sales"
+                          stroke="none"
+                          fill="url(#weeklyAreaGradient)"
+                          tooltipType="none"
+                          isAnimationActive={false}
+                        />
+                        <Line
+                          type="monotone"
+                          dataKey="sales"
+                          stroke="url(#historicalStrokeGradient)"
+                          strokeWidth={3.5}
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          filter="url(#lineGlow)"
+                          dot={(props: any) => {
+                            const { cx, cy, index } = props;
+                            if (cx == null || cy == null) return <g key={`wk-empty-${index}`} />;
+                            return (
+                              <g key={`wk-dot-${index}`}>
+                                <circle cx={cx} cy={cy} r={8.5} fill="#14532d" fillOpacity={0.15} />
+                                <circle
+                                  cx={cx}
+                                  cy={cy}
+                                  r={5}
+                                  fill="#ffffff"
+                                  stroke="#14532d"
+                                  strokeWidth={2.75}
+                                />
+                              </g>
+                            );
+                          }}
+                          activeDot={(props: any) => {
+                            const { cx, cy, index } = props;
+                            if (cx == null || cy == null) return <g />;
+                            return (
+                              <g key={`wk-active-${index}`}>
+                                <circle cx={cx} cy={cy} r={12} fill="#15803d" fillOpacity={0.22} />
+                                <circle
+                                  cx={cx}
+                                  cy={cy}
+                                  r={7}
+                                  fill="#14532d"
+                                  stroke="#ffffff"
+                                  strokeWidth={2.5}
+                                />
+                                <circle cx={cx} cy={cy} r={2.5} fill="#ffffff" />
+                              </g>
+                            );
+                          }}
+                          name="Weekly Sales"
+                        />
+                      </>
                     )}
-                  </LineChart>
+                  </ComposedChart>
                 </ResponsiveContainer>
-                <div className="flex items-center justify-center gap-5 rounded-xl border border-emerald-100 bg-emerald-50/50 p-4 text-sm text-slate-700">
-                  <div className="flex items-center gap-2">
-                    <span className="h-1.5 w-8 rounded bg-green-900"></span>
-                  Sales
+                <div className="flex flex-wrap items-center justify-center gap-6 rounded-xl border border-emerald-100 bg-emerald-50/50 p-4 text-sm text-slate-700">
+                  <div className="flex items-center gap-2.5">
+                    <span className="relative flex items-center justify-center w-8">
+                      <span className="h-1 w-full rounded-full bg-[#14532d]"></span>
+                      <span className="absolute w-3 h-3 rounded-full bg-white border-2 border-[#14532d] shadow-sm"></span>
+                    </span>
+                    <span className="font-medium">Sales</span>
                   </div>
                   {forecastData && (
-                    <div className="flex items-center gap-2">
-                      <span className="h-1.5 w-8 border-t-2 border-dashed border-green-500"></span>
-                      Forecasted Sales
+                    <div className="flex items-center gap-2.5">
+                      <span className="relative flex items-center justify-center w-8">
+                        <span className="w-full border-t-2 border-dashed border-[#10b981]"></span>
+                        <span className="absolute w-3 h-3 rounded-full bg-[#10b981] border-2 border-white ring-1 ring-[#10b981] shadow-sm"></span>
+                      </span>
+                      <span className="font-medium">Forecasted Sales</span>
                     </div>
                   )}
                   <div className="flex items-center gap-2">
                     <span className="w-4 h-4 rounded bg-green-400/50 ring-1 ring-green-600/60"></span>
-                    Dry Season
+                    <span className="font-medium">Dry Season</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <span className="w-4 h-4 rounded bg-blue-400/50 ring-1 ring-blue-600/60"></span>
-                    Rainy Season
+                    <span className="font-medium">Rainy Season</span>
                   </div>
                 </div>
               </CardContent>
