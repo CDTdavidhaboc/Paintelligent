@@ -32,7 +32,7 @@ export default function Login() {
   const location = useLocation();
 
   // ✅ Get the intended destination from location state
-  const from = location.state?.from || "/sales-forecasting";
+  const from = location.state?.from || "/paint-analyzer";
 
   // ✅ Handle redirect when authenticated
   useEffect(() => {
@@ -264,7 +264,7 @@ export default function Login() {
                     {showPassword ? <EyeOff className="size-5" /> : <Eye className="size-5" />}
                   </button>
                 </div>
-              </div>
+              </div>  
 
               <div className="text-right mb-1">
                 <button

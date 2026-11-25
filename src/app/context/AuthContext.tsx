@@ -191,12 +191,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.removeItem("userId");
     localStorage.removeItem("authToken");
     
-    // ✅ Clear profile data
+    // ✅ Clear profile data and reset active sample image/analysis in cloud on logout (preserving inventory & history)
     if (userEmail) {
       const userDataKey = `user_${userEmail}_profileData`;
       const userPictureKey = `user_${userEmail}_profilePicture`;
       localStorage.removeItem(userDataKey);
       localStorage.removeItem(userPictureKey);
+
+      void supabase
+        .from("user_data")
+        .update({
+          color_analysis: null,
+          uploaded_image: null,
+          uploaded_file_name: null,
+          uploaded_file_size: null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("email", userEmail.toLowerCase().trim());
     }
     localStorage.removeItem('userProfileData');
     localStorage.removeItem('userProfilePicture');

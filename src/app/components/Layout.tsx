@@ -246,8 +246,8 @@ export default function Layout() {
   const year = now.getFullYear();
 
   const navItems = [
-    { path: "/sales-forecasting", icon: LineChart, label: "Sales Forecasting" },
     { path: "/paint-analyzer", icon: Paintbrush, label: "Paint Analyzer" },
+    { path: "/sales-forecasting", icon: LineChart, label: "Sales Forecasting" },
     { path: "/user-profile", icon: User, label: "User Profile" },
   ];
 

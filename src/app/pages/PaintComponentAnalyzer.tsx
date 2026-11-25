@@ -937,7 +937,7 @@ export default function PaintComponentAnalyzer() {
     return () => window.clearInterval(interval);
   }, [isAnalyzing]);
 
-  // Clear current analysis from UI
+  // Clear current analysis from UI and cloud state immediately
   const clearCurrentAnalysis = () => {
     setColorAnalysis(null);
     setAnalyzeError("");
@@ -950,6 +950,19 @@ export default function PaintComponentAnalyzer() {
     setUploadedFileSize("");
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
+    }
+
+    if (userEmail) {
+      void savePaintAnalyzerData(userEmail, {
+        inventory_data: uploadedData || undefined,
+        inventory_data_name: uploadedDataName,
+        color_analysis: null,
+        uploaded_image: undefined,
+        uploaded_file_name: "",
+        uploaded_file_size: "",
+        batch_size: batchSizeLiters,
+        last_fetched: null,
+      });
     }
 
     showNotification("🧹 Current analysis and image cleared", "info");
@@ -2004,6 +2017,20 @@ Required JSON format:
     setIsFromHistory(false);
     if (fileInputRef.current) fileInputRef.current.value = "";
     setShowRemoveDialog(false);
+
+    if (userEmail) {
+      void savePaintAnalyzerData(userEmail, {
+        inventory_data: uploadedData || undefined,
+        inventory_data_name: uploadedDataName,
+        color_analysis: null,
+        uploaded_image: undefined,
+        uploaded_file_name: "",
+        uploaded_file_size: "",
+        batch_size: batchSizeLiters,
+        last_fetched: null,
+      });
+    }
+
     showNotification("🗑️ Image removed from view", "info");
   };
 

@@ -29,11 +29,11 @@ function AppRoutes() {
       {/* Public Routes */}
       <Route 
         path="/login" 
-        element={!isAuthenticated ? <Login /> : <Navigate to="/sales-forecasting" replace />} 
+        element={!isAuthenticated ? <Login /> : <Navigate to="/paint-analyzer" replace />} 
       />
       <Route 
         path="/register" 
-        element={!isAuthenticated ? <Register /> : <Navigate to="/sales-forecasting" replace />} 
+        element={!isAuthenticated ? <Register /> : <Navigate to="/paint-analyzer" replace />} 
       />
       
       {/* Reset Password Route - Public */}
@@ -53,12 +53,12 @@ function AppRoutes() {
           )
         }
       >
-        {/* Root redirects to sales-forecasting */}
-        <Route index element={<Navigate to="/sales-forecasting" replace />} />
+        {/* Root redirects to paint-analyzer */}
+        <Route index element={<Navigate to="/paint-analyzer" replace />} />
         
         {/* Main Routes */}
-        <Route path="sales-forecasting" element={<SeasonalForecasting />} />
         <Route path="paint-analyzer" element={<PaintComponentAnalyzer />} />
+        <Route path="sales-forecasting" element={<SeasonalForecasting />} />
         <Route path="user-profile" element={<UserProfile />} />
       </Route>
     </Routes>
